@@ -519,12 +519,15 @@ namespace oc4::host
 		}
 	}
 
-	// A farm as the plot LSystem lays it out (CIV4PlotLSystem.xml): its farmhouse (the goal of
-	// Leaf_Farm_4x4, by era and resource) with the two smaller buildings it names (szExtra)
-	// round it, and the crops of the 4x4 node it stands in (GNode_4x4), worked or not,
-	// irrigated or not, all turned by the farmhouse's fTwist. Rice and wheat keep their own
-	// fields: only the buildings, in a corner of the plot (the 4x4_Farm_Rice productions).
-	// The plot's 12x12 root node spans the plot. -1: none (not a farm).
+	// A farm as the plot LSystem lays it out (CIV4PlotLSystem.xml). The plot's 12x12 root node
+	// is split by one of its productions, down to leaves of crops (GLeaf_*: 4x2, 3x2, 2x2,
+	// 2x1); one of the 4x4 nodes on the way is the farm's (Farm_4x4: its farmhouse, the goal of
+	// Leaf_Farm_4x4 by era and resource, with the two smaller buildings it names, szExtra),
+	// with the crops of its own GNode_4x4. The crops grow from there out over the leaves
+	// nearest to it, as much ground as the farmhouse's iCropAreaMultiplier asks for (12 a plain
+	// farm's, 10 corn's: four cells each), worked or not, irrigated or not. Everything is turned
+	// by the farmhouse's fTwist. Rice and wheat keep their own fields: only the buildings, in a
+	// corner of the plot (the 4x4_Farm_Rice productions). -1: none (not a farm).
 	int MapCapture::plotLayout(const CvPlot& plot, int bonus)
 	{
 		const ImprovementTypes improvement = plot.getImprovementType();
@@ -551,12 +554,14 @@ namespace oc4::host
 			return a.allows("Era", eraName, "ERA_ALL", "NO_ERA") && a.allows("Bonus", bonusName, "BONUS_ALL", "NO_BONUS") &&
 				a.allows("Improvement", improvementName, "IMPROVEMENT_ALL", "NO_IMPROVEMENT");
 		};
+		uint32_t random = variant * 2654435761u + 1;
+		const auto next = [&] { return (random = random * 1664525u + 1013904223u) >> 8; };
 		const auto production = [&](const std::string& from, auto&& also) -> const LProduction* {
 			std::vector<const LProduction*> found;
 			for (const LProduction& p : m_plotProductions)
 				if (p.from == from && fits(p) && also(p))
 					found.push_back(&p);
-			return found.empty() ? nullptr : found[(variant / 64) % found.size()];
+			return found.empty() ? nullptr : found[next() % found.size()];
 		};
 		const auto artOf = [&](const std::string& node, auto&& also) -> const LArtRef* {
 			const auto it = m_plotNodes.find(node);
@@ -566,23 +571,61 @@ namespace oc4::host
 			for (const LArtRef& r : it->second)
 				if (fits(r) && also(r))
 					found.push_back(&r);
-			return found.empty() ? nullptr : found[(variant / 7) % found.size()];
+			return found.empty() ? nullptr : found[next() % found.size()];
 		};
 		const auto any = [](const auto&) { return true; };
+		const auto placesFarm = [](const LProduction& p) {
+			return std::ranges::any_of(p.to, [](const LProduction::To& t) { return t.node == "Farm_4x4"; });
+		};
 
 		std::vector<render::PlotPiece> pieces;
 		const LArtRef* goal = artOf("Leaf_Farm_4x4", [&](const LArtRef& r) { return r.name == "goal:" + improvementName && !r.nif.empty(); });
 		const LProduction* farm = production("Farm_4x4", any);
 		if (goal && farm)
 		{
-			// Where the farm's 4x4 node stands, in the plot's 12x12 root node: a corner (rice,
-			// wheat), else the first of the four 4x4 nodes round the middle (south-west: turned
-			// by the twist, west of the middle, as the original lays it out), the others its
-			// crops (iCropAreaMultiplier: 12 a plain farm's four, 10 corn's three).
-			float ox = 0, oy = 0, twist = 0;
-			std::vector<std::pair<float, float>> fields;
-			uint32_t random = variant * 2654435761u + 1;
-			const auto next = [&] { return (random = random * 1664525u + 1013904223u) >> 8; };
+			// A leaf of crops the root's productions came down to, in the plot's 12x12 cells,
+			// and the 4x4 node it lies in (-1: none).
+			struct Leaf
+			{
+				std::string node;
+				float x = 0, y = 0, degrees = 0;
+				int slot = -1;
+			};
+			struct Slot
+			{
+				float x = 0, y = 0, degrees = 0;
+			};
+			std::vector<Leaf> leaves;
+			std::vector<Slot> slots;
+			// Down from a node to its leaves of crops (the buildings' leaves, BLeaf_*, have no
+			// farm in them; the farm's own production is the goal's alone).
+			const auto expand = [&](auto&& self, const std::string& node, float x, float y, float degrees, int slot, int depth) -> void {
+				if (node.rfind("GLeaf_", 0) == 0)
+				{
+					leaves.push_back({ node, x, y, degrees, slot });
+					return;
+				}
+				if (depth > 8 || (node.rfind("Node_", 0) != 0 && node.rfind("GNode_", 0) != 0))
+					return;
+				if (node == "Node_4x4" && slot < 0)
+				{
+					slot = int(slots.size());
+					slots.push_back({ x, y, degrees });
+				}
+				const LProduction* p = production(node, [&](const LProduction& q) {
+					return q.scalar("bGoalOnly") != "1" && q.scalar("bExtraGoalOnly") != "1" && !placesFarm(q);
+				});
+				if (!p)
+					return;
+				const float rc = std::cos(degrees * std::numbers::pi_v<float> / 180), rs = std::sin(degrees * std::numbers::pi_v<float> / 180);
+				for (const LProduction::To& t : p->to)
+					self(self, t.node, x + t.x * rc - t.y * rs, y + t.x * rs + t.y * rc, degrees + t.rotate, slot, depth + 1);
+			};
+
+			// Where the farm's 4x4 node stands: a corner (rice, wheat), else one of the 4x4
+			// nodes the root came down to, near the middle of the plot.
+			float ox = 0, oy = 0, odeg = 0, twist = 0;
+			std::vector<Leaf> crops;
 			if (const LProduction* corner = production("Node_12x12", [&](const LProduction& p) {
 					return p.lists.contains("Improvement") && p.to.size() == 1 && p.to[0].node == "Farm_4x4";
 				}))
@@ -593,15 +636,51 @@ namespace oc4::host
 			else
 			{
 				twist = std::strtof(goal->scalar("fTwist").c_str(), nullptr);
-				std::vector<std::pair<float, float>> quarters{ { -2, -2 }, { 2, -2 }, { -2, 2 }, { 2, 2 } };
-				std::tie(ox, oy) = quarters[0];
-				std::erase(quarters, std::pair{ ox, oy });
-				const int area = std::atoi(goal->scalar("iCropAreaMultiplier").c_str());
-				for (int n = 1; n < (area + 1) / 3 && !quarters.empty(); ++n)
+				for (int attempt = 0; attempt < 8 && slots.empty(); ++attempt)
 				{
-					const size_t k = next() % quarters.size();
-					fields.push_back(quarters[k]);
-					quarters.erase(quarters.begin() + std::ptrdiff_t(k));
+					leaves.clear();
+					expand(expand, "Node_12x12", 0, 0, 0, -1, 0);
+				}
+				int chosen = -1;
+				float best = 1e9f;
+				for (size_t i = 0; i < slots.size(); ++i)
+					if (const float d = std::hypot(slots[i].x, slots[i].y) + float(next() % 1000) / 1000 * 3; d < best)
+						best = d, chosen = int(i);
+				if (chosen >= 0)
+					std::tie(ox, oy, odeg) = std::tuple{ slots[size_t(chosen)].x, slots[size_t(chosen)].y, slots[size_t(chosen)].degrees };
+				else
+					std::tie(ox, oy) = std::pair{ -2.0f, -2.0f };
+				std::erase_if(leaves, [&](const Leaf& l) { return l.slot == chosen && chosen >= 0; });
+				// The farm's own crops, then the leaves nearest it (a little at random) until the
+				// crops cover the ground the farmhouse asks for.
+				if (production("Node_4x4", [&](const LProduction& p) {
+						return placesFarm(p) && std::ranges::any_of(p.to, [](const LProduction::To& t) { return t.node == "GNode_4x4"; });
+					}))
+				{
+					const size_t before = leaves.size();
+					expand(expand, "GNode_4x4", ox, oy, odeg, -2, 0);
+					crops.assign(leaves.begin() + std::ptrdiff_t(before), leaves.end());
+					leaves.resize(before);
+					std::vector<std::pair<float, const Leaf*>> near;
+					for (const Leaf& l : leaves)
+						near.push_back({ std::hypot(l.x - ox, l.y - oy) + float(next() % 1000) / 1000 * 2.5f, &l });
+					std::ranges::sort(near, {}, &std::pair<float, const Leaf*>::first);
+					const auto cells = [](const Leaf& l) {
+						int w = 0, h = 0;
+						std::sscanf(l.node.c_str() + 6, "%dx%d", &w, &h);
+						return w * h;
+					};
+					int area = 0;
+					for (const Leaf& l : crops)
+						area += cells(l);
+					const int wanted = std::atoi(goal->scalar("iCropAreaMultiplier").c_str()) * 4;
+					for (const auto& [d, l] : near)
+					{
+						if (area >= wanted)
+							break;
+						crops.push_back(*l);
+						area += cells(*l);
+					}
 				}
 			}
 			const float c = std::cos(twist), sn = std::sin(twist);
@@ -613,55 +692,23 @@ namespace oc4::host
 				piece.y = (x * sn + y * c) / 12;
 				piece.yaw = twist + degrees * std::numbers::pi_v<float> / 180;
 			};
-			// A node of crops: its productions down to the crops of its leaves (GLeaf_*; the
-			// resource's and the buildings' leaves, BLeaf_*, are not the farm's).
-			const auto cropOf = [&](const LArtRef& r) {
-				const std::string w = r.scalar("bImprovementWorkedOnly"), i = r.scalar("bIrrigatedOnly");
-				return !r.nif.empty() && !r.node.empty() && r.lists.contains("Improvement") && (w.empty() || (w == "1") == worked) &&
-					(i.empty() || (i == "1") == irrigated);
-			};
-			const auto expand = [&](auto&& self, const std::string& node, float x, float y, float degrees, int depth) -> void {
-				if (node.rfind("GLeaf_", 0) == 0)
-				{
-					const auto it = m_plotNodes.find(node);
-					std::vector<const LArtRef*> found;
-					if (it != m_plotNodes.end())
-						for (const LArtRef& r : it->second)
-							if (fits(r) && cropOf(r))
-								found.push_back(&r);
-					if (found.empty())
-						return;
-					const LArtRef& crop = *found[next() % found.size()];
-					// (a 3x2 leaf's crops are the file's 2x3 piece: turned)
-					int w = 0, h = 0, aw = 0, ah = 0;
-					std::sscanf(node.c_str() + 6, "%dx%d", &w, &h);
-					std::sscanf(crop.node.c_str(), "%dx%d", &aw, &ah);
-					add(crop, crop.scale, x, y, degrees + (w != h && aw == h && ah == w ? 90.0f : 0.0f));
-					return;
-				}
-				if (depth > 8 || (node.rfind("Node_", 0) != 0 && node.rfind("GNode_", 0) != 0))
-					return;
-				std::vector<const LProduction*> found;
-				for (const LProduction& p : m_plotProductions)
-					if (p.from == node && fits(p) && p.scalar("bGoalOnly") != "1" && p.scalar("bExtraGoalOnly") != "1" &&
-						std::ranges::none_of(p.to, [](const LProduction::To& t) { return t.node == "Farm_4x4"; }))
-						found.push_back(&p);
-				if (found.empty())
-					return;
-				const LProduction& p = *found[next() % found.size()];
-				const float rc = std::cos(degrees * std::numbers::pi_v<float> / 180), rs = std::sin(degrees * std::numbers::pi_v<float> / 180);
-				for (const LProduction::To& t : p.to)
-					self(self, t.node, x + t.x * rc - t.y * rs, y + t.x * rs + t.y * rc, degrees + t.rotate, depth + 1);
-			};
-			const float improvementScale = defineOr("IMPROVEMENT_SCALE", 1);
-			if (production("Node_4x4", [](const LProduction& p) {
-					return std::ranges::any_of(p.to, [](const LProduction::To& t) { return t.node == "GNode_4x4"; });
-				}))
+			// The crops of a leaf (GLeaf_*), worked or not, irrigated or not.
+			for (const Leaf& l : crops)
 			{
-				expand(expand, "GNode_4x4", ox, oy, 0, 0);
-				for (const auto& [fx, fy] : fields)
-					expand(expand, "Node_4x4", fx, fy, 0, 0);
+				const LArtRef* crop = artOf(l.node, [&](const LArtRef& r) {
+					const std::string w = r.scalar("bImprovementWorkedOnly"), i = r.scalar("bIrrigatedOnly");
+					return !r.nif.empty() && !r.node.empty() && r.lists.contains("Improvement") && (w.empty() || (w == "1") == worked) &&
+						(i.empty() || (i == "1") == irrigated);
+				});
+				if (!crop)
+					continue;
+				// (a 3x2 leaf's crops are the file's 2x3 piece: turned)
+				int w = 0, h = 0, aw = 0, ah = 0;
+				std::sscanf(l.node.c_str() + 6, "%dx%d", &w, &h);
+				std::sscanf(crop->node.c_str(), "%dx%d", &aw, &ah);
+				add(*crop, crop->scale, l.x, l.y, l.degrees + (w != h && aw == h && ah == w ? 90.0f : 0.0f));
 			}
+			const float improvementScale = defineOr("IMPROVEMENT_SCALE", 1);
 			std::vector<const LProduction::To*> spots;
 			for (const LProduction::To& t : farm->to)
 				if (t.node == "Leaf_Farm_4x4")
