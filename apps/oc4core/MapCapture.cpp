@@ -661,10 +661,10 @@ namespace oc4::host
 					expand(expand, "GNode_4x4", ox, oy, odeg, -2, 0);
 					crops.assign(leaves.begin() + std::ptrdiff_t(before), leaves.end());
 					leaves.resize(before);
-					std::vector<std::pair<float, const Leaf*>> near;
+					std::vector<std::pair<float, const Leaf*>> nearest;
 					for (const Leaf& l : leaves)
-						near.push_back({ std::hypot(l.x - ox, l.y - oy) + float(next() % 1000) / 1000 * 2.5f, &l });
-					std::ranges::sort(near, {}, &std::pair<float, const Leaf*>::first);
+						nearest.push_back({ std::hypot(l.x - ox, l.y - oy) + float(next() % 1000) / 1000 * 2.5f, &l });
+					std::ranges::sort(nearest, {}, &std::pair<float, const Leaf*>::first);
 					const auto cells = [](const Leaf& l) {
 						int w = 0, h = 0;
 						std::sscanf(l.node.c_str() + 6, "%dx%d", &w, &h);
@@ -674,7 +674,7 @@ namespace oc4::host
 					for (const Leaf& l : crops)
 						area += cells(l);
 					const int wanted = std::atoi(goal->scalar("iCropAreaMultiplier").c_str()) * 4;
-					for (const auto& [d, l] : near)
+					for (const auto& [d, l] : nearest)
 					{
 						if (area >= wanted)
 							break;
