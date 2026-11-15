@@ -1259,7 +1259,10 @@ namespace
 			// shows it (the game core's interface pathfinder, the turns each plot is reached in).
 			const CvUnit* pathHead = ui.getHeadSelectedUnit();
 			const std::pair<const void*, int> from{ pathHead, pathHead ? pathHead->getX() * 4096 + pathHead->getY() : -1 };
-			if (const auto target = player.isTurnActive() ? window.pathTarget() : std::nullopt; target != pathShown || (target && from != pathFrom))
+			// The go-to mode (G) shows it for the plot under the mouse without the button, as the
+			// original does.
+			const bool goingTo = ui.getInterfaceMode() == INTERFACEMODE_GO_TO && pathHead && pathHead->getOwner() == me;
+			if (const auto target = player.isTurnActive() ? window.pathTarget(goingTo) : std::nullopt; target != pathShown || (target && from != pathFrom))
 			{
 				pathShown = target;
 				pathFrom = from;
