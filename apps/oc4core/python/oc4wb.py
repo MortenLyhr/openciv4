@@ -124,11 +124,7 @@ def reset():
 	gone, so each opening starts as the first (the script's interfaceScreen adds the map
 	palette's tabs again each time it opens, which the executable's new control takes)."""
 	global _flyout
-	try:
-		_clear(_screen())
-	except Exception:
-		del _widgets[:]
-		_choices.clear()
+	_clear(_screen())
 	for kind in ('player', 'map', 'advanced'):
 		_fresh(kind)
 	_fresh('edit').dead = True
