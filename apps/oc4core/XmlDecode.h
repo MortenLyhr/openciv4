@@ -2,8 +2,7 @@
 // The text of an XML document as the original engine reads it (Xml.cpp), and the way back to the
 // DLL's narrow strings.
 //
-// The original engine (Civ4BeyondSword_PitBoss.exe 3.19; the game's own exe is the same code under
-// Steam's wrapper) reads the whole file, turns it into UTF-16 with
+// The original engine reads the whole file, turns it into UTF-16 with
 // MultiByteToWideChar(CP_THREAD_ACP, 0, ...) and hands that to MSXML's IXMLDOMDocument::loadXML. The
 // encoding a declaration names therefore plays no part: on a Western Windows every byte is
 // Windows-1252, whether the file says ISO-8859-1, UTF-8 or nothing, and a UTF-8 file's accented
