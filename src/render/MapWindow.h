@@ -297,9 +297,11 @@ namespace oc4::render
 
 		// Playing, the right button held (Ctrl+right drag still turns the camera): the plot under
 		// the mouse, where the selected units would go when it is let go (a right click there).
-		// hovering: the plot under the mouse without the button (the go-to mode's, G: the left click
-		// there sends them).
-		std::optional<std::pair<int, int>> pathTarget(bool hovering = false) const;
+		// In the go-to mode (G, setGoingTo) the same without the button: the left click sends them.
+		std::optional<std::pair<int, int>> pathTarget() const;
+		// The go-to mode on while playing, set each frame (false out of the turn): the way to the plot
+		// under the mouse shown without the button, and the plot help gives the odds of an attack there.
+		void setGoingTo(bool goingTo);
 		// The way there, drawn while the button is held: the plots from the units' to it, each with
 		// the turn the units are there in (1 this turn); reachable false: they cannot go there.
 		struct PathView
