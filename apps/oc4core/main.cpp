@@ -1378,27 +1378,35 @@ namespace
 				}
 			}
 			changed = changed || game.getGameTurn() != turn;
+			// The city screen flies down to look straight down at the city; closed, back out to
+			// where the camera was. (the next city's screen flies over to that one)
+			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr;
+				city ? std::pair{ city->getX(), city->getY() } != cityScreen : cityScreen.first >= 0)
+			{
+				const bool toggled = (city != nullptr) != (cityScreen.first >= 0);
+				if (city)
+				{
+					cityScreen = { city->getX(), city->getY() };
+					window.enterCityView(cityScreen.first, cityScreen.second);
+				}
+				else
+				{
+					window.leaveCityView();
+					cityScreen = { -1, -1 };
+				}
+				if (log && toggled)
+				{
+					const auto at = Clock::now();
+					std::printf("  city screen %s after %lld frames in %.2f s\n", city ? "up" : "closed", frames - cityFrames, std::chrono::duration<double>(at - cityToggled).count());
+					cityFrames = frames, cityToggled = at;
+				}
+			}
 			if (ui.lookAtX >= 0)
 			{
 				// (a scripted game told where to look keeps looking there)
 				if (opt.lookX < 0 || opt.viewSeconds <= 0)
 					window.centerOn(ui.lookAtX, ui.lookAtY);
 				ui.lookAtX = ui.lookAtY = -1;
-			}
-			// The city screen looks at the city from close by; closed, from the usual distance.
-			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr; (city != nullptr) != (cityScreen.first >= 0))
-			{
-				if (city)
-					cityScreen = { city->getX(), city->getY() };
-				window.lookAt(cityScreen.first, cityScreen.second, city ? std::max(GC.getDefineFLOAT("CAMERA_CITY_ZOOM_IN_DISTANCE") / GC.getPLOT_SIZE(), 5.0f) : -1.0f);
-				if (!city)
-					cityScreen = { -1, -1 };
-				if (log)
-				{
-					const auto at = Clock::now();
-					std::printf("  city screen %s after %lld frames in %.2f s\n", city ? "up" : "closed", frames - cityFrames, std::chrono::duration<double>(at - cityToggled).count());
-					cityFrames = frames, cityToggled = at;
-				}
 			}
 			const auto now = Clock::now();
 				if (changed || now - captured > std::chrono::milliseconds(200))

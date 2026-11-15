@@ -46,6 +46,10 @@ namespace oc4::render
 		void lookAt(int x, int y, float distanceInPlots = -1);
 		// Moves the camera over the plot, keeping its distance.
 		void centerOn(int x, int y);
+		// The city screen: the camera flies down to look straight down at the city (again for
+		// another city's screen), and back to where it was when the screen closes.
+		void enterCityView(int x, int y);
+		void leaveCityView();
 		// The interface's size: its units (UiScale.h), which the screens, the mouse and the
 		// click positions are in.
 		uint32_t width() const;
