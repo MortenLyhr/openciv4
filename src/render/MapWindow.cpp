@@ -2057,11 +2057,11 @@ namespace oc4::render
 			return float(side);
 		}
 
-		// The game's layers over the plots near the camera: the yields (as many symbols as the
-		// plot gives, a row each), the resources' bubbles, the units' icons over their stacks.
+		// The game's layers over the plots near the camera: yields grouped into stacks by type,
+		// the resources' bubbles, and the units' icons over their stacks.
 		void drawLayers()
 		{
-			if (!layers.yields && !layers.resources && !layers.units)
+			if (!cityView && !layers.yields && !layers.resources && !layers.units)
 				return;
 			const auto& map = view->map();
 			// (the yields and unit icons only near the ground; the resources' bubbles at every height)
@@ -2099,26 +2099,28 @@ namespace oc4::render
 					if (layers.resources && !cityView && p.bonus >= 0 && size_t(p.bonus) < map.bonusButtons.size())
 						if (const ButtonArt::Icon* ic = art.icon(map.bonusButtons[size_t(p.bonus)]))
 							bubbles.push_back({ sx, sy, ic, bubbleSide(size_t(x) + size_t(y) * size_t(map.width), sx) });
-					if (low && layers.yields)
+					if (low && (cityView ? p.cityWorkable : layers.yields))
 					{
-						// (a row a yield, as many of its symbol as it gives: five and more as a number)
-						const float size = 11 * zoom;
-						float ry = sy - size * 0.5f * float(int(p.yields[0] > 0) + int(p.yields[1] > 0) + int(p.yields[2] > 0)) * 1.1f;
+						const float size = 64 * zoom, step = size * 0.7f;
+						const int stackSize = std::max(map.maxYieldStack, 1);
+						int groups = 0;
+						for (int k = 0; k < 3; ++k)
+							groups += (int(p.yields[k]) + stackSize - 1) / stackSize;
+						float gx = sx - step * float(groups - 1) / 2;
 						for (int k = 0; k < 3; ++k)
 						{
-							const int n = p.yields[k];
-							if (n <= 0 || yieldSymbols[size_t(k)].empty())
-								continue;
-							std::wstring row;
-							if (n >= 5)
-								row = std::to_wstring(n) + yieldSymbols[size_t(k)];
-							else
-								for (int i = 0; i < n; ++i)
-									row += yieldSymbols[size_t(k)];
-							// (in the yields' colours: the font's stand-ins have none of their own)
-							static const Color kYield[3] = { { 0.55f, 0.95f, 0.35f }, { 0.75f, 0.8f, 0.95f }, { 1, 0.85f, 0.2f } };
-							overlay->richText(row, sx, ry, size, true, kYield[k], 1, Overlay::Align::Center);
-							ry += size * 1.1f;
+							for (int left = p.yields[k]; left > 0; left -= stackSize, gx += step)
+							{
+								const int count = std::min(left, stackSize);
+								const auto& icons = map.yieldIcons[size_t(k)];
+								const ButtonArt::Icon* ic = size_t(count) <= icons.size() ? art.icon(icons[size_t(count - 1)]) : nullptr;
+								if (ic)
+									overlay->image(ic->key, ic->bgra, ic->width, ic->height, 1, gx - size / 2, sy - size / 2, gx + size / 2, sy + size / 2);
+								else // a mod without stack artwork: overlap its game-font symbols instead
+									for (int i = 0; i < count; ++i)
+										overlay->richText(yieldSymbols[size_t(k)], gx + (float(i) - float(count - 1) / 2) * size * 0.12f,
+											sy - size * 0.4f + float(i) * size * 0.1f, size * 0.65f, false, { 1, 1, 1 }, 1, Overlay::Align::Center);
+							}
 						}
 					}
 				}
