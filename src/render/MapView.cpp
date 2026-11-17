@@ -3074,7 +3074,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 
 		// A model's particles under that key, on since it was last drawn (from a while back when
 		// first seen: the smoke already up), as quads facing the camera.
-		void drawParticlesOf(const LoadedModel& lm, uint64_t key, std::span<const Affine> world, std::span<const uint8_t> visible)
+		void drawParticlesOf(const LoadedModel& lm, uint64_t key, std::span<const Affine> world, std::span<const uint8_t> visible, bool luminous = false)
 		{
 			if (lm.model.particles.empty())
 				return;
@@ -3101,7 +3101,18 @@ float4 PSTerrain(PSIn i) : SV_Target
 				std::vector<scene::Vertex> quads;
 				e.particles.quads(i, world, right, up, quads);
 				if (!quads.empty())
-					renderer.drawParticles(*lm.gpu, i, lm.model.particles[i].material, std::move(quads));
+				{
+					scene::Material material = lm.model.particles[i].material;
+					if (luminous)
+					{
+						// BtS blooms this effect after rendering.  Additive composition gives this
+						// one luminous effect the same bright response without changing the map.
+						material.alphaBlend = true;
+						material.srcBlend = scene::Blend::SrcAlpha;
+						material.dstBlend = scene::Blend::One;
+					}
+					renderer.drawParticles(*lm.gpu, i, material, std::move(quads));
+				}
 			}
 		}
 
@@ -3252,6 +3263,44 @@ float4 PSTerrain(PSIn i) : SV_Target
 				}
 			}
 			std::erase_if(bursts, [&](const Burst& b) { return time >= b.until && (b.particles.alive() == 0 || time > b.until + 20); });
+		}
+
+		// The original engine's showPromotionGlow: keep EFFECT_PROMOTION_UNIT at every unit
+		// that can take a promotion. It is a looping blue aura and rising sparkles in BtS.
+		void drawPromotionGlows(const Frustum& frustum)
+		{
+			if (!showEffects)
+				return;
+			const auto art = std::ranges::find_if(map.effects, [](const auto& a) { return _stricmp(a.type.c_str(), "EFFECT_PROMOTION_UNIT") == 0; });
+			if (art == map.effects.end())
+				return;
+			LoadedModel* lm = model(art->nif, "");
+			if (!lm)
+				return;
+			for (const UnitView& u : map.units)
+			{
+				const int plot = u.x + u.y * map.width;
+				if (!u.promotionReady || (fog && !map.plots[size_t(plot)].visible))
+					continue;
+				const uint64_t unit = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);
+				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
+				if (const auto position = unitPositions.find(unit); position != unitPositions.end())
+					at = position->second;
+				if (const auto motion = motions.find(unit); motion != motions.end() && time < motion->second.start + motion->second.duration)
+					at = motionPoint(motion->second);
+				at.z = ground(at.x, at.y);
+				at.x += wrapOffset(at.x);
+				if (!frustum.sphere(at, S()))
+					continue;
+				const Affine place = placement(at, 0, art->scale > 0 ? art->scale : 1);
+				std::vector<Affine> world = lm->bindWorld;
+				for (auto& w : world)
+					w = place * w;
+				if (!lm->model.items.empty())
+					renderer.draw(*lm->gpu, world, lm->bindVisible);
+				// Keep a stable particle simulation for this unit while its ready state remains set.
+				drawParticlesOf(*lm, unit ^ 0xA41F2D729C55E8BFull, world, lm->bindVisible, true);
+			}
 		}
 
 		void drawInstances(const std::vector<Instance>& list, const Frustum& frustum, bool needsSight = false)
@@ -3580,6 +3629,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		m->figureHits.clear();
 		if (options.units)
 		{
+			m->drawPromotionGlows(frustum);
 			m->drawInstances(m->units, frustum, true);
 			m->ringsDrawn = m->drawRings();
 		}

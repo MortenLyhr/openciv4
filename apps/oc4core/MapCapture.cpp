@@ -603,6 +603,7 @@ namespace oc4::host
 						}
 					u.count = seenCount;
 					u.health = shown->maxHitPoints() > 0 ? float(shown->currHitPoints()) / float(shown->maxHitPoints()) : 1.0f;
+					u.promotionReady = shown->isPromotionReady();
 					if (const char* button = shown->getButton())
 						u.button = button;
 					// The formation's figures: each art definition as many times as the unit
