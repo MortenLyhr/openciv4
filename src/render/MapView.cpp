@@ -1682,7 +1682,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 
 		// A model of the snapshot standing at a point, animated when it has an idle animation.
 		// Draped: its heights over the terrain under each of its points, as roads are (a land
-		// resource: its fields would sink under the slope of a hill beside it).
+		// resource: its fields would sink under the slope of a hill beside it). Not a model with
+		// skinned figures (cows, horses, deer): they stand upright.
 		void addDecor(int index, Vec3 at, float yaw, uint32_t h, int state = 0, bool draped = false)
 		{
 			if (index < 0 || size_t(index) >= map.models.size())
@@ -1691,6 +1692,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 			LoadedModel* lm = model(art.nif, art.kfm);
 			if (!lm)
 				return;
+			if (std::ranges::any_of(lm->model.items, [](const scene::DrawItem& item) { return item.skinned; }))
+				draped = false;
 			const float groundZ = ground(at.x, at.y);
 			at.z = draped ? 4.0f : groundZ; // (draped: a little over it: low leaves, a wheat field's, are not lost in the terrain's bumps)
 			const anim::Sequence* sequence = state >= 1 && state <= 3 && lm->states[state - 1] ? &*lm->states[state - 1] : nullptr;
@@ -3228,7 +3231,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 			shape[i] = uint8_t((p.water ? 1 : 0) | (p.hills ? 2 : 0) | (p.peak ? 4 : 0) | (p.riverSouth ? 8 : 0) | (p.riverEast ? 16 : 0));
 			featureKey[i] = int32_t(p.feature) << 8 | p.featureVariety;
 			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint16_t(p.route)) << 32 |
-				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0xFFF) << 50 | uint64_t(p.bonusState & 3) << 62;
+				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0xFFF) << 50 |
+				uint64_t(p.bonusState & 3) << 62; // (the layout's 12 bits: two layouts 4096 apart on a plot would look unchanged)
 		}
 		const bool reshaped = resized || shape != m->shape;
 		const bool refeatured = reshaped || newArt || featureKey != m->featureKey;

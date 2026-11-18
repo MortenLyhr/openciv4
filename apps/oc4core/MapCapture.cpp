@@ -519,15 +519,9 @@ namespace oc4::host
 		}
 	}
 
-	// A farm as the plot LSystem lays it out (CIV4PlotLSystem.xml). The plot's 12x12 root node
-	// is split by one of its productions, down to leaves of crops (GLeaf_*: 4x2, 3x2, 2x2,
-	// 2x1); one of the 4x4 nodes on the way is the farm's (Farm_4x4: its farmhouse, the goal of
-	// Leaf_Farm_4x4 by era and resource, with the two smaller buildings it names, szExtra),
-	// with the crops of its own GNode_4x4. The crops grow from there out over the leaves
-	// nearest to it, as much ground as the farmhouse's iCropAreaMultiplier asks for (12 a plain
-	// farm's, 10 corn's: four cells each), worked or not, irrigated or not. Everything is turned
-	// by the farmhouse's fTwist. Rice and wheat keep their own fields: only the buildings, in a
-	// corner of the plot (the 4x4_Farm_Rice productions). -1: none (not a farm).
+	// A farm as CIV4PlotLSystem.xml lays it out: its farmhouse (Leaf_Farm_4x4's goal) and the
+	// crops grown out from its 4x4 node; rice and wheat only the buildings, in a corner. -1: none
+	// (not a farm, or nothing of it in the file: the improvement's own model is drawn).
 	int MapCapture::plotLayout(const CvPlot& plot, int bonus)
 	{
 		const ImprovementTypes improvement = plot.getImprovementType();
@@ -724,8 +718,9 @@ namespace oc4::host
 					std::erase(spots, spot);
 				}
 		}
-		const int index = int(m_snapshot.plotLayouts.size());
-		m_snapshot.plotLayouts.push_back(std::move(pieces));
+		const int index = pieces.empty() ? -1 : int(m_snapshot.plotLayouts.size());
+		if (!pieces.empty())
+			m_snapshot.plotLayouts.push_back(std::move(pieces));
 		m_plotLayouts.emplace(key, index);
 		return index;
 	}
