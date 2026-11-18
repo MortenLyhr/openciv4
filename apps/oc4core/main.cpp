@@ -141,7 +141,7 @@ namespace
 		bool noEdgeScroll = false; // the mouse at the window's edge does not scroll the map (the same)
 		int uiScale = -1; // the interface's, in percent, 0 the window's density (-1: the profile's)
 		int lookX = -1, lookY = -1;
-		float lookDistance = 9;
+		float lookDistance = -1; // (below 0: the game's start distance)
 		double viewSeconds = 0; // development: close the window after this long
 		std::string viewKeys;   // window keys pressed at the start (G grid, V fog of war, ...)
 		int helpX = -1, helpY = -1; // development: print the plot help of this plot
@@ -1163,8 +1163,13 @@ namespace
 					}
 					clicks.clear();
 					utility.engine().clear(AREA_BORDER_LAYER_HIGHLIGHT_PLOT, true);
+					// (in green, as the original's and the script's own big brush, COLOR_GREEN)
 					if (const py::object h = si.attr("WorldBuilderGetHighlightPlot")(py::make_tuple(wbScreen)); py::len(h) >= 2)
-						utility.engine().mark({ h[py::int_(0)].cast<int>(), h[py::int_(1)].cast<int>(), 1, 1, 1, 0.9f, AREA_BORDER_LAYER_HIGHLIGHT_PLOT, true, false });
+					{
+						const ColorTypes green = ColorTypes(GC.getInfoTypeForString("COLOR_GREEN"));
+						const NiColorA c = green >= 0 ? GC.getColorInfo(green).getColor() : NiColorA(0, 1, 0, 1);
+						utility.engine().mark({ h[py::int_(0)].cast<int>(), h[py::int_(1)].cast<int>(), c.r, c.g, c.b, 0.9f, AREA_BORDER_LAYER_HIGHLIGHT_PLOT, true, false });
+					}
 				}
 				catch (py::error_already_set& e)
 				{
@@ -1248,6 +1253,10 @@ namespace
 			{
 				if (player.isTurnActive() || utility.diplomacy().active())
 					press(key);
+				// (out of its turn Esc still closes the screen on top: an advisor opened while the
+				// others move)
+				else if (key.key == render::key::Escape)
+					screens.escape();
 				changed = true;
 			}
 			if (const auto a = window.takeActionClick(); a && size_t(*a) < actionIds.size())
@@ -1260,9 +1269,10 @@ namespace
 			const CvUnit* pathHead = ui.getHeadSelectedUnit();
 			const std::pair<const void*, int> from{ pathHead, pathHead ? pathHead->getX() * 4096 + pathHead->getY() : -1 };
 			// The go-to mode (G) shows it for the plot under the mouse without the button, as the
-			// original does.
-			window.setGoingTo(player.isTurnActive() && ui.getInterfaceMode() == INTERFACEMODE_GO_TO && pathHead && pathHead->getOwner() == me);
-			if (const auto target = player.isTurnActive() ? window.pathTarget() : std::nullopt; target != pathShown || (target && from != pathFrom))
+			// original does. (none in the WorldBuilder, where the right button takes away what is on a plot)
+			const bool playing = player.isTurnActive() && !ui.worldBuilder();
+			window.setGoingTo(playing && ui.getInterfaceMode() == INTERFACEMODE_GO_TO && pathHead && pathHead->getOwner() == me);
+			if (const auto target = playing ? window.pathTarget() : std::nullopt; target != pathShown || (target && from != pathFrom))
 			{
 				pathShown = target;
 				pathFrom = from;
@@ -1342,7 +1352,9 @@ namespace
 				for (const auto& m : marks)
 				{
 					const auto [x, y] = m.core ? host::windowPlot({ m.x, m.y }) : std::pair{ m.x, m.y };
-					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border });
+					// (the WorldBuilder's plot and brush in the original's area border style)
+					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER);
+					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border, false, hatched });
 				}
 				for (const auto& s : signs)
 				{
@@ -1381,27 +1393,35 @@ namespace
 				}
 			}
 			changed = changed || game.getGameTurn() != turn;
+			// The city screen flies down to look straight down at the city; closed, back out to
+			// where the camera was. (the next city's screen flies over to that one)
+			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr;
+				city ? std::pair{ city->getX(), city->getY() } != cityScreen : cityScreen.first >= 0)
+			{
+				const bool toggled = (city != nullptr) != (cityScreen.first >= 0);
+				if (city)
+				{
+					cityScreen = { city->getX(), city->getY() };
+					window.enterCityView(cityScreen.first, cityScreen.second);
+				}
+				else
+				{
+					window.leaveCityView();
+					cityScreen = { -1, -1 };
+				}
+				if (log && toggled)
+				{
+					const auto at = Clock::now();
+					std::printf("  city screen %s after %lld frames in %.2f s\n", city ? "up" : "closed", frames - cityFrames, std::chrono::duration<double>(at - cityToggled).count());
+					cityFrames = frames, cityToggled = at;
+				}
+			}
 			if (ui.lookAtX >= 0)
 			{
 				// (a scripted game told where to look keeps looking there)
 				if (opt.lookX < 0 || opt.viewSeconds <= 0)
 					window.centerOn(ui.lookAtX, ui.lookAtY);
 				ui.lookAtX = ui.lookAtY = -1;
-			}
-			// The city screen looks at the city from close by; closed, from the usual distance.
-			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr; (city != nullptr) != (cityScreen.first >= 0))
-			{
-				if (city)
-					cityScreen = { city->getX(), city->getY() };
-				window.lookAt(cityScreen.first, cityScreen.second, city ? 5.0f : 9.0f);
-				if (!city)
-					cityScreen = { -1, -1 };
-				if (log)
-				{
-					const auto at = Clock::now();
-					std::printf("  city screen %s after %lld frames in %.2f s\n", city ? "up" : "closed", frames - cityFrames, std::chrono::duration<double>(at - cityToggled).count());
-					cityFrames = frames, cityToggled = at;
-				}
 			}
 			const auto now = Clock::now();
 				if (changed || now - captured > std::chrono::milliseconds(200))
@@ -1414,7 +1434,8 @@ namespace
 						walls.push_back(host::windowPlot(c));
 					capture.setGreatWallCities(std::move(walls));
 				}
-				window.setMap(capture.capture(&ui));
+				// (in the WorldBuilder no unit shows as selected, as the original's)
+				window.setMap(capture.capture(ui.worldBuilder() ? nullptr : &ui));
 				if (sounds.started())
 					sounds.setSoundscape(soundscapeHere());
 				std::string state = game.getGameState() == GAMESTATE_OVER ? "the game is over" : !player.isAlive() ? "you have been defeated"
