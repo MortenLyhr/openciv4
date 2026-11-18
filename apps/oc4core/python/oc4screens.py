@@ -1970,7 +1970,9 @@ def _screenMusic(s, shown):
 		era = us.getCurrentEra()
 		oc4host.audio_talk_music(leader.getDiploPeaceIntroMusicScriptIds(era), leader.getDiploPeaceMusicScriptIds(era))
 	except Exception:
-		pass
+		# (the screen still shows; the error is printed, not hidden)
+		import traceback
+		traceback.print_exc()
 
 
 def _forget(s):
