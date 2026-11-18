@@ -66,6 +66,7 @@ namespace oc4::host
 		struct Listener
 		{
 			float x = 0, y = 0, distance = 9;
+			float closeness = 1; // 1 at the camera's closest zoom, 0 at its farthest
 		};
 		void update(const Listener& listener, const std::string& eraType);
 

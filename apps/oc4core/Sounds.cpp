@@ -188,8 +188,8 @@ namespace oc4::host
 
 		void updateScapes(const Listener& l, Clock::time_point now, float dt)
 		{
-			// (louder from close by, as the original's: full at the nearest, a quarter from far up)
-			const float zoom = std::clamp(1 - (l.distance - 4) / 28, 0.25f, 1.0f);
+			// (louder from close by, as the original's: full at the closest zoom, a quarter from far up)
+			const float zoom = 0.25f + 0.75f * std::clamp(l.closeness, 0.0f, 1.0f);
 			const auto setVolumes = [&](Scape& s) {
 				for (auto& b : s.beds)
 					if (b.voice)

@@ -500,9 +500,19 @@ namespace
 			[&sounds](uint64_t voice) { sounds.stopMovie(voice); });
 		std::string era;
 		// (before each frame: what is heard there, and the game's messages to the player)
+		// The camera's distances (GlobalDefines, world units) in plots, as window.look() gives
+		// them: the closest zoom, the start's, the farthest before the map view.
+		const float plotSize = std::max(GC.getPLOT_SIZE(), 1.0f);
+		const auto cameraPlots = [&](const char* define, float fallback) {
+			const float v = GC.getDefineFLOAT(define);
+			return (v > 0 ? v : fallback) / plotSize;
+		};
+		const float cameraNearest = cameraPlots("CAMERA_MIN_DISTANCE", 700), cameraStart = cameraPlots("CAMERA_START_DISTANCE", 2200),
+			cameraTop = std::max(cameraPlots("CAMERA_SMALLEST_MAX_DISTANCE", 7000), cameraNearest + 1);
 		const auto hear = [&] {
 			const auto look = window.look();
-			sounds.update({ look.x, look.y, look.distance }, era);
+			const float closeness = std::clamp((cameraTop - look.distance) / (cameraTop - cameraNearest), 0.0f, 1.0f);
+			sounds.update({ look.x, look.y, look.distance, closeness }, era);
 			std::vector<std::pair<std::string, float>> lines;
 			// (none over a talk: the leader's face is where they are; the turn log keeps them)
 			if (!utility.diplomacy().active())
@@ -544,16 +554,15 @@ namespace
 				count(scapes.terrain), scapes.terrain.size(), count(scapes.feature), scapes.feature.size(), count(scapes.improvement),
 				scapes.improvement.size(), scapes.city.empty() ? -1 : scapes.city[0][0], scapes.city.empty() ? -1 : scapes.city[0][1],
 				scapes.city.empty() ? -1 : scapes.city[0][2]);
+			std::printf("  camera (plots): closest %.1f, start %.1f, farthest %.1f, now %.1f\n", cameraNearest, cameraStart, cameraTop, window.look().distance);
 		}
 		const auto soundscapeHere = [&]() -> int {
 			const auto look = window.look();
 			CvMap& map = GC.getMap();
 			const TeamTypes team = game.getActiveTeam();
-			const CvPlot* plot = map.plot(int(std::floor(look.x)), int(std::floor(look.y)));
-			if (look.distance > 25 || !plot || team == NO_TEAM || !plot->isRevealed(team, false))
-				return -1;
 			const auto of = [](const std::vector<int>& table, int i) { return i >= 0 && size_t(i) < table.size() ? table[size_t(i)] : -1; };
-			// (a city's own, its dogs and talk, only while its screen is up: the original's)
+			// (a city's own, its dogs and talk, only while its screen is up: the original's; from
+			// whatever distance the city screen looks)
 			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr)
 			{
 				const EraTypes era = CvPlayerAI::getPlayerNonInl(city->getOwner()).getCurrentEra();
@@ -561,6 +570,9 @@ namespace
 					if (const int s = of(scapes.city[size_t(era)], int(city->getCitySizeType())); s >= 0)
 						return s;
 			}
+			const CvPlot* plot = map.plot(int(std::floor(look.x)), int(std::floor(look.y)));
+			if (look.distance > cameraTop || !plot || team == NO_TEAM || !plot->isRevealed(team, false))
+				return -1;
 			if (const int s = of(scapes.feature, plot->getFeatureType()); s >= 0)
 				return s;
 			if (const int s = of(scapes.improvement, plot->getImprovementType()); s >= 0)
@@ -570,8 +582,8 @@ namespace
 		// The leaders' music where the camera looks, in the game's first era (the original's):
 		// each civilization's share of the land around (the plots its borders hold as the
 		// player knows them, the nearer the more), its leader's peace music of its era; heard
-		// only from close by: full at the nearest, gone a third of the way up. (Not 1:1 with the
-		// original: the zoom range, the area weighed and the fades are by ear, close but not the same.)
+		// only from close by: full at the closest zoom, gone just past the start's (at the start
+		// the soundtrack alone, all but).
 		const auto territoryMusicHere = [&]() {
 			std::vector<std::pair<int, float>> music;
 			const PlayerTypes active = game.getActivePlayer();
@@ -579,7 +591,8 @@ namespace
 			if (active == NO_PLAYER || team == NO_TEAM || CvPlayerAI::getPlayerNonInl(active).getCurrentEra() != 0)
 				return music;
 			const auto look = window.look();
-			const float zoom = std::clamp((13 - look.distance) / (13 - 4.5f), 0.0f, 1.0f);
+			const float silentFrom = cameraNearest + 1.1f * std::max(cameraStart - cameraNearest, 1.0f);
+			const float zoom = std::clamp((silentFrom - look.distance) / (silentFrom - cameraNearest), 0.0f, 1.0f);
 			if (zoom <= 0)
 				return music;
 			CvMap& map = GC.getMap();
