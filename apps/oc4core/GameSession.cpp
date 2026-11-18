@@ -238,6 +238,14 @@ namespace oc4::host
 		const int barbarianLeader = GC.getDefineINT("BARBARIAN_LEADER");
 		const HandicapTypes humanHandicap = static_cast<HandicapTypes>(infoTypeOrStandard(s.handicap, NewGameSettings{}.handicap, "STANDARD_HANDICAP"));
 		const HandicapTypes aiHandicap = static_cast<HandicapTypes>(GC.getDefineINT("AI_HANDICAP"));
+		// (the leaders already taken: the ones chosen, and those drawn so far, so a random leader
+		// is not another player's unless the civilization has no other)
+		std::vector<int> takenLeaders;
+		for (int p = 0; p < numSlots; ++p)
+			if (const SlotSetting* set = slotSetting(p); isOpen(p) && set && !set->leader.empty())
+				takenLeaders.push_back(infoType(set->leader));
+		if (!s.leader.empty() && !(slotSetting(0) && !slotSetting(0)->leader.empty()))
+			takenLeaders.push_back(infoType(s.leader));
 		size_t nextCiv = 0;
 		for (int p = 0; p < numSlots; ++p)
 		{
@@ -261,7 +269,16 @@ namespace oc4::host
 			ic.setSlotStatus(id, p == 0 ? SS_TAKEN : SS_COMPUTER);
 			ic.setCiv(id, civ);
 			const bool chosen = chosenLeader >= 0 && std::ranges::find(leaders, chosenLeader) != leaders.end();
-			ic.setLeader(id, static_cast<LeaderHeadTypes>(chosen ? chosenLeader : leaders.empty() ? 0 : leaders[size_t(rng.next(int(leaders.size())))]));
+			int leader = chosenLeader;
+			if (!chosen)
+			{
+				std::vector<int> free;
+				std::ranges::copy_if(leaders, std::back_inserter(free), [&](int l) { return std::ranges::find(takenLeaders, l) == takenLeaders.end(); });
+				const std::vector<int>& from = free.empty() ? leaders : free;
+				leader = from.empty() ? 0 : from[size_t(rng.next(int(from.size())))];
+				takenLeaders.push_back(leader);
+			}
+			ic.setLeader(id, static_cast<LeaderHeadTypes>(leader));
 			ic.setTeam(id, static_cast<TeamTypes>(set && set->team >= 0 ? set->team : p));
 			ic.setHandicap(id, p == 0 ? humanHandicap : aiHandicap);
 			ic.setColor(id, static_cast<PlayerColorTypes>(civInfo.getDefaultPlayerColor()));
@@ -724,6 +741,12 @@ namespace oc4::host
 					(save.modFolder.empty() ? std::string("the unmodded game") : "mod \"" + save.modFolder + "\"") + ", running " +
 					(modFolder.empty() ? std::string("without a mod") : "mod \"" + modFolder + "\""));
 		}
+	}
+
+	void GameSession::checkNewGame(const NewGameSettings& settings)
+	{
+		if (!m_utility.isDescFileName(settings.mapScript.c_str()))
+			setupInitCore(settings);
 	}
 
 	void GameSession::checkSave(const std::filesystem::path& path) const { checkMod(path, SaveFile::read(path), m_modFolder); }

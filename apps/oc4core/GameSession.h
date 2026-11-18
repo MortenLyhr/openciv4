@@ -30,6 +30,9 @@ namespace oc4::host
 		void initEngine();
 
 		void startNewGame(const NewGameSettings& settings);
+		// Throws what startNewGame would for settings it cannot start a game from (too few
+		// civilizations, a leader of another civilization); it leaves the init core set up.
+		void checkNewGame(const NewGameSettings& settings);
 		// A scenario (mapScript a WorldBuilder save, .CivBeyondSwordWBSave): its game, players,
 		// map and their things, as CvWBInterface reads them; the human the one of
 		// settings.civilization (else the first playable).

@@ -2055,9 +2055,10 @@ int wmain(int argc, wchar_t** argv)
 						otherMods.push_back(m.folder);
 				// (a save that cannot be played here: the menu again, saying why)
 				std::string message;
+				Options menuOpt = opt;
 				for (;;)
 				{
-					const auto choice = runMenu(opt, *menuWindow, utility, title, maps, otherMods, played.viewKeys, message);
+					const auto choice = runMenu(menuOpt, *menuWindow, utility, title, maps, otherMods, played.viewKeys, message);
 					if (!choice || choice->kind == host::MenuChoice::Kind::Exit)
 					{
 						std::printf("\nmenu: %s\n", choice ? "exit" : "closed");
@@ -2090,7 +2091,19 @@ int wmain(int argc, wchar_t** argv)
 							played.game.slots = asked.slots;
 						if (played.game.advancedStartPoints < 0)
 							played.game.advancedStartPoints = asked.advancedStartPoints;
-						break;
+						// (settings the game cannot start from: the menu again, saying why)
+						try
+						{
+							session.checkNewGame(played.game);
+							break;
+						}
+						catch (const std::exception& e)
+						{
+							message = e.what();
+							menuOpt.menuPage = choice->game.slots.empty() ? "new" : "custom";
+							std::printf("\nmenu: %s\n", message.c_str());
+							continue;
+						}
 					}
 					if (choice->kind == host::MenuChoice::Kind::Mod)
 					{
@@ -2110,6 +2123,7 @@ int wmain(int argc, wchar_t** argv)
 					catch (const std::exception& e)
 					{
 						message = e.what();
+						menuOpt.menuPage = "load";
 						std::printf("\nmenu: %s\n", message.c_str());
 					}
 				}

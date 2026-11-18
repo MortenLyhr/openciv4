@@ -21,7 +21,7 @@ _state = {
 	'saves': [],   # (path, name, label, modified) of the load page, newest first
 	'mods': [],    # the other mods played here (as saves name them, 'Mods\Name\'; '': the game without one)
 	'choice': None,
-	'message': u'', # why the last choice could not be played (shown on the load page)
+	'message': u'', # why the last choice could not be played (shown on the page it came from)
 	'picked': {},  # the new game page's choices, kept across pages: dropdown name -> index
 	'custom': None, # the custom game page's choices (see _customDefaults)
 }
@@ -53,15 +53,15 @@ def _screen():
 
 def show(title, maps, folders, message='', page='', mods=()):
 	"""The menu up, on its first page: maps are the map scripts' module names, folders
-	(folder, label) pairs where saved games are; with a message (a save that could not be
-	loaded) on the load page, saying it."""
+	(folder, label) pairs where saved games are; with a message (a choice that could not be
+	played) on the page given ('new', 'custom' or 'load'; else the load page), saying it."""
 	_state['title'] = _u(title)
 	_state['maps'] = sorted([_u(m) for m in maps], key=lambda m: m.lower())
 	_state['folders'] = [(_u(f), _u(l)) for f, l in folders]
 	_state['mods'] = list(mods)
 	_state['choice'] = None
 	_state['message'] = _u(message)
-	_state['page'] = 'load' if message or page == 'load' else 'main'
+	_state['page'] = page if page in ('new', 'custom', 'load') else 'load' if message else 'main'
 	_draw()
 
 
@@ -268,6 +268,8 @@ def _newPage(screen, W, H):
 		for k, (text, data, default) in enumerate(items):
 			screen.addPullDownString(name, text, k, data, (k == keep) if keep >= 0 else default)
 		ry += 50
+	if _state['message']:
+		_label(screen, 'MenuNewMessage', u'<color=255,96,96>' + _state['message'] + u'</color>', W / 2, y + h - 100, 2, 1 << 2)
 	_button(screen, 'MenuLaunch', _t('TXT_KEY_MAIN_MENU_LAUNCH', u'Launch!'), x + w - 230, y + h - 64, 200)
 	_button(screen, 'MenuBack', _t('TXT_KEY_MAIN_MENU_GO_BACK', u'Go Back'), x + 30, y + h - 64, 200)
 
@@ -824,9 +826,11 @@ def _customProblem(c, open):
 		return u'Not every player can be on the same team.'
 	if 'GAMEOPTION_ALWAYS_WAR' in c['options'] and 'GAMEOPTION_ALWAYS_PEACE' in c['options']:
 		return u'Always War and Always Peace cannot both be on.'
+	# (as the engine counts: every random civilization, the human's too, from the AI-playable
+	# ones no slot has chosen)
 	fixed = set([s['civ'] for p, s in open if s['civ']])
-	randomAI = len([1 for p, s in open if p > 0 and not s['civ']])
-	if randomAI > len([1 for n, t in _civs(False) if t not in fixed]):
+	random = len([1 for p, s in open if not s['civ']])
+	if random > len([1 for n, t in _civs(False) if t not in fixed]):
 		return u'There are not enough civilizations for that many random ones.'
 	return u''
 
