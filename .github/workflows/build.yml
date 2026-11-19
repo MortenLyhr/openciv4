@@ -95,6 +95,8 @@ jobs:
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 500M
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,7 +104,7 @@ jobs:
 
       - name: Tools
         run: |
-          brew install ninja gettext
+          brew install ninja gettext ccache
           cmake --version | head -n 1
           # The image's default Xcode 16's libc++ lacks std::jthread: use the newest Xcode 26 on it.
           ls -d /Applications/Xcode_*.app
@@ -149,10 +151,22 @@ jobs:
           curl -sSfL -o external/dr_libs/dr_mp3.h https://raw.githubusercontent.com/mackron/dr_libs/aec2dd20667f54acfdb66031217df6d240f56c52/dr_mp3.h
           ls external
 
+      # Compiled objects from earlier runs: a change recompiles only what it touches. A cache entry
+      # cannot be overwritten, so each run saves a new one and restores the latest.
+      - name: Cache compiler output
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-macos-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-macos-
+
       - name: Build
         run: |
-          cmake -S . -B build/macos -G Ninja -DCMAKE_BUILD_TYPE=Release -DOC4_PYTHON27_DIR=$HOME/.pyenv/versions/2.7.18
+          ccache --zero-stats
+          cmake -S . -B build/macos -G Ninja -DCMAKE_BUILD_TYPE=Release -DOC4_PYTHON27_DIR=$HOME/.pyenv/versions/2.7.18 \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build/macos
+          ccache --show-stats
 
       - name: Test
         run: ctest --test-dir build/macos --output-on-failure
