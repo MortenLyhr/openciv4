@@ -364,6 +364,9 @@ namespace
 		for (fs::path* p : { &o.civ4Root, &o.pythonHome, &o.logDir, &o.probeSave, &o.load, &o.save, &o.exec, &o.execFirst, &o.profileOut, &o.screenshot })
 			if (!p->empty())
 				*p = fs::absolute(*p);
+		// (--map is a map script's name, or a scenario's file: a file here is resolved too)
+		if (std::error_code ec; !o.game.mapScript.empty() && fs::is_regular_file(o.game.mapScript, ec))
+			o.game.mapScript = fs::absolute(o.game.mapScript).string();
 		return o;
 	}
 
