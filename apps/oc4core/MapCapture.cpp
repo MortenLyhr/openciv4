@@ -997,21 +997,9 @@ namespace oc4::host
 					{
 						GAMETEXT.buildCityBillboardProductionString(label, city);
 						c.production = gameMarkup(label.getCString());
-						// The production symbol: the button of what it builds, else the cancel button.
-						const char* art = nullptr;
-						if (const OrderData* order = city->getOrderFromQueue(0))
-							switch (order->eOrderType)
-							{
-							case ORDER_TRAIN: art = GC.getUnitInfo(static_cast<UnitTypes>(order->iData1)).getButton(); break;
-							case ORDER_CONSTRUCT: art = GC.getBuildingInfo(static_cast<BuildingTypes>(order->iData1)).getButton(); break;
-							case ORDER_CREATE: art = GC.getProjectInfo(static_cast<ProjectTypes>(order->iData1)).getButton(); break;
-							case ORDER_MAINTAIN: art = GC.getProcessInfo(static_cast<ProcessTypes>(order->iData1)).getButton(); break;
-							default: break;
-							}
-						if (!art)
-							if (const CvArtInfoInterface* cancel = ARTFILEMGR.getInterfaceArtInfo("INTERFACE_BUTTONS_CANCEL"))
-								art = cancel->getPath();
-						if (art)
+						// The production symbol, as the engine asks for it: the button of what it builds,
+						// else the game's "no production" button.
+						if (const TCHAR* art = city->getCityBillboardProductionIcon())
 							c.productionArt = art;
 					}
 					label.clear();
