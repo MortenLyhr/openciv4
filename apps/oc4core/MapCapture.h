@@ -48,6 +48,7 @@ namespace oc4::host
 		void loadCityLSystem();
 		void loadPlotLSystem();
 		int plotLayout(const class CvPlot& plot, int bonus);
+		void loadFlagScale();
 		void loadAttachables(render::MapSnapshot& s);
 	public:
 		// The cities with the Great Wall (their plots, the map's): the wall along their owners'
