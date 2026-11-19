@@ -161,6 +161,7 @@ namespace oc4::render
 		std::vector<int> models; // one per figure of the formation, into MapSnapshot::models
 		int count = 1;           // units on the plot
 		float health = 1;
+		float healthBar = 0; // its health bar's length in the original's units (its strength now)
 		std::string button; // the shown unit's button art (the unit layer's icons)
 		bool selected = false;   // the player has selected units there
 		bool promotionReady = false; // enough experience and at least one promotion it can take
@@ -242,11 +243,10 @@ namespace oc4::render
 		// CIV4DetailManager's FLAG_SCALE: camera distance, model scale multiplier.
 		std::vector<std::pair<float, float>> flagScale{ { 700, 0.6f }, { 1500, 0.7f }, { 3000, 0.9f }, { 5000, 1.2f } };
 		// A unit's health bar (CIV4DetailManager's UNIT_HEALTH_BILLBOARD_* by camera distance): its
-		// scale (the bar is HEALTH_BAR_WIDTH over it long), its height over the ground, and how
-		// far from the plot's middle towards the camera it stands (less: behind it).
+		// scale (how thick it is), its height over the ground, and how far from the plot's middle
+		// towards the camera it stands (less: behind it).
 		std::vector<std::pair<float, float>> healthScale{ { 700, 3 }, { 2500, 2 } }, healthZ{ { 700, 80 }, { 5000, 70 } },
 			healthRadius{ { 700, 0 }, { 2000, -60 }, { 5000, -80 } };
-		float healthBarWidth = 100;
 		std::vector<TerrainArt> terrains;  // by TerrainTypes
 		int hillTerrain = -1, peakTerrain = -1; // graphical terrains drawn over hills and peaks
 		std::vector<FeatureArt> features; // by FeatureTypes
