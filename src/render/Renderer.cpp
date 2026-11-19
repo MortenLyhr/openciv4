@@ -1045,13 +1045,16 @@ float4 PSOverlay(Out p) : SV_Target
 		writeUvRows(m.decalUv, oc.decalUv);
 		oc.diffuse = { m.diffuse.r, m.diffuse.g, m.diffuse.b, m.alpha };
 		oc.ambient = { m.ambient.r, m.ambient.g, m.ambient.b, 1 };
-		oc.emissive = { m.emissive.r, m.emissive.g, m.emissive.b, 1 };
+		// A civilization flag's cloth as Civ4FlagDecal.fx draws it (TFlagShader): unlit, its
+		// colours times the cloth's base map, no material or light on it.
+		const bool clothFlag = m.shaderName.starts_with("TFlagShader");
+		oc.emissive = clothFlag ? XMFLOAT4{ 1, 1, 1, 1 } : XMFLOAT4{ m.emissive.r, m.emissive.g, m.emissive.b, 1 };
 		oc.teamColor = { teamColor.x, teamColor.y, teamColor.z, 1 };
 		writeRows(mesh.node >= 0 && size_t(mesh.node) < world.size() ? world[size_t(mesh.node)] : Affine{}, oc.world);
-		oc.flags = (mesh.texture ? 1u : 0u) | (m.alphaTest ? 2u : 0u) | ((m.vertexColorMode & 3u) << 2) | (m.lightingMode ? 16u : 0u) |
+		oc.flags = (mesh.texture ? 1u : 0u) | (m.alphaTest ? 2u : 0u) | (clothFlag ? 0u : (m.vertexColorMode & 3u) << 2) | (m.lightingMode && !clothFlag ? 16u : 0u) |
 			(mesh.decal ? 32u : 0u) | (m.baseIsTeamColor ? 64u : 0u) | (mesh.skinned ? 128u : 0u) | (onGround ? 256u : 0u) |
 			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) |
-			(m.shaderName.starts_with("TFlagShader") ? 4096u : 0u);
+			(clothFlag ? 4096u : 0u);
 		oc.alphaFunc = static_cast<uint32_t>(m.alphaFunc);
 		oc.alphaRef = m.alphaRef;
 		oc.treesCut = m.treesCut;
