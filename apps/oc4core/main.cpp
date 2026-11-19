@@ -528,9 +528,19 @@ namespace
 			[&sounds](uint64_t voice) { sounds.stopMovie(voice); });
 		std::string era;
 		// (before each frame: what is heard there, and the game's messages to the player)
+		// The camera's distances (GlobalDefines, world units) in plots, as window.look() gives
+		// them: the closest zoom, the start's, the farthest before the map view.
+		const float plotSize = std::max(GC.getPLOT_SIZE(), 1.0f);
+		const auto cameraPlots = [&](const char* define, float fallback) {
+			const float v = GC.getDefineFLOAT(define);
+			return (v > 0 ? v : fallback) / plotSize;
+		};
+		const float cameraNearest = cameraPlots("CAMERA_MIN_DISTANCE", 700), cameraStart = cameraPlots("CAMERA_START_DISTANCE", 2200),
+			cameraTop = std::max(cameraPlots("CAMERA_SMALLEST_MAX_DISTANCE", 7000), cameraNearest + 1);
 		const auto hear = [&] {
 			const auto look = window.look();
-			sounds.update({ look.x, look.y, look.distance }, era);
+			const float closeness = std::clamp((cameraTop - look.distance) / (cameraTop - cameraNearest), 0.0f, 1.0f);
+			sounds.update({ look.x, look.y, look.distance, closeness }, era);
 			std::vector<std::pair<std::string, float>> lines;
 			// (none over a talk: the leader's face is where they are; the turn log keeps them)
 			if (!utility.diplomacy().active())
@@ -561,8 +571,9 @@ namespace
 			logMapKnown("at the start");
 		// The game's own interface (CvMainInterface.py and the screens), unless asked not to.
 		host::Screens screens(utility);
-		// The soundscape where the camera looks: a city's by it (its era's, its size's), else the
-		// plot's feature's, improvement's or terrain's; none unexplored or from far up.
+		// The soundscape where the camera looks: the city's whose screen is up (its era's, its
+		// size's), else the plot's feature's, improvement's or terrain's; none unexplored or
+		// from far up.
 		const host::SoundscapePlaces scapes = sounds.started() ? host::soundscapePlaces(utility) : host::SoundscapePlaces{};
 		if (playLog && sounds.started())
 		{
@@ -571,30 +582,81 @@ namespace
 				count(scapes.terrain), scapes.terrain.size(), count(scapes.feature), scapes.feature.size(), count(scapes.improvement),
 				scapes.improvement.size(), scapes.city.empty() ? -1 : scapes.city[0][0], scapes.city.empty() ? -1 : scapes.city[0][1],
 				scapes.city.empty() ? -1 : scapes.city[0][2]);
+			std::printf("  camera (plots): closest %.1f, start %.1f, farthest %.1f, now %.1f\n", cameraNearest, cameraStart, cameraTop, window.look().distance);
 		}
 		const auto soundscapeHere = [&]() -> int {
 			const auto look = window.look();
 			CvMap& map = GC.getMap();
 			const TeamTypes team = game.getActiveTeam();
-			const CvPlot* plot = map.plot(int(std::floor(look.x)), int(std::floor(look.y)));
-			if (look.distance > 25 || !plot || team == NO_TEAM || !plot->isRevealed(team, false))
-				return -1;
 			const auto of = [](const std::vector<int>& table, int i) { return i >= 0 && size_t(i) < table.size() ? table[size_t(i)] : -1; };
-			for (int dy = -1; dy <= 1; ++dy)
-				for (int dx = -1; dx <= 1; ++dx)
-					if (const CvPlot* p = map.plot(plot->getX() + dx, plot->getY() + dy); p && p->isRevealed(team, false))
-						if (const CvCity* city = p->getPlotCity())
-						{
-							const EraTypes era = CvPlayerAI::getPlayerNonInl(city->getOwner()).getCurrentEra();
-							if (era >= 0 && size_t(era) < scapes.city.size())
-								if (const int s = of(scapes.city[size_t(era)], int(city->getCitySizeType())); s >= 0)
-									return s;
-						}
+			// (a city's own, its dogs and talk, only while its screen is up: the original's; from
+			// whatever distance the city screen looks)
+			if (const CvCity* city = ui.isCityScreenUp() ? ui.getHeadSelectedCity() : nullptr)
+			{
+				const EraTypes era = CvPlayerAI::getPlayerNonInl(city->getOwner()).getCurrentEra();
+				if (era >= 0 && size_t(era) < scapes.city.size())
+					if (const int s = of(scapes.city[size_t(era)], int(city->getCitySizeType())); s >= 0)
+						return s;
+			}
+			const CvPlot* plot = map.plot(int(std::floor(look.x)), int(std::floor(look.y)));
+			if (look.distance > cameraTop || !plot || team == NO_TEAM || !plot->isRevealed(team, false))
+				return -1;
 			if (const int s = of(scapes.feature, plot->getFeatureType()); s >= 0)
 				return s;
 			if (const int s = of(scapes.improvement, plot->getImprovementType()); s >= 0)
 				return s;
 			return of(scapes.terrain, plot->getTerrainType());
+		};
+		// The leaders' music where the camera looks, in the game's first era (the original's):
+		// each civilization's share of the land around (the plots its borders hold as the
+		// player knows them, the nearer the more), its leader's peace music of its era; heard
+		// only from close by: full at the closest zoom, gone just past the start's (at the start
+		// the soundtrack alone, all but).
+		const auto territoryMusicHere = [&]() {
+			std::vector<std::pair<int, float>> music;
+			const PlayerTypes active = game.getActivePlayer();
+			const TeamTypes team = game.getActiveTeam();
+			if (active == NO_PLAYER || team == NO_TEAM || CvPlayerAI::getPlayerNonInl(active).getCurrentEra() != 0)
+				return music;
+			const auto look = window.look();
+			const float silentFrom = cameraNearest + 1.1f * std::max(cameraStart - cameraNearest, 1.0f);
+			const float zoom = std::clamp((silentFrom - look.distance) / (silentFrom - cameraNearest), 0.0f, 1.0f);
+			if (zoom <= 0)
+				return music;
+			CvMap& map = GC.getMap();
+			const int radius = 2;
+			const int cx = int(std::floor(look.x)), cy = int(std::floor(look.y));
+			float total = 0;
+			for (int dy = -radius; dy <= radius; ++dy)
+				for (int dx = -radius; dx <= radius; ++dx)
+				{
+					const float d = std::hypot(float(cx + dx) + 0.5f - look.x, float(cy + dy) + 0.5f - look.y);
+					const float w = std::max(0.0f, 1 - d / float(radius + 1));
+					const CvPlot* p = w > 0 ? map.plot(cx + dx, cy + dy) : nullptr;
+					if (!p)
+						continue;
+					total += w;
+					const PlayerTypes owner = p->getRevealedOwner(team, false);
+					if (owner == NO_PLAYER)
+						continue;
+					const CvPlayerAI& player = CvPlayerAI::getPlayerNonInl(owner);
+					const LeaderHeadTypes leader = player.getLeaderType();
+					const EraTypes era = player.getCurrentEra();
+					if (leader < 0 || size_t(leader) >= scapes.leaderPeaceMusic.size() || era < 0)
+						continue;
+					const auto& eras = scapes.leaderPeaceMusic[size_t(leader)];
+					const int script = size_t(era) < eras.size() ? eras[size_t(era)] : -1;
+					if (script < 0)
+						continue;
+					auto it = std::find_if(music.begin(), music.end(), [&](const auto& m) { return m.first == script; });
+					if (it == music.end())
+						music.push_back({ script, w });
+					else
+						it->second += w;
+				}
+			for (auto& m : music)
+				m.second *= zoom / std::max(total, 1.0f);
+			return music;
 		};
 		host::Screens::setTextWidth([&window](const std::string& markup, int font) { return window.textWidth(markup, font); });
 		host::Screens::setTextHeight([&window](const std::string& markup, int width, int font) { return window.textHeight(markup, width, font); });
@@ -1465,7 +1527,10 @@ namespace
 				// (in the WorldBuilder no unit shows as selected, as the original's)
 				window.setMap(capture.capture(ui.worldBuilder() ? nullptr : &ui));
 				if (sounds.started())
+				{
 					sounds.setSoundscape(soundscapeHere());
+					sounds.setTerritoryMusic(territoryMusicHere());
+				}
 				std::string state = game.getGameState() == GAMESTATE_OVER ? "the game is over" : !player.isAlive() ? "you have been defeated"
 					: !player.isTurnActive() ? "the other civilizations move" : ui.isEndTurnMessage() ? "press Enter to end the turn" : "your turn";
 				if (const InterfaceModeTypes mode = ui.getInterfaceMode(); mode != INTERFACEMODE_SELECTION && mode != NO_INTERFACEMODE)
