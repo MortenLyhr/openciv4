@@ -3405,8 +3405,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				if (const auto position = unitPositions.find(unit); position != unitPositions.end())
 					at = position->second;
-				if (const auto motion = motions.find(unit); motion != motions.end() && time < motion->second.start + motion->second.duration)
-					at = motionPoint(motion->second);
+				if (const Motion* motion = activeMotion(unit))
+					at = motionPoint(*motion);
 				at.z = ground(at.x, at.y);
 				at.x += wrapOffset(at.x);
 				if (!frustum.sphere(at, S()))
