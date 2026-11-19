@@ -373,6 +373,16 @@ namespace oc4::host
 		void createUnitEntity(CvUnit* pUnit) override;
 		void destroyEntity(CvEntity*& pEntity, bool) override;
 		bool IsSelected(const CvEntity* pEntity) const override;
+		// The plots in a move order's displayed path. Keep them until snapshots show each
+		// unit reaching one, so the renderer follows the legal route instead of drawing a
+		// straight line between snapshots.
+		struct Movement
+		{
+			IDInfo unit;
+			std::vector<std::pair<int, int>> plots;
+		};
+		static void planMovement(const std::vector<IDInfo>& units, const std::vector<std::pair<int, int>>& plots);
+		static std::optional<Movement> movement(const IDInfo& unit, int x, int y);
 		// The mission a unit's entity is told it does (fortify, sleep, ..., idle): how the
 		// original engine knows which animation the unit plays.
 		void NotifyEntity(CvUnitEntity* pEntity, MissionTypes eMission) override;
