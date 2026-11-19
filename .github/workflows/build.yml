@@ -97,7 +97,7 @@ jobs:
       HOMEBREW_NO_INSTALL_CLEANUP: 1
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: 500M
-      # The game core has a precompiled header (GameCore.cmake): ccache uses it only with these.
+      # The game core and SDL have precompiled headers: ccache uses them only with these (and -fno-pch-timestamp).
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
     steps:
       - uses: actions/checkout@v4
@@ -166,7 +166,7 @@ jobs:
         run: |
           ccache --zero-stats
           cmake -S . -B build/macos -G Ninja -DCMAKE_BUILD_TYPE=Release -DOC4_PYTHON27_DIR=$HOME/.pyenv/versions/2.7.18 \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_FLAGS="-Xclang -fno-pch-timestamp"
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_FLAGS="-Xclang -fno-pch-timestamp" -DCMAKE_CXX_FLAGS="-Xclang -fno-pch-timestamp"
           cmake --build build/macos
           ccache --show-stats -v
 
