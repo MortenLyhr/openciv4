@@ -195,6 +195,7 @@ namespace oc4::render
 		MapWindow::PlotMarks plotMarks;
 		std::array<std::wstring, 3> yieldSymbols;
 		bool pathing = false;     // the right button held while playing: the way to the plot under the mouse
+		bool goingTo = false;     // the go-to mode (G) while playing: the same, without the button
 		MapWindow::PathView path; // that way, as the host found it
 		std::vector<uint8_t> screenPixels;
 		std::pair<uint64_t, uint64_t> screenPixelsFor{ ~0ull, ~0ull };
@@ -1844,7 +1845,7 @@ namespace oc4::render
 		// where each turn's move ends and at its end; a red circle alone where they cannot go.
 		void drawPath()
 		{
-			if ((!pathing && !padShowsPath()) || path.points.empty())
+			if ((!pathing && !goingTo && !padShowsPath()) || path.points.empty())
 				return;
 			const XMMATRIX vp = viewProjection();
 			const auto toScreen = [&](const MapWindow::PathView::Point& p, float& sx, float& sy) {
@@ -1983,21 +1984,23 @@ namespace oc4::render
 
 		bool plotHelpWanted(std::pair<int, int> plot)
 		{
-			return plotHelp && plot.first >= 0 && !panning && !orbiting && clock - restingSince >= 0.4 && !onMinimap(mouseX, mouseY) &&
-				!(ui.active() && (ui.hovered() >= 0 || ui.solid(mouseX, mouseY)));
+			return plotHelp && plot.first >= 0 && !panning && !orbiting && clock - restingSince >= 0.4 && !overInterface();
 		}
+
+		// The mouse over the minimap or one of the interface's panels or controls.
+		bool overInterface() const { return onMinimap(mouseX, mouseY) || (ui.active() && (ui.hovered() >= 0 || ui.solid(mouseX, mouseY))); }
 
 		// (asked of the game between its updates; again now and then, as the units on it come and go)
 		void askPlotHelp()
 		{
 			const auto plot = hoveredPlot();
-			if (!plotHelpWanted(plot) || (plot == helpPlot && helpCombat == pathing && clock - helpAsked <= 1.0))
+			if (!plotHelpWanted(plot) || (plot == helpPlot && helpCombat == (pathing || goingTo) && clock - helpAsked <= 1.0))
 				return;
 			helpPlot = plot;
-			helpCombat = pathing;
+			helpCombat = pathing || goingTo;
 			helpAsked = clock;
 			plotHelpText = widen(plotHelp(plot.first, plot.second));
-			if (pathing)
+			if (pathing || goingTo)
 				return;
 			if (plotHelpSeen.size() > 512)
 				plotHelpSeen.clear();
@@ -2014,7 +2017,7 @@ namespace oc4::render
 			}
 			if (!busy)
 				askPlotHelp();
-			else if (plot != helpPlot && !pathing)
+			else if (plot != helpPlot && !(pathing || goingTo))
 			{
 				if (const auto seen = plotHelpSeen.find(plot); seen != plotHelpSeen.end())
 				{
@@ -2023,7 +2026,7 @@ namespace oc4::render
 					plotHelpText = seen->second;
 				}
 			}
-			if (plot != helpPlot || helpCombat != pathing)
+			if (plot != helpPlot || helpCombat != (pathing || goingTo))
 				return;
 			if (plotHelpText.empty())
 				return;
@@ -2372,6 +2375,8 @@ namespace oc4::render
 	void MapWindow::setInfo(const std::string& text) { m->info = widen(text); }
 	void MapWindow::setScreenMinimap(ScreenMinimap minimap) { m->screenMinimap = std::move(minimap); }
 
+	void MapWindow::setGoingTo(bool goingTo) { m->goingTo = goingTo; }
+
 	std::optional<std::pair<int, int>> MapWindow::pathTarget() const
 	{
 		// (OC4_PATH_AT=x,y: as if the button were held there, for a scripted game's screenshot)
@@ -2381,7 +2386,10 @@ namespace oc4::render
 			const auto p = m->plotUnder(px, py);
 			return p.first >= 0 ? std::optional(p) : std::nullopt;
 		}
-		if ((!m->pathing && !m->padShowsPath()) || m->popup.active())
+		if ((!m->pathing && !m->goingTo && !m->padShowsPath()) || m->popup.active())
+			return std::nullopt;
+		// (in the go-to mode not over the interface's panels or the minimap: no plot is pointed at there)
+		if (m->goingTo && !m->pathing && !m->padShowsPath() && m->overInterface())
 			return std::nullopt;
 		const auto p = m->hoveredPlot();
 		return p.first >= 0 ? std::optional(p) : std::nullopt;
