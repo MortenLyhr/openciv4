@@ -13,6 +13,7 @@
 #include <bit>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <format>
@@ -399,6 +400,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 		std::shared_ptr<GpuImage> flagDecal; // runtime colours; outlives the GPU model's texture references
 		std::unique_ptr<GpuModel> gpu;
 		std::optional<anim::Sequence> idle, run; // event codes 1000, 1010
+		// A flag's medallions (Medallions.kfm): medallion n (1..7) in state s (0 off, 1 can move,
+		// 2 cannot move, 3 "fortify": white, 4 has moved but can go on) at event code 10 n + s.
+		std::map<uint32_t, anim::Sequence> medallions;
 		// A resource's look by its state (event codes 1, 2, 3: CvPlot::getVisibleBonusState):
 		// not improved, improved, improved and worked; each shows its own nodes.
 		std::optional<anim::Sequence> states[3];
@@ -1024,12 +1028,12 @@ float4 PSTerrain(PSIn i) : SV_Target
 			lm.water = std::move(w);
 		}
 
-		LoadedModel* model(const std::string& nif, const std::string& kfm, const ButtonArt::Icon* flag = nullptr)
+		LoadedModel* model(const std::string& nif, const std::string& kfm, const ButtonArt::Icon* flag = nullptr, bool medallions = false)
 		{
 			if (nif.empty())
 				return nullptr;
 			const std::string key = makeAssetKey(nif);
-			auto& slot = models[key + '|' + makeAssetKey(kfm) + (flag ? '|' + std::to_string(flag->key) : "")];
+			auto& slot = models[key + '|' + makeAssetKey(kfm) + (flag ? '|' + std::to_string(flag->key) : "") + (medallions ? "|m" : "")];
 			if (slot)
 				return slot->ok ? slot.get() : nullptr;
 			slot = std::make_unique<LoadedModel>();
@@ -1124,7 +1128,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					const int parent = nodes[i].parent;
 					lm.top[i] = parent < 0 || int(i) <= spread || parent == spread ? int(i) : lm.top[size_t(parent)];
 				}
-				loadIdle(lm, *loc, kfm, flag ? 3276800u : 1000u);
+				loadIdle(lm, *loc, kfm, flag ? 3276800u : 1000u, medallions);
 				lm.ok = true;
 			}
 			catch (const std::exception& e)
@@ -1135,7 +1139,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		}
 
 		// The idle animation (event 1000) from the art's KFM, or the one next to the model.
-		void loadIdle(LoadedModel& lm, const AssetLocation& nifLocation, const std::string& kfm, uint32_t idleCode = 1000u)
+		void loadIdle(LoadedModel& lm, const AssetLocation& nifLocation, const std::string& kfm, uint32_t idleCode = 1000u, bool medallions = false)
 		{
 			std::string kfmKey = makeAssetKey(kfm);
 			if (kfmKey.empty())
@@ -1165,6 +1169,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 				for (uint32_t state = 0; state < 3; ++state)
 					wanted.emplace_back(state + 1, &lm.states[state]);
 				wanted.emplace_back(1004u, &lm.heal);
+				std::vector<std::optional<anim::Sequence>> medallionStates(medallions ? 70 : 0);
+				for (uint32_t code = 10; code < 10 + medallionStates.size(); ++code)
+					if (code % 10 < 5)
+						wanted.emplace_back(code, &medallionStates[code - 10]);
 				std::vector<std::optional<anim::Sequence>> damaged(16);
 				for (uint32_t state = 0; state < 4; ++state)
 					for (uint32_t part = 0; part < 4; ++part)
@@ -1196,6 +1204,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 				for (size_t k = 0; k < damaged.size(); ++k)
 					if (damaged[k])
 						lm.damage[k / 4].push_back(std::move(*damaged[k]));
+				for (size_t k = 0; k < medallionStates.size(); ++k)
+					if (medallionStates[k])
+						lm.medallions.emplace(uint32_t(k + 10), std::move(*medallionStates[k]));
 			}
 			catch (const std::exception& e)
 			{
@@ -2849,14 +2860,17 @@ float4 PSTerrain(PSIn i) : SV_Target
 			return at;
 		}
 
-		struct FlagDraw { Vec3 top, clothBottom; };
+		struct FlagDraw { Vec3 top, clothBottom; bool medallions = false; };
 		std::map<int, FlagDraw> flagDraws; // projected by the overlay for health and stack counts
 
-		float flagZoom() const
+		float flagZoom() const { return fader(map.flagScale, 1); }
+
+		// A CIV4DetailManager fader at the camera's distance: between its keys, the nearest
+		// one's beyond them.
+		float fader(const std::vector<std::pair<float, float>>& keys, float none) const
 		{
-			const auto& keys = map.flagScale;
 			if (keys.empty())
-				return 1;
+				return none;
 			const float distance = renderer.camera().distance;
 			const auto upper = std::ranges::upper_bound(keys, distance, {}, &std::pair<float, float>::first);
 			if (upper == keys.begin())
@@ -2866,6 +2880,114 @@ float4 PSTerrain(PSIn i) : SV_Target
 			const auto& lower = *std::prev(upper);
 			const float t = (distance - lower.first) / std::max(upper->first - lower.first, 1.0f);
 			return lower.second + (upper->second - lower.second) * t;
+		}
+
+		// Over the flag, a medallion for each unit on the plot (up to the model's 7): white, or
+		// for each selected unit how it can move (green: not moved yet, yellow: moved
+		// and can go on, red: cannot move).
+		bool drawMedallions(const UnitView& u, const Affine& place)
+		{
+			if (map.flagMedallions < 0 || size_t(map.flagMedallions) >= map.models.size())
+				return false;
+			const ModelArt& art = map.models[size_t(map.flagMedallions)];
+			LoadedModel* lm = model(art.nif, art.kfm, nullptr, true);
+			if (!lm || lm->medallions.empty())
+				return false;
+			// (the states' rows of Medallions.dds: "off" shows its empty row, "fortify" the white
+			// one the original shows for every unit not selected, its own and others')
+			const int shown = std::clamp(int(u.medallions.size()), 1, 7);
+			anim::Pose pose = anim::Pose::bind(lm->model);
+			for (int k = 1; k <= shown; ++k)
+			{
+				const uint32_t state = size_t(k) <= u.medallions.size() ? u.medallions[size_t(k - 1)] : 3;
+				if (const auto it = lm->medallions.find(uint32_t(10 * k) + state); it != lm->medallions.end())
+					it->second.apply(0, pose);
+			}
+			// (the billboard's other pieces are the winged coin of a unit that can be promoted)
+			const auto& nodes = lm->model.nodes;
+			for (size_t n = 0; n < nodes.size(); ++n)
+				if (const int parent = nodes[n].parent; parent >= 0 && nodes[size_t(parent)].name.starts_with("UpgradeMedallion"))
+				{
+					int k = 0;
+					pose.hidden[n] = std::sscanf(nodes[n].name.c_str(), "Medallion_%d", &k) == 1 ? k < 1 || k > shown : !u.promotionReady;
+				}
+			// (in the flag's own frame: they hang over its pole)
+			auto world = lm->model.worldTransforms(pose.locals);
+			for (auto& w : world)
+				w = place * w;
+			std::vector<scene::Material> materials;
+			for (const auto& item : lm->model.items)
+				materials.push_back(anim::animatedMaterial(item, pose));
+			renderer.draw(*lm->gpu, world, lm->model.visibility(pose.hidden), materials);
+			return true;
+		}
+
+		// The units' health bars as the original's billboards: a flat bar facing the camera,
+		// green, yellow, then red, as long as the unit's health (HEALTH_BAR_WIDTH over
+		// UNIT_HEALTH_BILLBOARD_SCALE when whole), ending over the plot's middle and reaching left,
+		// behind the unit (UNIT_HEALTH_BILLBOARD_RADIUS) and above the ground (..._Z): in the
+		// scene, so the figures in front of it hide it.
+		scene::Model barModel;
+		std::unique_ptr<GpuModel> barGpu;
+		bool barTried = false;
+
+		void drawHealthBars(const Frustum& frustum)
+		{
+			if (!barTried)
+			{
+				barTried = true;
+				barModel.nodes.push_back({ "HealthBar" });
+				scene::DrawItem bar;
+				bar.node = 0;
+				// (its right end at its origin, reaching left along x, z its height, facing -y)
+				for (const auto [x, z] : { std::pair{ -1.0f, -0.5f }, { 0.0f, -0.5f }, { 0.0f, 0.5f }, { -1.0f, 0.5f } })
+					bar.vertices.push_back({ { x, 0, z }, { 0, -1, 0 } });
+				bar.indices = { 0, 1, 2, 0, 2, 3 };
+				bar.material.lightingMode = 0;
+				bar.material.cull = scene::Cull::None;
+				barModel.items.push_back(std::move(bar));
+				barGpu = renderer.upload(barModel, assets, AssetLocation{});
+			}
+			if (!barGpu)
+				return;
+			const Camera& camera = renderer.camera();
+			const Vec3 eye = camera.eye();
+			Vec3 toward{ eye.x - camera.target.x, eye.y - camera.target.y, 0 };
+			const float length = std::sqrt(toward.x * toward.x + toward.y * toward.y);
+			toward = length > 1e-3f ? toward * (1 / length) : Vec3{ 0, -1, 0 };
+			const Vec3 right{ -toward.y, toward.x, 0 };
+			const float unit = S() / 180; // (the faders are in the original's units: 180 a plot)
+			const float width = map.healthBarWidth / std::max(fader(map.healthScale, 2), 0.1f) * unit, height = width * 0.12f;
+			const float radius = fader(map.healthRadius, -60) * unit, z = fader(map.healthZ, 75) * unit;
+			std::vector<scene::Material> material(1, barModel.items[0].material);
+			for (const UnitView& u : map.units)
+			{
+				const int plot = u.x + u.y * map.width;
+				const float health = std::clamp(u.health, 0.0f, 1.0f);
+				if ((fog && !map.plots[size_t(plot)].visible) || health <= 0)
+					continue;
+				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
+				if (const auto it = unitPositions.find(uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id)); it != unitPositions.end())
+					at = it->second;
+				at = at + toward * radius;
+				at.z = ground(at.x, at.y) + z;
+				at.x += wrapOffset(at.x);
+				if (!frustum.sphere(at, width))
+					continue;
+				Affine place;
+				place.translation = at - right * (width * (1 - health));
+				for (int r = 0; r < 3; ++r)
+				{
+					place.rotation.m[size_t(r)][0] = (r == 0 ? right.x : r == 1 ? right.y : right.z) * width * health;
+					place.rotation.m[size_t(r)][1] = -(r == 0 ? toward.x : r == 1 ? toward.y : 0.0f);
+					place.rotation.m[size_t(r)][2] = r == 2 ? height : 0.0f;
+				}
+				const nif::Color3 colour = health > 2 / 3.0f ? nif::Color3{ 0, 1, 0 } : health > 1 / 3.0f ? nif::Color3{ 1, 1, 0 } : nif::Color3{ 1, 0, 0 };
+				material[0].emissive = colour;
+				const Affine world[] = { place };
+				const uint8_t visible[] = { 1 };
+				renderer.draw(*barGpu, world, visible, material);
+			}
 		}
 
 		void drawFlags(const Frustum& frustum)
@@ -2910,7 +3032,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 					w = place * w;
 				renderer.draw(*lm->gpu, world, lm->model.visibility(pose.hidden));
 				const float height = lm->bounds.max.z - lm->bounds.min.z;
-				flagDraws[plot] = { place.point({ 0, 0, lm->bounds.max.z }), place.point({ 0, 0, lm->bounds.max.z - height * 0.47f }) };
+				flagDraws[plot] = { place.point({ 0, 0, lm->bounds.max.z }), place.point({ 0, 0, lm->bounds.max.z - height * 0.47f }),
+					drawMedallions(u, place) };
 			}
 		}
 
@@ -3840,6 +3963,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 			m->ringsDrawn = m->drawRings();
 			if (options.flags)
 				m->drawFlags(frustum);
+			if (options.flags && options.healthBars && m->renderer.camera().distance > m->map.cameraMinDistance + 0.5f &&
+				m->renderer.camera().distance < 22 * m->S())
+				m->drawHealthBars(frustum);
 		}
 		m->drawBursts(frustum);
 		// (the particles of what is no longer drawn: gone)
@@ -3962,13 +4088,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 					else
 						overlay.rect(x - fw / 2, y - fh, x + fw / 2, y, primary, 0.95f);
 				}
-				const float health = std::clamp(u.health, 0.0f, 1.0f);
-				if (options.healthBars)
-				{
-					overlay.rect(x - fw / 2, y + 1, x + fw / 2, y + 3.5f * scale, { 0, 0, 0 }, 0.7f);
-					overlay.rect(x - fw / 2, y + 1, x - fw / 2 + fw * health, y + 3.5f * scale, { 1 - health, 0.3f + 0.6f * health, 0.15f }, 0.95f);
-				}
-				if (u.count > 1)
+				const auto drawn = m->flagDraws.find(plot);
+				if (u.count > 1 && (drawn == m->flagDraws.end() || !drawn->second.medallions))
 					overlay.text(std::to_wstring(u.count), x + fw / 2 + 2, topY - 1, 10 * scale, { 1, 1, 1 }, 0.95f, true);
 			}
 		for (const CityView& c : m->map.cities)

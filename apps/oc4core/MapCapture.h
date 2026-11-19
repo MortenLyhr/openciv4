@@ -17,6 +17,18 @@
 
 namespace oc4::host
 {
+	// A player's flag as the engine draws it, on the map and by the minimap: the flag model of
+	// the player's era (ART_UNITGROUP_FLAG_ANCIENT, _MEDIEVAL from the medieval era, _MODERN
+	// from the industrial), the civilization's decal, the player's colours.
+	struct FlagArt
+	{
+		const class CvArtInfoMisc* model = nullptr;
+		std::string decal;
+		render::Color primary, secondary;
+		bool white = false; // a full-colour decal, its alpha no colour mask
+	};
+	FlagArt flagArt(int player);
+
 	class MapCapture
 	{
 	public:
