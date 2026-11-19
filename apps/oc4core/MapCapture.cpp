@@ -25,7 +25,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <list>
+#include <numbers>
 
 namespace oc4::host
 {
@@ -227,6 +229,7 @@ namespace oc4::host
 			s.routes.push_back({ int(info.getRouteType()), text(info.getModelFile()), directionMask(info.getConnectString()), numbers(info.getRotateString()) });
 		}
 		loadCityLSystem();
+		loadPlotLSystem();
 		loadAttachables(s);
 
 		s.rivers.clear();
@@ -397,6 +400,331 @@ namespace oc4::host
 		}
 	}
 
+	bool MapCapture::LAttributes::allows(const std::string& cls, const std::string& value, const char* all, const char* none) const
+	{
+		const auto it = lists.find(cls);
+		if (it == lists.end())
+			return true;
+		const auto has = [&](const std::string& v) { return std::ranges::find(it->second, v) != it->second.end(); };
+		if (value.empty())
+			return has(none);
+		return !has("!" + value) && (has(value) || has(all));
+	}
+
+	std::string MapCapture::LAttributes::scalar(const std::string& name) const
+	{
+		for (const auto& [n, v] : scalars)
+			if (n == name)
+				return v;
+		return {};
+	}
+
+	// The engine reads CIV4PlotLSystem.xml itself (the DLL never sees it). It lays out what
+	// stands on a plot from it: here what farms take, the farm's buildings and its crops.
+	void MapCapture::loadPlotLSystem()
+	{
+		m_plotNodes.clear();
+		m_plotProductions.clear();
+		const auto loc = m_assets.locate("xml/buildings/civ4plotlsystem.xml");
+		if (!loc)
+			return;
+		std::string error;
+		const auto doc = parseXml(m_assets.read(*loc), error);
+		if (!doc)
+		{
+			std::printf("  map view: CIV4PlotLSystem.xml: %s\n", error.c_str());
+			return;
+		}
+		const auto narrow = [](const std::wstring& w) {
+			std::string out;
+			for (const wchar_t c : w)
+				if (c != L' ' && c != L'\t' && c != L'\r' && c != L'\n')
+					out += char(c);
+			return out;
+		};
+		const auto number = [](const XmlNode* n) { return n ? std::wcstof(n->text.c_str(), nullptr) : 0.0f; };
+		const auto attributes = [&](const XmlNode& n, LAttributes& out) {
+			for (const auto& a : n.children)
+				if (const std::wstring* cls = a->type == XmlNode::Type::Element && a->name == "Attribute" ? a->attribute("Class") : nullptr)
+				{
+					const std::string v = narrow(a->text);
+					if (*cls == L"Scalar")
+					{
+						if (const size_t colon = v.find(':'); colon != std::string::npos)
+							out.scalars.emplace_back(v.substr(0, colon), v.substr(colon + 1));
+						continue;
+					}
+					auto& list = out.lists[narrow(*cls)];
+					size_t start = 0;
+					for (size_t comma; (comma = v.find(',', start)) != std::string::npos; start = comma + 1)
+						list.push_back(v.substr(start, comma - start));
+					list.push_back(v.substr(start));
+				}
+		};
+		std::vector<const XmlNode*> stack{ doc.get() };
+		while (!stack.empty())
+		{
+			const XmlNode* n = stack.back();
+			stack.pop_back();
+			for (auto c = n->children.rbegin(); c != n->children.rend(); ++c)
+				stack.push_back(c->get());
+			if (n->type != XmlNode::Type::Element)
+				continue;
+			const std::wstring* name = n->attribute("Name");
+			if (n->name == "LNode" && name)
+			{
+				auto& art = m_plotNodes[narrow(*name)];
+				for (const auto& r : n->children)
+				{
+					const std::wstring* refName = r->type == XmlNode::Type::Element && r->name == "ArtRef" ? r->attribute("Name") : nullptr;
+					if (!refName)
+						continue;
+					LArtRef ref;
+					ref.name = narrow(*refName);
+					attributes(*r, ref);
+					ref.nif = ref.scalar("NIF");
+					if (const size_t sep = ref.nif.find("::"); sep != std::string::npos)
+					{
+						ref.node = ref.nif.substr(sep + 2);
+						ref.nif.resize(sep);
+					}
+					ref.kfm = ref.scalar("KFM");
+					if (const XmlNode* scale = r->firstChildElement("Scale"))
+						ref.scale = number(scale);
+					ref.rotate = number(r->firstChildElement("Rotate"));
+					art.push_back(std::move(ref));
+				}
+			}
+			else if (n->name == "LProduction")
+			{
+				LProduction p;
+				if (const std::wstring* from = n->attribute("From"))
+					p.from = narrow(*from);
+				if (name)
+					p.name = narrow(*name);
+				attributes(*n, p);
+				for (const auto& t : n->children)
+				{
+					const std::wstring* to = t->type == XmlNode::Type::Element && t->name == "To" ? t->attribute("Name") : nullptr;
+					if (!to)
+						continue;
+					LProduction::To& out = p.to.emplace_back();
+					out.node = narrow(*to);
+					if (const XmlNode* tr = t->firstChildElement("Translate"))
+						std::swscanf(tr->text.c_str(), L" %f , %f", &out.x, &out.y);
+					out.rotate = number(t->firstChildElement("Rotate"));
+				}
+				m_plotProductions.push_back(std::move(p));
+			}
+		}
+	}
+
+	// A farm as CIV4PlotLSystem.xml lays it out: its farmhouse (Leaf_Farm_4x4's goal) and the
+	// crops grown out from its 4x4 node; rice and wheat only the buildings, in a corner. -1: none
+	// (not a farm, or nothing of it in the file: the improvement's own model is drawn).
+	int MapCapture::plotLayout(const CvPlot& plot, int bonus)
+	{
+		const ImprovementTypes improvement = plot.getImprovementType();
+		if (improvement == NO_IMPROVEMENT || m_plotNodes.empty())
+			return -1;
+		const std::string improvementName = text(GC.getImprovementInfo(improvement).getType());
+		if (improvementName != "IMPROVEMENT_FARM")
+			return -1;
+		const PlayerTypes owner = plot.getOwner();
+		const int era = owner != NO_PLAYER ? int(player(owner).getCurrentEra()) : int(GC.getGame().getCurrentEra());
+		ImprovementTypes shown = NO_IMPROVEMENT;
+		bool worked = false;
+		const_cast<CvPlot&>(plot).getVisibleImprovementState(shown, worked);
+		const bool irrigated = plot.isIrrigationAvailable();
+		const uint32_t variant = (uint32_t(plot.getX()) * 73856093u) ^ (uint32_t(plot.getY()) * 19349663u);
+		const uint64_t key = uint64_t(uint8_t(era)) | uint64_t(uint16_t(bonus + 1)) << 8 | uint64_t(worked) << 24 | uint64_t(irrigated) << 25 |
+			uint64_t(variant % 64) << 26;
+		if (const auto it = m_plotLayouts.find(key); it != m_plotLayouts.end())
+			return it->second;
+
+		const std::string eraName = era >= 0 && era < GC.getNumEraInfos() ? text(GC.getEraInfo(static_cast<EraTypes>(era)).getType()) : "";
+		const std::string bonusName = bonus >= 0 && bonus < GC.getNumBonusInfos() ? text(GC.getBonusInfo(static_cast<BonusTypes>(bonus)).getType()) : "";
+		const auto fits = [&](const LAttributes& a) {
+			return a.allows("Era", eraName, "ERA_ALL", "NO_ERA") && a.allows("Bonus", bonusName, "BONUS_ALL", "NO_BONUS") &&
+				a.allows("Improvement", improvementName, "IMPROVEMENT_ALL", "NO_IMPROVEMENT");
+		};
+		uint32_t random = variant * 2654435761u + 1;
+		const auto next = [&] { return (random = random * 1664525u + 1013904223u) >> 8; };
+		const auto production = [&](const std::string& from, auto&& also) -> const LProduction* {
+			std::vector<const LProduction*> found;
+			for (const LProduction& p : m_plotProductions)
+				if (p.from == from && fits(p) && also(p))
+					found.push_back(&p);
+			return found.empty() ? nullptr : found[next() % found.size()];
+		};
+		const auto artOf = [&](const std::string& node, auto&& also) -> const LArtRef* {
+			const auto it = m_plotNodes.find(node);
+			if (it == m_plotNodes.end())
+				return nullptr;
+			std::vector<const LArtRef*> found;
+			for (const LArtRef& r : it->second)
+				if (fits(r) && also(r))
+					found.push_back(&r);
+			return found.empty() ? nullptr : found[next() % found.size()];
+		};
+		const auto any = [](const auto&) { return true; };
+		const auto placesFarm = [](const LProduction& p) {
+			return std::ranges::any_of(p.to, [](const LProduction::To& t) { return t.node == "Farm_4x4"; });
+		};
+
+		std::vector<render::PlotPiece> pieces;
+		const LArtRef* goal = artOf("Leaf_Farm_4x4", [&](const LArtRef& r) { return r.name == "goal:" + improvementName && !r.nif.empty(); });
+		const LProduction* farm = production("Farm_4x4", any);
+		if (goal && farm)
+		{
+			// A leaf of crops the root's productions came down to, in the plot's 12x12 cells,
+			// and the 4x4 node it lies in (-1: none).
+			struct Leaf
+			{
+				std::string node;
+				float x = 0, y = 0, degrees = 0;
+				int slot = -1;
+			};
+			struct Slot
+			{
+				float x = 0, y = 0, degrees = 0;
+			};
+			std::vector<Leaf> leaves;
+			std::vector<Slot> slots;
+			// Down from a node to its leaves of crops (the buildings' leaves, BLeaf_*, have no
+			// farm in them; the farm's own production is the goal's alone).
+			const auto expand = [&](auto&& self, const std::string& node, float x, float y, float degrees, int slot, int depth) -> void {
+				if (node.rfind("GLeaf_", 0) == 0)
+				{
+					leaves.push_back({ node, x, y, degrees, slot });
+					return;
+				}
+				if (depth > 8 || (node.rfind("Node_", 0) != 0 && node.rfind("GNode_", 0) != 0))
+					return;
+				if (node == "Node_4x4" && slot < 0)
+				{
+					slot = int(slots.size());
+					slots.push_back({ x, y, degrees });
+				}
+				const LProduction* p = production(node, [&](const LProduction& q) {
+					return q.scalar("bGoalOnly") != "1" && q.scalar("bExtraGoalOnly") != "1" && !placesFarm(q);
+				});
+				if (!p)
+					return;
+				const float rc = std::cos(degrees * std::numbers::pi_v<float> / 180), rs = std::sin(degrees * std::numbers::pi_v<float> / 180);
+				for (const LProduction::To& t : p->to)
+					self(self, t.node, x + t.x * rc - t.y * rs, y + t.x * rs + t.y * rc, degrees + t.rotate, slot, depth + 1);
+			};
+
+			// Where the farm's 4x4 node stands: a corner (rice, wheat), else one of the 4x4
+			// nodes the root came down to, near the middle of the plot.
+			float ox = 0, oy = 0, odeg = 0, twist = 0;
+			std::vector<Leaf> crops;
+			if (const LProduction* corner = production("Node_12x12", [&](const LProduction& p) {
+					return p.lists.contains("Improvement") && p.to.size() == 1 && p.to[0].node == "Farm_4x4";
+				}))
+			{
+				ox = corner->to[0].x;
+				oy = corner->to[0].y;
+			}
+			else
+			{
+				twist = std::strtof(goal->scalar("fTwist").c_str(), nullptr);
+				for (int attempt = 0; attempt < 8 && slots.empty(); ++attempt)
+				{
+					leaves.clear();
+					expand(expand, "Node_12x12", 0, 0, 0, -1, 0);
+				}
+				int chosen = -1;
+				float best = 1e9f;
+				for (size_t i = 0; i < slots.size(); ++i)
+					if (const float d = std::hypot(slots[i].x, slots[i].y) + float(next() % 1000) / 1000 * 3; d < best)
+						best = d, chosen = int(i);
+				if (chosen >= 0)
+					std::tie(ox, oy, odeg) = std::tuple{ slots[size_t(chosen)].x, slots[size_t(chosen)].y, slots[size_t(chosen)].degrees };
+				else
+					std::tie(ox, oy) = std::pair{ -2.0f, -2.0f };
+				std::erase_if(leaves, [&](const Leaf& l) { return l.slot == chosen && chosen >= 0; });
+				// The farm's own crops, then the leaves nearest it (a little at random) until the
+				// crops cover the ground the farmhouse asks for.
+				if (production("Node_4x4", [&](const LProduction& p) {
+						return placesFarm(p) && std::ranges::any_of(p.to, [](const LProduction::To& t) { return t.node == "GNode_4x4"; });
+					}))
+				{
+					const size_t before = leaves.size();
+					expand(expand, "GNode_4x4", ox, oy, odeg, -2, 0);
+					crops.assign(leaves.begin() + std::ptrdiff_t(before), leaves.end());
+					leaves.resize(before);
+					std::vector<std::pair<float, const Leaf*>> nearest;
+					for (const Leaf& l : leaves)
+						nearest.push_back({ std::hypot(l.x - ox, l.y - oy) + float(next() % 1000) / 1000 * 2.5f, &l });
+					std::ranges::sort(nearest, {}, &std::pair<float, const Leaf*>::first);
+					const auto cells = [](const Leaf& l) {
+						int w = 0, h = 0;
+						std::sscanf(l.node.c_str() + 6, "%dx%d", &w, &h);
+						return w * h;
+					};
+					int area = 0;
+					for (const Leaf& l : crops)
+						area += cells(l);
+					const int wanted = std::atoi(goal->scalar("iCropAreaMultiplier").c_str()) * 4;
+					for (const auto& [d, l] : nearest)
+					{
+						if (area >= wanted)
+							break;
+						crops.push_back(*l);
+						area += cells(*l);
+					}
+				}
+			}
+			const float c = std::cos(twist), sn = std::sin(twist);
+			const auto add = [&](const LArtRef& art, float scale, float x, float y, float degrees) {
+				render::PlotPiece& piece = pieces.emplace_back();
+				piece.model = modelIndex(&art, art.nif.c_str(), art.kfm.c_str(), scale);
+				piece.node = art.node;
+				piece.x = (x * c - y * sn) / 12;
+				piece.y = (x * sn + y * c) / 12;
+				piece.yaw = twist + degrees * std::numbers::pi_v<float> / 180;
+			};
+			// The crops of a leaf (GLeaf_*), worked or not, irrigated or not.
+			for (const Leaf& l : crops)
+			{
+				const LArtRef* crop = artOf(l.node, [&](const LArtRef& r) {
+					const std::string w = r.scalar("bImprovementWorkedOnly"), i = r.scalar("bIrrigatedOnly");
+					return !r.nif.empty() && !r.node.empty() && r.lists.contains("Improvement") && (w.empty() || (w == "1") == worked) &&
+						(i.empty() || (i == "1") == irrigated);
+				});
+				if (!crop)
+					continue;
+				// (a 3x2 leaf's crops are the file's 2x3 piece: turned)
+				int w = 0, h = 0, aw = 0, ah = 0;
+				std::sscanf(l.node.c_str() + 6, "%dx%d", &w, &h);
+				std::sscanf(crop->node.c_str(), "%dx%d", &aw, &ah);
+				add(*crop, crop->scale, l.x, l.y, l.degrees + (w != h && aw == h && ah == w ? 90.0f : 0.0f));
+			}
+			const float improvementScale = defineOr("IMPROVEMENT_SCALE", 1);
+			std::vector<const LProduction::To*> spots;
+			for (const LProduction::To& t : farm->to)
+				if (t.node == "Leaf_Farm_4x4")
+					add(*goal, goal->scale * improvementScale, ox + t.x, oy + t.y, goal->rotate);
+				else
+					spots.push_back(&t);
+			for (const auto& [n, extra] : goal->scalars)
+				if (n == "szExtra" && !spots.empty())
+				{
+					const LProduction::To* spot = spots[next() % spots.size()];
+					if (const LArtRef* art = artOf(spot->node, [&](const LArtRef& r) { return r.name == extra && !r.nif.empty(); }))
+						add(*art, art->scale * improvementScale, ox + spot->x, oy + spot->y, art->rotate);
+					std::erase(spots, spot);
+				}
+		}
+		const int index = pieces.empty() ? -1 : int(m_snapshot.plotLayouts.size());
+		if (!pieces.empty())
+			m_snapshot.plotLayouts.push_back(std::move(pieces));
+		m_plotLayouts.emplace(key, index);
+		return index;
+	}
+
 	// The houses a city of this era and art style draws from, as the LSystem's attributes say.
 	int MapCapture::houseSet(int era, int artStyle)
 	{
@@ -531,6 +859,13 @@ namespace oc4::host
 			// (a resource the active team cannot see yet, by its techs, is not there for it)
 			v.bonus = int16_t(plot->getBonusType(active));
 			v.route = int16_t(plot->getRouteType());
+			v.layout = int16_t(plotLayout(*plot, v.bonus));
+			{
+				BonusTypes shownBonus = NO_BONUS;
+				bool improved = false, worked = false;
+				plot->getVisibleBonusState(shownBonus, improved, worked);
+				v.bonusState = uint8_t(!improved ? 1 : worked ? 3 : 2);
+			}
 			v.water = plot->isWater();
 			v.hills = plot->isHills();
 			v.peak = plot->isPeak();
