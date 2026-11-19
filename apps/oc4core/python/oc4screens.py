@@ -1886,6 +1886,7 @@ def typeIntoEdit(text):
 			value = value[:-1]
 		elif c in (u'\r', u'\x1b'):
 			_editFocus[0] = None
+			break # (the rest of the keys are not the edit box's)
 		elif c >= u' ' and (w.allowed is None or c in w.allowed) and (not w.maxChars or len(value) < w.maxChars):
 			value += c
 	_set(w, 'text', value)

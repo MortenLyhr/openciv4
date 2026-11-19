@@ -246,15 +246,23 @@ namespace oc4::host
 				takenLeaders.push_back(infoType(set->leader));
 		if (!s.leader.empty() && !(slotSetting(0) && !slotSetting(0)->leader.empty()))
 			takenLeaders.push_back(infoType(s.leader));
-		size_t nextCiv = 0;
+		// (the open slots become players 0, 1, 2... in their order, as the original's setup screen
+		// hands them over: map scripts count the players as the first ones, so a closed slot
+		// between open ones would leave one of them out)
+		std::vector<int> openSlots;
 		for (int p = 0; p < numSlots; ++p)
+			if (isOpen(p))
+				openSlots.push_back(p);
+		size_t nextCiv = 0;
+		for (int i = 0; i < numSlots; ++i)
 		{
-			const PlayerTypes id = static_cast<PlayerTypes>(p);
-			if (!isOpen(p))
+			const PlayerTypes id = static_cast<PlayerTypes>(i);
+			if (size_t(i) >= openSlots.size())
 			{
 				ic.setSlotStatus(id, SS_CLOSED);
 				continue;
 			}
+			const int p = openSlots[size_t(i)];
 			const SlotSetting* set = slotSetting(p);
 			const auto civ = static_cast<CivilizationTypes>(chosenCivs[size_t(p)] >= 0 ? chosenCivs[size_t(p)] : civs[nextCiv++]);
 			const CvCivilizationInfo& civInfo = GC.getCivilizationInfo(civ);
@@ -279,7 +287,7 @@ namespace oc4::host
 				takenLeaders.push_back(leader);
 			}
 			ic.setLeader(id, static_cast<LeaderHeadTypes>(leader));
-			ic.setTeam(id, static_cast<TeamTypes>(set && set->team >= 0 ? set->team : p));
+			ic.setTeam(id, static_cast<TeamTypes>(set && set->team >= 0 ? set->team : i));
 			ic.setHandicap(id, p == 0 ? humanHandicap : aiHandicap);
 			ic.setColor(id, static_cast<PlayerColorTypes>(civInfo.getDefaultPlayerColor()));
 			ic.setPlayableCiv(id, civInfo.isPlayable());

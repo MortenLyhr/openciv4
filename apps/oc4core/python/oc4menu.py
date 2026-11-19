@@ -24,6 +24,7 @@ _state = {
 	'message': u'', # why the last choice could not be played (shown on the page it came from)
 	'picked': {},  # the new game page's choices, kept across pages: dropdown name -> index
 	'custom': None, # the custom game page's choices (see _customDefaults)
+	'lists': {},   # the civilizations' and leaders' lists, made once a menu (key -> list)
 }
 
 _DROPDOWNS = ('MenuLeader', 'MenuMap', 'MenuSize', 'MenuClimate', 'MenuSea', 'MenuEra', 'MenuSpeed', 'MenuHandicap')
@@ -60,6 +61,7 @@ def show(title, maps, folders, message='', page='', mods=()):
 	_state['folders'] = [(_u(f), _u(l)) for f, l in folders]
 	_state['mods'] = list(mods)
 	_state['choice'] = None
+	_state['lists'] = {}
 	_state['message'] = _u(message)
 	_state['page'] = page if page in ('new', 'custom', 'load') else 'load' if message else 'main'
 	_draw()
@@ -505,8 +507,21 @@ def _custom():
 	return _state['custom']
 
 
+def _listed(key, make):
+	"""The list made once (the game's XML does not change while the menu is up): a mod with
+	100+ civilizations would otherwise go through them all for every row at every redraw."""
+	lists = _state['lists']
+	if key not in lists:
+		lists[key] = make()
+	return lists[key]
+
+
 def _civs(human):
 	"""(name, type) of the civilizations a slot can play, by name."""
+	return _listed(('civs', human), lambda: _makeCivs(human))
+
+
+def _makeCivs(human):
 	gc = _gc()
 	out = []
 	for i in range(gc.getNumCivilizationInfos()):
@@ -519,6 +534,10 @@ def _civs(human):
 
 def _civLeaders(civType, anyCiv):
 	"""(name, type) of the leaders a civilization can have (all with Lead from any civ), by name."""
+	return _listed(('civLeaders', civType, anyCiv), lambda: _makeCivLeaders(civType, anyCiv))
+
+
+def _makeCivLeaders(civType, anyCiv):
 	gc = _gc()
 	civ = _type(gc.getNumCivilizationInfos(), gc.getCivilizationInfo, civType, -1)
 	barbarian = gc.getDefineINT('BARBARIAN_LEADER')
@@ -534,6 +553,10 @@ def _civLeaders(civType, anyCiv):
 
 def _leadersOf(civTypes):
 	"""(name, type) of the leaders of those civilizations, by name."""
+	return _listed(('leadersOf', tuple(civTypes)), lambda: _makeLeadersOf(civTypes))
+
+
+def _makeLeadersOf(civTypes):
 	gc = _gc()
 	civs = [_type(gc.getNumCivilizationInfos(), gc.getCivilizationInfo, t, -1) for t in civTypes]
 	out = []
@@ -605,7 +628,18 @@ def _customPage(screen, W, H):
 	box = 20
 	perColumn = (len(options) + 1) / 2
 	below = 80 + perColumn * (box + 1) + 16
-	rowH = max(26, min(36, (y + h - 72 - 12 - ptop - below) / shown))
+	# (more rows than fit at the smallest height: as many as fit, paged with the arrows)
+	fit = max(2, (y + h - 72 - 12 - ptop - below) / 26)
+	first = 0
+	if shown > fit:
+		first = max(0, min(_state.get('customFirstRow', 0), shown - fit))
+		_button(screen, 'MenuRowsUp', u'^', x + w - 96, y + 10, 36, 32)
+		_button(screen, 'MenuRowsDown', u'v', x + w - 56, y + 10, 36, 32)
+		screen.enable('MenuRowsUp', first > 0)
+		screen.enable('MenuRowsDown', first + fit < shown)
+	_state['customFirstRow'] = first
+	rows = range(first, min(shown, first + fit))
+	rowH = max(26, min(36, (y + h - 72 - 12 - ptop - below) / len(rows)))
 	parts = [0.21, 0.14, 0.36, 0.145, 0.145] # status, team, leader, civilization, difficulty
 	gap = 8
 	inner = pw - 16 - gap * (len(parts) - 1)
@@ -616,9 +650,9 @@ def _customPage(screen, W, H):
 	anyCiv = _leadAnyCiv(c)
 	human, ai = _civs(True), _civs(False)
 	aiHandicap = gc.getHandicapInfo(gc.getDefineINT('AI_HANDICAP')).getDescription()
-	for p in range(shown):
+	for p in rows:
 		slot = slots[p]
-		ry = ptop + p * rowH
+		ry = ptop + (p - first) * rowH
 		screen.addPanel('CGRow%d' % p, u'', u'', True, False, px, ry, pw, rowH - 4, _cpe.PanelStyles.PANEL_STYLE_IN)
 		dy = ry + (rowH - 4 - 24) / 2
 		if p == 0:
@@ -650,8 +684,8 @@ def _customPage(screen, W, H):
 			_label(screen, 'CGDifficulty%d' % p, grey(aiHandicap), cols[4] + 6, dy + 3)
 
 	# Settings, Options, Victories.
-	btop = ptop + shown * rowH + 12
-	bbottom = y + h - 72
+	btop = ptop + len(rows) * rowH + 12
+	bbottom = max(y + h - 72, btop + 120)
 	bw = w - 40 - 2 * gap
 	bwidths = [int(bw * 0.36), int(bw * 0.36)]
 	bwidths.append(bw - bwidths[0] - bwidths[1])
@@ -938,6 +972,9 @@ def handleInput(args):
 	elif function == 'MenuCustom':
 		_state['message'] = u''
 		_state['page'] = 'custom'
+	elif function in ('MenuRowsUp', 'MenuRowsDown'):
+		_keepCustom()
+		_state['customFirstRow'] = _state.get('customFirstRow', 0) + (function == 'MenuRowsUp' and -1 or 1)
 	elif function == 'MenuCustomLaunch':
 		_customLaunch()
 		return 1
