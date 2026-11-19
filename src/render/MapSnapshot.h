@@ -133,11 +133,16 @@ namespace oc4::render
 
 	struct UnitView
 	{
+		struct MoveStep
+		{
+			int x = 0, y = 0;
+		};
 		int id = -1; // the owner's unit id: the view follows a unit from plot to plot
 		int x = 0, y = 0;
 		int owner = -1;
 		int shownOwner = -1; // whose it looks to the active team (getVisualOwner: a hidden nationality's, the barbarians')
 		int direction = 4; // DirectionTypes the unit faces (south)
+		std::vector<MoveStep> moveSteps; // the accepted move order's plots, in order
 		std::vector<int> models; // one per figure of the formation, into MapSnapshot::models
 		int count = 1;           // units on the plot
 		float health = 1;

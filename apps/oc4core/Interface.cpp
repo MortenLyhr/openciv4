@@ -388,10 +388,54 @@ namespace oc4::host
 
 	std::unordered_map<const void*, MissionTypes> Entities::s_missions;
 
+	namespace
+	{
+		std::mutex g_movementMutex;
+		std::unordered_map<uint64_t, Entities::Movement> g_movements;
+
+		uint64_t movementKey(const IDInfo& unit)
+		{
+			return uint64_t(uint32_t(unit.eOwner)) << 32 | uint32_t(unit.iID);
+		}
+	}
+
 	void Entities::destroyEntity(CvEntity*& pEntity, bool)
 	{
 		s_missions.erase(pEntity);
+		{
+			std::lock_guard lock(g_movementMutex);
+			if (const auto* unit = reinterpret_cast<const CvUnit*>(pEntity))
+				g_movements.erase(movementKey(unit->getIDInfo()));
+		}
 		pEntity = nullptr;
+	}
+
+	void Entities::planMovement(const std::vector<IDInfo>& units, const std::vector<std::pair<int, int>>& plots)
+	{
+		if (plots.empty())
+			return;
+		std::lock_guard lock(g_movementMutex);
+		for (const IDInfo& unit : units)
+			if (unit.eOwner >= 0 && unit.iID >= 0)
+				g_movements[movementKey(unit)] = { unit, plots };
+	}
+
+	std::optional<Entities::Movement> Entities::movement(const IDInfo& unit, int x, int y)
+	{
+		std::lock_guard lock(g_movementMutex);
+		const auto it = g_movements.find(movementKey(unit));
+		if (it == g_movements.end())
+			return std::nullopt;
+		const auto reached = std::ranges::find(it->second.plots, std::pair{ x, y });
+		if (reached == it->second.plots.end())
+			return std::nullopt;
+		const size_t count = size_t(std::distance(it->second.plots.begin(), reached)) + 1;
+		Movement out = it->second;
+		out.plots.resize(count);
+		it->second.plots.erase(it->second.plots.begin(), it->second.plots.begin() + count);
+		if (it->second.plots.empty())
+			g_movements.erase(it);
+		return out;
 	}
 
 	namespace

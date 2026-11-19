@@ -14,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <format>
 #include <functional>
 #include <map>
@@ -578,13 +579,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 		};
 		std::unordered_map<int, CityLayout> cityLayouts;
 
-		// Units walking from plot to plot between two states of the game.
+		// Units walking through the plots of their accepted move order.
 		struct Motion
 		{
 			Vec3 from, to;
 			float start = 0, duration = 0;
 		};
-		std::unordered_map<uint64_t, Vec3> unitPositions; // where each unit was last shown
+		std::unordered_map<uint64_t, std::deque<Motion>> motions;
+		std::unordered_map<uint64_t, Vec3> unitPositions; // the plot where each unit was last shown
 		// Where each unit's figure was drawn last (round its middle), for clicks on them.
 		struct FigureHit
 		{
@@ -673,8 +675,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 				}
 				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				const uint64_t key = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);
-				if (const auto it = motions.find(key); it != motions.end() && time < it->second.start + it->second.duration)
-					at = motionPoint(it->second);
+				if (const Motion* motion = activeMotion(key))
+					at = motionPoint(*motion);
 				at.x += wrapOffset(at.x);
 				const anim::Pose pose = ring.player.evaluate(ring.model);
 				const auto local = ring.model.worldTransforms(pose.locals);
@@ -690,7 +692,6 @@ float4 PSTerrain(PSIn i) : SV_Target
 			}
 			return true;
 		}
-		std::unordered_map<uint64_t, Motion> motions;
 		std::unordered_map<uint64_t, float> restingSince; // when each resting unit began to fortify
 		std::unordered_map<uint64_t, float> battleStarts; // by BattleView::serial
 		std::unordered_map<uint64_t, std::pair<int, float>> workSince; // each working unit's work, since when
@@ -2567,10 +2568,25 @@ float4 PSTerrain(PSIn i) : SV_Target
 			return lerp(m.from, m.to, t);
 		}
 
+		const Motion* activeMotion(uint64_t unit) const
+		{
+			const auto it = motions.find(unit);
+			return it != motions.end() && !it->second.empty() && time < it->second.front().start + it->second.front().duration ? &it->second.front() : nullptr;
+		}
+
+		void finishMotions()
+		{
+			for (auto& [unit, route] : motions)
+				while (!route.empty() && time >= route.front().start + route.front().duration)
+					route.pop_front();
+			std::erase_if(motions, [](const auto& entry) { return entry.second.empty(); });
+		}
+
 		// Units: the plot's centre unit, as many figures as its formation has.
 		void buildUnits()
 		{
 			units.clear();
+			finishMotions();
 			// When each battle began, on this view's clock.
 			for (const BattleView& b : map.battles)
 				if (!battleStarts.contains(b.serial))
@@ -2605,19 +2621,40 @@ float4 PSTerrain(PSIn i) : SV_Target
 				Vec3 center{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				if (cityPlots.contains(u.x + u.y * map.width))
 					center.y -= 0.3f * S();
-				// A unit seen on another plot before walks there (the whole way, if it is near).
+				// A unit seen on another plot before walks there. Its move order supplies every
+				// legal intermediate plot; snapshots alone only reveal the final one.
 				const uint64_t key = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);
 				if (const auto it = unitPositions.find(key); it != unitPositions.end() && u.id >= 0)
 				{
-					Vec3 from = it->second;
-					if (const auto walking = motions.find(key); walking != motions.end())
-						from = motionPoint(walking->second);
-					Vec3 d = center - from;
-					if (map.wrapX && std::abs(d.x) > worldW() / 2)
-						d.x -= std::copysign(worldW(), d.x);
-					const float plots = length(d) / S();
-					if (plots > 0.05f && plots < 3.5f)
-						motions[key] = { center - d, center, time, 0.25f + 0.3f * plots };
+					auto& route = motions[key];
+					Vec3 from = route.empty() ? it->second : route.back().to;
+					float start = route.empty() ? time : route.back().start + route.back().duration;
+					auto append = [&](Vec3 to) {
+						Vec3 d = to - from;
+						if (map.wrapX && std::abs(d.x) > worldW() / 2)
+							d.x -= std::copysign(worldW(), d.x);
+						to = from + d;
+						const float plots = length(d) / S();
+						if (plots > 0.05f && plots < 3.5f)
+						{
+							const float duration = 0.25f + 0.3f * plots;
+							route.push_back({ from, to, start, duration });
+							from = to;
+							start += duration;
+						}
+					};
+					for (const UnitView::MoveStep& step : u.moveSteps)
+					{
+						Vec3 to{ (float(step.x) + 0.5f) * S(), (float(step.y) + 0.5f) * S(), 0 };
+						if (cityPlots.contains(step.x + step.y * map.width))
+							to.y -= 0.3f * S();
+						append(to);
+					}
+					// A mod or an unseen move may not have queued waypoints. Preserve the old
+					// short straight interpolation for that case and for any missing final step.
+					append(center);
+					if (route.empty())
+						motions.erase(key);
 				}
 				// (one already resting when first seen, as in a loaded game, is fortified already)
 				if (!u.resting)
@@ -3265,8 +3302,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					continue;
 				const Motion* motion = nullptr;
 				if (inst.unit)
-					if (const auto it = motions.find(inst.unit); it != motions.end() && time < it->second.start + it->second.duration)
-						motion = &it->second;
+					motion = activeMotion(inst.unit);
 				Vec3 anchor = inst.anchor;
 				float yaw = inst.yaw;
 				// Fighting: the attacker steps up to the defender; the dead are gone.
@@ -3284,7 +3320,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 				{
 					// Walking: from where it was, facing the way, on its way to the plot.
 					const Vec3 d = motion->to - motion->from;
-					anchor = motionPoint(*motion) + (inst.anchor - motion->to);
+					anchor = motionPoint(*motion) + (inst.anchor - inst.center);
 					if (std::abs(d.x) + std::abs(d.y) > 0.01f)
 						yaw = std::atan2(d.y, d.x) + std::numbers::pi_v<float> / 2;
 				}
@@ -3550,7 +3586,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		}
 		if (m->ring.ok)
 			m->ring.player.update(dt);
-		std::erase_if(m->motions, [&](const auto& e) { return m->time > e.second.start + e.second.duration; });
+		m->finishMotions();
 	}
 
 	void MapView::draw()
@@ -3663,8 +3699,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 					continue;
 				Vec3 p{ (float(u.x) + 0.5f) * m->S(), (float(u.y) + 0.5f) * m->S(), 0 };
 				const uint64_t key = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);
-				if (const auto it = m->motions.find(key); it != m->motions.end() && m->time < it->second.start + it->second.duration)
-					p = m->motionPoint(it->second);
+				if (const Impl::Motion* motion = m->activeMotion(key))
+					p = m->motionPoint(*motion);
 				p.x += m->wrapOffset(p.x);
 				if (u.selected && !m->ringsDrawn)
 				{
