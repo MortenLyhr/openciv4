@@ -841,6 +841,33 @@ float4 PSOverlay(Out p) : SV_Target
 		SDL_ReleaseGPUTransferBuffer(m_device, tb);
 	}
 
+	std::shared_ptr<GpuImage> Renderer::createMipmapped(uint32_t width, uint32_t height, std::span<const uint8_t> bgra)
+	{
+		if (width == 0 || height == 0 || bgra.size() < size_t(width) * height * 4)
+			return nullptr;
+		std::vector<std::vector<uint8_t>> levels{ std::vector<uint8_t>(bgra.begin(), bgra.begin() + ptrdiff_t(width) * height * 4) };
+		for (uint32_t w = width, h = height; w > 1 || h > 1;)
+		{
+			const uint32_t nw = std::max(w / 2, 1u), nh = std::max(h / 2, 1u);
+			const std::vector<uint8_t>& above = levels.back();
+			std::vector<uint8_t> next(size_t(nw) * nh * 4);
+			for (uint32_t y = 0; y < nh; ++y)
+				for (uint32_t x = 0; x < nw; ++x)
+					for (uint32_t c = 0; c < 4; ++c)
+					{
+						const uint32_t x0 = std::min(x * 2, w - 1), x1 = std::min(x * 2 + 1, w - 1), y0 = std::min(y * 2, h - 1), y1 = std::min(y * 2 + 1, h - 1);
+						const auto at = [&](uint32_t px, uint32_t py) { return unsigned(above[(size_t(py) * w + px) * 4 + c]); };
+						next[(size_t(y) * nw + x) * 4 + c] = uint8_t((at(x0, y0) + at(x1, y0) + at(x0, y1) + at(x1, y1) + 2) / 4);
+					}
+			levels.push_back(std::move(next));
+			w = nw, h = nh;
+		}
+		std::vector<std::span<const uint8_t>> spans;
+		for (const auto& l : levels)
+			spans.emplace_back(l);
+		return createTexture(width, height, 1, uint32_t(levels.size()), TextureFormat::BGRA8, spans);
+	}
+
 	std::shared_ptr<GpuImage> Renderer::createTexture(uint32_t width, uint32_t height, uint32_t layers, uint32_t mips, TextureFormat format,
 		std::span<const std::span<const uint8_t>> subresources)
 	{
