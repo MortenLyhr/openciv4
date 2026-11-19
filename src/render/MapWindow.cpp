@@ -147,6 +147,8 @@ namespace oc4::render
 		int uiPercent = 0; // (0: the window's density)
 		bool showFrameRate = false; // (Ctrl+Shift+F)
 		bool uiTakesKeys = false;   // a menu or a screen over the map has the arrows (after Tab)
+		bool uiTextFocus = false;   // an edit box of the screens has the keys
+		std::wstring uiTyped;       // what was typed into it since takeUiTyped
 		bool uiMapBehind = true;    // (no map behind it, the main menu: the arrows are its at once)
 		bool wasdPan = false;       // W A S D pan the map too (Ctrl+Shift+W, WasdPan.h)
 		std::optional<bool> wasdToggled; // (Ctrl+Shift+W since asked: the profile's to keep)
@@ -1027,6 +1029,13 @@ namespace oc4::render
 				if (isArrow(k) && !popup.keyboardChoice())
 					return;
 				popup.key(k == key::Tab && shift ? key::Up : k);
+				return;
+			}
+			// An edit box of the screens: its keys (the characters come as text).
+			if (uiTextFocus && !ctrl && !alt)
+			{
+				if (k == key::Back || k == key::Return || k == key::Escape)
+					uiTyped += wchar_t(k == key::Back ? L'\b' : k == key::Return ? L'\r' : L'\x1b');
 				return;
 			}
 			// (the game has no Ctrl+Shift+F, and this works over its screens and popups too)
@@ -2221,10 +2230,12 @@ namespace oc4::render
 				if (const unsigned k = keyOfSdl(e.key.key))
 					onKey(k);
 				break;
-			case SDL_EVENT_TEXT_INPUT: // (typed into a popup's edit box)
+			case SDL_EVENT_TEXT_INPUT: // (typed into a popup's edit box, or a screen's)
 				if (popup.active())
 					for (const wchar_t c : widen(e.text.text))
 						popup.character(c);
+				else if (uiTextFocus)
+					uiTyped += widen(e.text.text);
 				break;
 			case SDL_EVENT_MOUSE_MOTION:
 				padPointer = false; // (the mouse's own, or a finger: no drawn pointer)
@@ -2584,6 +2595,16 @@ namespace oc4::render
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
 	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }
+	void MapWindow::setUiTextFocus(bool focus) { m->uiTextFocus = focus; }
+	std::wstring MapWindow::takeUiTyped() { return std::exchange(m->uiTyped, {}); }
+	void MapWindow::typeText(const std::string& utf8)
+	{
+		if (m->popup.active())
+			for (const wchar_t c : widen(utf8))
+				m->popup.character(c);
+		else if (m->uiTextFocus)
+			m->uiTyped += widen(utf8);
+	}
 	int MapWindow::uiHovered() const { return m->ui.hovered(); }
 	void MapWindow::hoverUi(int item) { m->ui.hoverItem(item); }
 	int MapWindow::textWidth(const std::string& markup, int font) const
