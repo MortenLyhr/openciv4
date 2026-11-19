@@ -1809,8 +1809,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 						if (float(i * i + j * j) <= radius * radius)
 							disc.push_back({ int8_t(i), int8_t(j) });
 				// (the texels with another's ground or a river near: eight points round them tell)
-				const int far = int(std::ceil(radius)), mid = int(std::lround(radius * 0.7071f));
-				const int probes[8][2] = { { far, 0 }, { -far, 0 }, { 0, far }, { 0, -far }, { mid, mid }, { -mid, mid }, { mid, -mid }, { -mid, -mid } };
+				const int outer = int(std::ceil(radius)), mid = int(std::lround(radius * 0.7071f));
+				const int probes[8][2] = { { outer, 0 }, { -outer, 0 }, { 0, outer }, { 0, -outer }, { mid, mid }, { -mid, mid }, { mid, -mid }, { -mid, -mid } };
 				std::vector<uint32_t> mixed;
 				std::vector<uint8_t> byRiver;
 				each(along, true, [&](int tx, int ty) {
