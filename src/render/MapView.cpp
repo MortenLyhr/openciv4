@@ -34,7 +34,7 @@ namespace oc4::render
 		constexpr int kSub = 8;          // terrain quads per plot side
 		constexpr size_t kMaxPlayers = 256;
 		constexpr uint16_t kNoOverlay = 0xFFFF;
-		constexpr int kBorderRes = 16;       // culture border texels per plot side
+		constexpr int kBorderRes = 32;       // culture border texels per plot side
 		constexpr float kBorderReach = 0.75f; // plots: the border texture's distances go this far
 		constexpr float kBorderCorner = 0.11f; // plots: the ground within this of a texel decides its owner (rounds the borders' corners)
 
@@ -63,7 +63,7 @@ Texture2DArray atlas : register(t1, space2);     // 32 tiles per terrain
 Texture2DArray decals : register(t2, space2);    // features painted on the ground (flood plains)
 Texture2DArray details : register(t3, space2);   // the terrains' detail textures (grey around one half)
 Texture2D cells : register(t4, space2);          // 16-bit unorm, two texels a tile: its layers lowest first (atlas slice | rotation << 14), 0xFFFF none
-Texture2D borders : register(t5, space2);        // 16-bit unorm, kBorderRes texels a plot side: owner + 1, distance to another owner's ground / kBorderReach
+Texture2D borders : register(t5, space2);        // 8-bit unorm, kBorderRes texels a plot side: owner + 1, distance to the edge of its ground / kBorderReach
 SamplerState atlasSampler : register(s1, space2);
 SamplerState decalSampler : register(s2, space2);
 SamplerState detailSampler : register(s3, space2);
@@ -108,7 +108,7 @@ uint4 borderAt(int2 t, int2 size)
 	int2 w = t - int2(fs * floor((float2(t) + 0.5) / fs));
 	t.x = wrapX ? w.x : clamp(t.x, 0, size.x - 1);
 	t.y = wrapY ? w.y : clamp(t.y, 0, size.y - 1);
-	return uint4(round(borders.Load(int3(t, 0)) * 65535.0));
+	return uint4(round(borders.Load(int3(t, 0)) * 255.0));
 }
 
 // An atlas slice turned by quarter turns clockwise.
@@ -260,7 +260,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// The owner's colour along the edge of its ground, a line with a glow towards the
 		// inside, as the game's borders: from the distance to another owner's ground, signed
 		// for the owner of the texel the pixel is in and blended between texels.
-		const float res = 16;      // kBorderRes
+		const float res = 32;      // kBorderRes
 		const float reach = 0.75;  // kBorderReach
 		int2 tsize = mapSize * int(res);
 		float2 t = p * res - 0.5;
@@ -278,7 +278,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 			float v[4];
 			[unroll] for (int k = 0; k < 4; ++k)
 			{
-				float d = b[k].y / 65535.0 * reach;
+				float d = b[k].y / 255.0 * reach;
 				v[k] = b[k].x == b[c].x ? d : -d;
 			}
 			float inside = lerp(lerp(v[0], v[1], ft.x), lerp(v[2], v[3], ft.x), ft.y);
@@ -1607,10 +1607,11 @@ float4 PSTerrain(PSIn i) : SV_Target
 		}
 
 		// The culture borders, kBorderRes texels a plot side: whose ground each texel is, and how
-		// far it is from another owner's (in kBorderReach). Along a river between plots of
-		// different owners the ground is the plots' up to their banks, as the river bends: the
-		// plots on either side reach for it from their centres, around the water (an unowned plot
-		// goes over it: the water is outside the owner's border).
+		// far it is from the edge of that ground (in kBorderReach). The edge is the plots' edges
+		// with the corners cut round, as the original's. Along a river between plots of different
+		// owners it is the river's bank on the owner's side, as the river bends: the plots on
+		// either side reach for the ground from their centres, round the water, and the water
+		// and its bed are nobody's. Worked out in the plots along the borders only.
 		void updateBorders()
 		{
 			const int W = map.width, H = map.height, R = kBorderRes, TW = W * R, TH = H * R;
@@ -1631,6 +1632,13 @@ float4 PSTerrain(PSIn i) : SV_Target
 					py = (py % H + H) % H;
 				return px < 0 || py < 0 || px >= W || py >= H ? -1 : px + py * W;
 			};
+			const auto at = [&](int tx, int ty) -> int {
+				if (map.wrapX)
+					tx = (tx % TW + TW) % TW;
+				if (map.wrapY)
+					ty = (ty % TH + TH) % TH;
+				return tx < 0 || ty < 0 || tx >= TW || ty >= TH ? -1 : ty * TW + tx;
+			};
 			// A river along the edge between plot (px, py) and its neighbour (dx, dy) (one step).
 			const auto riverBetween = [&](int px, int py, int dx, int dy) {
 				const PlotView* q = dx > 0 || dy < 0 ? map.plot(px, py) : map.plot(px + dx, py + dy);
@@ -1638,13 +1646,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 			};
 			static const int kStep[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
 
-			std::vector<int32_t> label(size_t(TW) * size_t(TH)); // the plot whose ground the texel is
-			for (int ty = 0; ty < TH; ++ty)
-				for (int tx = 0; tx < TW; ++tx)
-					label[size_t(ty) * TW + tx] = tx / R + (ty / R) * W;
-
-			// The plots along rivers between different owners compete for the ground around them.
-			std::vector<uint8_t> zone(map.plots.size(), 0);
+			// The plots along rivers between different owners (they compete for the ground around
+			// them), the plots along a border, and those next to them (the distances reach there).
+			std::vector<uint8_t> zone(map.plots.size(), 0), along(map.plots.size(), 0), work(map.plots.size(), 0);
 			bool anyZone = false;
 			for (int py = 0; py < H; ++py)
 				for (int px = 0; px < W; ++px)
@@ -1654,10 +1658,48 @@ float4 PSTerrain(PSIn i) : SV_Target
 						if (n >= 0 && owners[size_t(n)] != owners[size_t(px + py * W)] && riverBetween(px, py, s[0], s[1]))
 							zone[size_t(px + py * W)] = 1, anyZone = true;
 					}
+			const auto around = [&](int px, int py, auto&& is) {
+				for (int dy = -1; dy <= 1; ++dy)
+					for (int dx = -1; dx <= 1; ++dx)
+						if (const int n = plotIndex(px + dx, py + dy); n >= 0 && is(n))
+							return true;
+				return false;
+			};
+			for (int py = 0; py < H; ++py)
+				for (int px = 0; px < W; ++px)
+					along[size_t(px + py * W)] = around(px, py, [&](int n) { return owners[size_t(n)] != owners[size_t(px + py * W)] || zone[size_t(n)]; });
+			for (int py = 0; py < H; ++py)
+				for (int px = 0; px < W; ++px)
+					work[size_t(px + py * W)] = around(px, py, [&](int n) { return along[size_t(n)] != 0; });
+			// (the texels of the plots flagged, a row at a time, forwards or backwards)
+			const auto each = [&](const std::vector<uint8_t>& plots, bool forwards, auto&& texel) {
+				for (int j = 0; j < TH; ++j)
+				{
+					const int ty = forwards ? j : TH - 1 - j;
+					const uint8_t* row = plots.data() + size_t(ty / R) * W;
+					for (int i = 0; i < W; ++i)
+					{
+						const int px = forwards ? i : W - 1 - i;
+						if (row[px])
+							for (int k = 0; k < R; ++k)
+								texel(forwards ? px * R + k : px * R + R - 1 - k, ty);
+					}
+				}
+			};
+
+			// Each texel's owner (+ 1): its plot's.
+			std::vector<uint8_t> owner(size_t(TW) * size_t(TH));
+			for (int ty = 0; ty < TH; ++ty)
+				for (int px = 0; px < W; ++px)
+					std::memset(owner.data() + size_t(ty) * TW + size_t(px) * R, uint8_t(std::min(owners[size_t(px + (ty / R) * W)] + 1, 255)), size_t(R));
+
 			if (anyZone)
 			{
+				// The plots along the rivers reach for the ground from their centres, a texel at a
+				// time, the river's water and bed far to cross.
 				constexpr uint32_t kFar = 0xFFFFFFFFu;
-				std::vector<uint32_t> dist(label.size(), kFar);
+				std::vector<uint32_t> dist(owner.size(), kFar);
+				std::vector<int32_t> label(owner.size(), -1); // the plot whose ground the texel is
 				using Item = std::pair<uint32_t, uint32_t>;
 				std::priority_queue<Item, std::vector<Item>, std::greater<>> open;
 				for (int py = 0; py < H; ++py)
@@ -1677,7 +1719,6 @@ float4 PSTerrain(PSIn i) : SV_Target
 						continue;
 					const int tx = int(t % uint32_t(TW)), ty = int(t / uint32_t(TW));
 					const int from = label[t];
-					const bool owned = owners[size_t(from)] >= 0;
 					for (int k = 0; k < 8; ++k)
 					{
 						static const int kNeighbour[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
@@ -1702,9 +1743,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 								continue;
 						}
 						const uint32_t n = uint32_t(ny * TW + nx);
-						uint32_t cost = k < 4 ? 5 : 7;
-						if (riverMask[n])
-							cost *= owned ? 12 : 1;
+						const uint32_t cost = (k < 4 ? 5 : 7) * (riverMask[n] ? 12 : 1);
 						if (d + cost < dist[n])
 						{
 							dist[n] = d + cost;
@@ -1713,111 +1752,92 @@ float4 PSTerrain(PSIn i) : SV_Target
 						}
 					}
 				}
+				each(zone, true, [&](int tx, int ty) {
+					if (const int32_t l = label[size_t(ty) * TW + tx]; l >= 0)
+						owner[size_t(ty) * TW + tx] = uint8_t(std::min(owners[size_t(l)] + 1, 255));
+				});
+				// The river between two grounds is nobody's: each owner's border on its own bank.
+				// (a river texel with the ground of different owners close by, as wide as the bed)
+				std::vector<uint32_t> nobodys;
+				const int across = std::max(2, R * 3 / 16);
+				each(zone, true, [&](int tx, int ty) {
+					const size_t i = size_t(ty) * TW + tx;
+					if (!riverMask[i])
+						return;
+					int first = -1;
+					for (int ring = 1; ring <= 2; ++ring)
+						for (int k = 0; k < 8; ++k)
+						{
+							static const int kRing[8][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 }, { 1, -1 }, { -1, -1 } };
+							const int n = at(tx + kRing[k][0] * across * ring, ty + kRing[k][1] * across * ring);
+							if (n < 0 || riverMask[size_t(n)])
+								continue;
+							if (first < 0)
+								first = owner[size_t(n)];
+							else if (owner[size_t(n)] != first)
+							{
+								nobodys.push_back(uint32_t(i));
+								return;
+							}
+						}
+				});
+				for (const uint32_t i : nobodys)
+					owner[i] = 0;
 			}
 
-			// Each texel's owner, then its distance to another owner's ground (two chamfer passes).
-			std::vector<uint16_t> owner(label.size());
-			for (size_t i = 0; i < label.size(); ++i)
-				owner[i] = uint16_t(owners[size_t(label[i])] + 1);
-			// Along the rivers the ground follows the river bed's texels: smoothed, each texel the
-			// owner of most of those around it, so that the border has no steps.
-			if (anyZone)
-			{
-				const auto texel = [&](int tx, int ty) -> int {
-					if (map.wrapX)
-						tx = (tx % TW + TW) % TW;
-					if (map.wrapY)
-						ty = (ty % TH + TH) % TH;
-					return tx < 0 || ty < 0 || tx >= TW || ty >= TH ? -1 : ty * TW + tx;
-				};
-				for (int round = 0; round < 1; ++round)
-				{
-					std::vector<uint16_t> smoothed = owner;
-					for (int ty = 0; ty < TH; ++ty)
-						for (int tx = 0; tx < TW; ++tx)
-						{
-							if (!zone[size_t(tx / R + (ty / R) * W)])
-								continue;
-							std::pair<uint16_t, int> counts[25];
-							int kinds = 0;
-							for (int dy = -2; dy <= 2; ++dy)
-								for (int dx = -2; dx <= 2; ++dx)
-								{
-									if (std::abs(dx) + std::abs(dy) > 3)
-										continue;
-									const int n = texel(tx + dx, ty + dy);
-									if (n < 0)
-										continue;
-									const uint16_t o = owner[size_t(n)];
-									int k = 0;
-									while (k < kinds && counts[k].first != o)
-										++k;
-									if (k == kinds)
-										counts[kinds++] = { o, 0 };
-									++counts[k].second;
-								}
-							int best = 0;
-							for (int k = 1; k < kinds; ++k)
-								if (counts[k].second > counts[best].second)
-									best = k;
-							smoothed[size_t(ty) * TW + tx] = counts[best].first;
-						}
-					owner = std::move(smoothed);
-				}
-			}
-			const auto at = [&](int tx, int ty) -> int {
-				if (map.wrapX)
-					tx = (tx % TW + TW) % TW;
-				if (map.wrapY)
-					ty = (ty % TH + TH) % TH;
-				return tx < 0 || ty < 0 || tx >= TW || ty >= TH ? -1 : ty * TW + tx;
-			};
 			const float reach = kBorderReach * float(R);
-			std::vector<float> edge(label.size(), reach);
-			// The borders' corners rounded, as the original's: in the plots along a border each
-			// texel is the owner's of most of the ground within kBorderCorner of it (a straight
-			// edge stays where it is; a corner, outwards or inwards, is cut round). Then how far
-			// the texel is from the edge, to less than a texel: from how much of that ground is
-			// another's (a straight edge that far from the middle of a disc cuts that much off).
+			std::vector<float> edge(owner.size(), reach);
+			// The borders' corners rounded: in the plots along a border each texel is the owner's
+			// of most of the ground within kBorderCorner of it (a straight edge stays where it
+			// is; a corner, outwards or inwards, is cut round), but not by a river, whose bends
+			// the border keeps. Then how far the texel is from the edge, to less than a texel:
+			// from how much of that ground is another's (a straight edge that far from the middle
+			// of a disc cuts that much off).
 			{
-				std::vector<uint8_t> along(map.plots.size(), 0);
-				for (int py = 0; py < H; ++py)
-					for (int px = 0; px < W; ++px)
-						for (int dy = -1; dy <= 1 && !along[size_t(px + py * W)]; ++dy)
-							for (int dx = -1; dx <= 1; ++dx)
-								if (const int n = plotIndex(px + dx, py + dy); n >= 0 && (owners[size_t(n)] != owners[size_t(px + py * W)] || zone[size_t(n)]))
-								{
-									along[size_t(px + py * W)] = 1;
-									break;
-								}
-				// (the disc's sample points, two a texel side, as steps from the texel)
+				// (the disc's texels, and its sample points, two a texel side, as steps from the texel)
 				const float radius = kBorderCorner * float(R);
-				std::vector<std::pair<int8_t, int8_t>> disc;
+				std::vector<std::pair<int8_t, int8_t>> disc, fine;
 				for (int j = -int(radius * 2) - 1; j <= int(radius * 2); ++j)
 					for (int i = -int(radius * 2) - 1; i <= int(radius * 2); ++i)
 					{
 						const float ox = (float(i) + 0.5f) * 0.5f, oy = (float(j) + 0.5f) * 0.5f;
 						if (ox * ox + oy * oy <= radius * radius)
-							disc.push_back({ int8_t(std::floor(ox + 0.5f)), int8_t(std::floor(oy + 0.5f)) });
+							fine.push_back({ int8_t(std::floor(ox + 0.5f)), int8_t(std::floor(oy + 0.5f)) });
 					}
-				const auto each = [&](auto&& texel) {
-					for (int py = 0; py < H; ++py)
-						for (int px = 0; px < W; ++px)
-							if (along[size_t(px + py * W)])
-								for (int ty = py * R; ty < (py + 1) * R; ++ty)
-									for (int tx = px * R; tx < (px + 1) * R; ++tx)
-										texel(tx, ty);
-				};
-				std::vector<uint16_t> rounded = owner;
-				each([&](int tx, int ty) {
-					std::pair<uint16_t, int> counts[8];
+				for (int j = -int(radius); j <= int(radius); ++j)
+					for (int i = -int(radius); i <= int(radius); ++i)
+						if (float(i * i + j * j) <= radius * radius)
+							disc.push_back({ int8_t(i), int8_t(j) });
+				// (the texels with another's ground or a river near: eight points round them tell)
+				const int far = int(std::ceil(radius)), mid = int(std::lround(radius * 0.7071f));
+				const int probes[8][2] = { { far, 0 }, { -far, 0 }, { 0, far }, { 0, -far }, { mid, mid }, { -mid, mid }, { mid, -mid }, { -mid, -mid } };
+				std::vector<uint32_t> mixed;
+				std::vector<uint8_t> byRiver;
+				each(along, true, [&](int tx, int ty) {
+					const size_t i = size_t(ty) * TW + tx;
+					bool differs = false, river = riverMask[i] != 0;
+					for (const auto& p : probes)
+						for (int half = 1; half <= 2; ++half)
+							if (const int n = at(tx + p[0] * half / 2, ty + p[1] * half / 2); n >= 0)
+								differs = differs || owner[size_t(n)] != owner[i], river = river || riverMask[size_t(n)] != 0;
+					if (differs)
+						mixed.push_back(uint32_t(i)), byRiver.push_back(river);
+				});
+				std::vector<uint8_t> rounded(mixed.size());
+				for (size_t m = 0; m < mixed.size(); ++m)
+				{
+					const int tx = int(mixed[m] % uint32_t(TW)), ty = int(mixed[m] / uint32_t(TW));
+					rounded[m] = owner[mixed[m]];
+					if (byRiver[m])
+						continue;
+					std::pair<uint8_t, int> counts[8];
 					int kinds = 0;
 					for (const auto& [dx, dy] : disc)
 					{
 						const int n = at(tx + dx, ty + dy);
 						if (n < 0)
 							continue;
-						const uint16_t o = owner[size_t(n)];
+						const uint8_t o = owner[size_t(n)];
 						int k = 0;
 						while (k < kinds && counts[k].first != o)
 							++k;
@@ -1833,11 +1853,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 					for (int k = 1; k < kinds; ++k)
 						if (counts[k].second > counts[best].second)
 							best = k;
-					// (not along a river between owners: there the ground is the river bank's, bends and all)
-					if (kinds > 1 && !zone[size_t(tx / R + (ty / R) * W)])
-						rounded[size_t(ty) * TW + tx] = counts[best].first;
-				});
-				owner = std::move(rounded);
+					rounded[m] = counts[best].first;
+				}
+				for (size_t m = 0; m < mixed.size(); ++m)
+					owner[mixed[m]] = rounded[m];
 				// (how far from the middle of a disc of radius 1 a straight edge cuts the share q off it)
 				static const std::array<float, 65> kChord = [] {
 					std::array<float, 65> table{};
@@ -1854,55 +1873,54 @@ float4 PSTerrain(PSIn i) : SV_Target
 					}
 					return table;
 				}();
-				each([&](int tx, int ty) {
-					const uint16_t own = owner[size_t(ty) * TW + tx];
+				for (const uint32_t i : mixed)
+				{
+					const int tx = int(i % uint32_t(TW)), ty = int(i / uint32_t(TW));
+					const uint8_t own = owner[i];
 					int other = 0, all = 0;
-					for (const auto& [dx, dy] : disc)
+					for (const auto& [dx, dy] : fine)
 						if (const int n = at(tx + dx, ty + dy); n >= 0)
 							++all, other += owner[size_t(n)] != own;
 					if (other == 0)
-						return;
+						continue;
 					const float q = std::min(float(other) / float(all), 0.5f) * 2 * float(kChord.size() - 1);
 					const size_t k = std::min(size_t(q), kChord.size() - 2);
-					edge[size_t(ty) * TW + tx] = std::max(0.02f, radius * std::lerp(kChord[k], kChord[k + 1], q - float(k)));
-				});
-			}
-			for (int ty = 0; ty < TH; ++ty)
-				for (int tx = 0; tx < TW; ++tx)
-				{
-					const int i = ty * TW + tx;
-					for (const auto& s : kStep)
-						if (const int n = at(tx + s[0], ty + s[1]); n >= 0 && owner[size_t(n)] != owner[size_t(i)])
-						{
-							edge[size_t(i)] = std::min(edge[size_t(i)], 0.5f);
-							break;
-						}
+					edge[i] = std::max(0.02f, radius * std::lerp(kChord[k], kChord[k + 1], q - float(k)));
 				}
+			}
+			// The distances on from there (two chamfer passes over the plots near the borders).
+			each(work, true, [&](int tx, int ty) {
+				const size_t i = size_t(ty) * TW + tx;
+				for (const auto& s : kStep)
+					if (const int n = at(tx + s[0], ty + s[1]); n >= 0 && owner[size_t(n)] != owner[i])
+					{
+						edge[i] = std::min(edge[i], 0.5f);
+						break;
+					}
+			});
 			constexpr float kDiagonal = 1.41421356f;
 			for (int pass = 0; pass < 2; ++pass)
 			{
 				const int step = pass == 0 ? 1 : -1;
-				for (int ty = pass == 0 ? 0 : TH - 1; ty >= 0 && ty < TH; ty += step)
-					for (int tx = pass == 0 ? 0 : TW - 1; tx >= 0 && tx < TW; tx += step)
-					{
-						float& e = edge[size_t(ty * TW + tx)];
-						const int previous[4][2] = { { -step, 0 }, { -step, -step }, { 0, -step }, { step, -step } };
-						for (int k = 0; k < 4; ++k)
-							if (const int n = at(tx + previous[k][0], ty + previous[k][1]); n >= 0)
-								e = std::min(e, edge[size_t(n)] + (k & 1 ? kDiagonal : 1.0f));
-					}
+				each(work, pass == 0, [&](int tx, int ty) {
+					float& e = edge[size_t(ty) * TW + tx];
+					const int previous[4][2] = { { -step, 0 }, { -step, -step }, { 0, -step }, { step, -step } };
+					for (int k = 0; k < 4; ++k)
+						if (const int n = at(tx + previous[k][0], ty + previous[k][1]); n >= 0)
+							e = std::min(e, edge[size_t(n)] + (k & 1 ? kDiagonal : 1.0f));
+				});
 			}
 
-			std::vector<uint16_t> data(label.size() * 4, 0);
-			for (size_t i = 0; i < label.size(); ++i)
+			std::vector<uint8_t> data(owner.size() * 2);
+			for (size_t i = 0; i < owner.size(); ++i)
 			{
-				data[i * 4 + 0] = owner[i];
-				data[i * 4 + 1] = uint16_t(std::min(edge[i] / reach, 1.0f) * 65535.0f + 0.5f);
+				data[i * 2 + 0] = owner[i];
+				data[i * 2 + 1] = uint8_t(std::min(edge[i] / reach, 1.0f) * 255.0f + 0.5f);
 			}
 			if (!borderTex || borderTex->width != uint32_t(TW) || borderTex->height != uint32_t(TH))
 			{
-				const std::span<const uint8_t> bytes(reinterpret_cast<const uint8_t*>(data.data()), data.size() * 2);
-				borderTex = renderer.createTexture(uint32_t(TW), uint32_t(TH), 1, 1, TextureFormat::RGBA16, std::span(&bytes, 1));
+				const std::span<const uint8_t> bytes(data.data(), data.size());
+				borderTex = renderer.createTexture(uint32_t(TW), uint32_t(TH), 1, 1, TextureFormat::RG8, std::span(&bytes, 1));
 			}
 			else
 				renderer.updateTexture(*borderTex, 0, 0, 0, 0, uint32_t(TW), uint32_t(TH), data.data());
