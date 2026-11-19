@@ -1016,10 +1016,12 @@ namespace oc4::host
 					u.health = shown->maxHitPoints() > 0 ? float(shown->currHitPoints()) / float(shown->maxHitPoints()) : 1.0f;
 					// (the health bar's length, as the engine asks the DLL for it: the unit's strength
 					// now times CvUnit::getHealthBarModifier, HEALTH_BAR_WIDTH over twice the best land
-					// unit's strength; none for a unit without strength)
-					if (GC.getGame().getBestLandUnitCombat() > 0)
+					// unit's strength; none for a unit without strength, nor before there is a best
+					// land unit: the modifier is then not finite. Only DllExport functions: the
+					// Windows DLL exports nothing else.)
+					if (const float modifier = shown->getHealthBarModifier(); std::isfinite(modifier))
 						u.healthBar = (shown->getDomainType() == DOMAIN_AIR ? shown->airCurrCombatStrFloat(nullptr) : shown->currCombatStrFloat(nullptr, nullptr)) *
-							shown->getHealthBarModifier();
+							modifier;
 					u.promotionReady = shown->isPromotionReady();
 					if (const char* button = shown->getButton())
 						u.button = button;
