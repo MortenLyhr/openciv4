@@ -3878,15 +3878,26 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// The city bars, as the original's CityBar.nif lays them out (in its units: the banner
 		// 128 x 32 with its top at the origin, the population's circle at its left end, the
 		// production symbol at its right end, the icon line above), facing the screen.
-		// Placed and sized by camera distance as CIV4DetailManager's CITYBILLBOARD faders do:
-		// out from the city towards the bottom of the screen (twice CITYBILLBOARD_RADIUS) and
-		// raised 100 units; the size measured in the original (points a model unit, at
-		// distances of 12 to 102 plots), which levels off at CITYBILLBOARD_SCALE's 0.67.
+		// Placed as CIV4DetailManager's CITYBILLBOARD_RADIUS places it: its top on the ground
+		// south of the city (towards the bottom of the screen), 90 units out up close, 35 at
+		// 5000 and beyond; the original's grid shows it no closer than 70 there. Sized as
+		// measured in the original (the star's width, at camera distances of 5 to 102 plots):
+		// CITYBILLBOARD_SCALE's 1.5 up close to its 0.67 far out, in points a model unit.
 		const float plots = m->renderer.camera().distance / m->S();
 		const float civ = m->S() / 180; // (the original's units: 180 a plot)
 		const float units = plots * 180;
-		const float radius = 2 * std::lerp(90.0f, 35.0f, std::clamp((units - 700) / 4300, 0.0f, 1.0f));
-		const float k = std::max(0.668f, 0.581f + 4.68f / std::max(plots, 1.0f));
+		const float radius = std::max(70.0f, std::lerp(90.0f, 35.0f, std::clamp((units - 700) / 4300, 0.0f, 1.0f)));
+		const float k = [&] {
+			static constexpr std::array<std::pair<float, float>, 8> measured{ { { 3.89f, 1.39f }, { 5.18f, 1.327f }, { 8.8f, 1.16f },
+				{ 12.3f, 0.962f }, { 14.85f, 0.913f }, { 28.5f, 0.743f }, { 47.5f, 0.718f }, { 102, 0.694f } } };
+			if (plots <= measured.front().first)
+				return measured.front().second;
+			for (size_t i = 1; i < measured.size(); ++i)
+				if (plots <= measured[i].first)
+					return std::lerp(measured[i - 1].second, measured[i].second,
+						(plots - measured[i - 1].first) / (measured[i].first - measured[i - 1].first));
+			return measured.back().second;
+		}();
 		const float yaw = m->renderer.camera().yaw;
 		const Vec3 towardsScreenBottom{ std::cos(yaw), std::sin(yaw), 0 };
 		ButtonArt* art = overlay.buttonArt();
@@ -3921,7 +3932,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 			Vec3 p{ (float(c.x) + 0.5f) * m->S(), (float(c.y) + 0.5f) * m->S(), 0 };
 			p.x += m->wrapOffset(p.x);
 			p.z = m->ground(p.x, p.y);
-			p = p + towardsScreenBottom * (radius * civ) + Vec3{ 0, 0, 100 * civ };
+			p = p + towardsScreenBottom * (radius * civ);
 			float ox = 0, oy = 0;
 			if (!toScreen(p, ox, oy))
 				continue;
