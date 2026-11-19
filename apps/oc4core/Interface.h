@@ -215,6 +215,7 @@ namespace oc4::host
 		bool updateCursorType() override { return false; }
 		bool isFocusedWidget() override { return false; }
 		bool isFocused() override { return false; }
+		bool isDebugMenuCreated() const override { return false; } // (the options screen asks; there is no debug menu)
 		bool isScoresVisible() override { return false; }
 		// The tech splash (the scripts' CvTechSplashScreen, with the tech's quote): only with the
 		// game's screens up (Screens::start); without them the game core plays the short sound instead.
