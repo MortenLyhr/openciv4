@@ -825,7 +825,6 @@ namespace oc4::host
 		s.cameraTopDistance = defineOr("CAMERA_SMALLEST_MAX_DISTANCE", 7000);
 		s.cameraCityDistance = defineOr("CAMERA_CITY_ZOOM_IN_DISTANCE", 3500);
 		s.flagOffset = { GC.getDefineFLOAT("FLAG_OFFSET_X"), GC.getDefineFLOAT("FLAG_OFFSET_Y") };
-		s.healthBarWidth = defineOr("HEALTH_BAR_WIDTH", 100);
 		const auto miscModel = [&](const char* tag) {
 			const CvArtInfoMisc* art = ARTFILEMGR.getMiscArtInfo(tag);
 			return art ? modelIndex(art, art->getNIF(), art->getKFM(), art->getScale()) : -1;
@@ -1015,6 +1014,12 @@ namespace oc4::host
 							u.medallions.push_back(!selection || !selection->isSelected(any) || any->getOwner() != GC.getGame().getActivePlayer() ? 3
 								: !any->canMove() ? 2 : any->hasMoved() ? 4 : 1);
 					u.health = shown->maxHitPoints() > 0 ? float(shown->currHitPoints()) / float(shown->maxHitPoints()) : 1.0f;
+					// (the health bar's length, as the engine asks the DLL for it: the unit's strength
+					// now times CvUnit::getHealthBarModifier, HEALTH_BAR_WIDTH over twice the best land
+					// unit's strength; none for a unit without strength)
+					if (GC.getGame().getBestLandUnitCombat() > 0)
+						u.healthBar = (shown->getDomainType() == DOMAIN_AIR ? shown->airCurrCombatStrFloat(nullptr) : shown->currCombatStrFloat(nullptr, nullptr)) *
+							shown->getHealthBarModifier();
 					u.promotionReady = shown->isPromotionReady();
 					if (const char* button = shown->getButton())
 						u.button = button;

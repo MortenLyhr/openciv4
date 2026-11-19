@@ -2922,11 +2922,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 			return true;
 		}
 
-		// The units' health bars as the original's billboards: a flat bar facing the camera,
-		// green, yellow, then red, as long as the unit's health (HEALTH_BAR_WIDTH over
-		// UNIT_HEALTH_BILLBOARD_SCALE when whole), ending over the plot's middle and reaching left,
-		// behind the unit (UNIT_HEALTH_BILLBOARD_RADIUS) and above the ground (..._Z): in the
-		// scene, so the figures in front of it hide it.
+		// The units' health bars as the original's billboards: a flat bar facing the camera, as
+		// long as the unit's strength now (UnitView::healthBar: a whole Modern Armor's is
+		// HEALTH_BAR_WIDTH / 2, a unit without strength has none), green from two thirds of its
+		// hit points, yellow from a third, red below (measured in the original: 75 % green,
+		// 66 % and 40 % yellow, 33 % red), as thick at every length (2.6 units times
+		// UNIT_HEALTH_BILLBOARD_SCALE: 13 px of 3200 at the start distance); ending over the
+		// plot's middle and reaching left, behind the unit (UNIT_HEALTH_BILLBOARD_RADIUS) and up the
+		// screen from the ground (..._Z): in the scene, so what stands in front of it hides it.
 		scene::Model barModel;
 		std::unique_ptr<GpuModel> barGpu;
 		bool barTried = false;
@@ -2955,34 +2958,35 @@ float4 PSTerrain(PSIn i) : SV_Target
 			Vec3 toward{ eye.x - camera.target.x, eye.y - camera.target.y, 0 };
 			const float length = std::sqrt(toward.x * toward.x + toward.y * toward.y);
 			toward = length > 1e-3f ? toward * (1 / length) : Vec3{ 0, -1, 0 };
-			const Vec3 right{ -toward.y, toward.x, 0 };
+			const Vec3 right{ -toward.y, toward.x, 0 }, up = camera.up(), facing = cross(up, right); // (it faces the camera)
 			const float unit = S() / 180; // (the faders are in the original's units: 180 a plot)
-			const float width = map.healthBarWidth / std::max(fader(map.healthScale, 2), 0.1f) * unit, height = width * 0.12f;
+			const float height = 2.6f * fader(map.healthScale, 2) * unit;
 			const float radius = fader(map.healthRadius, -60) * unit, z = fader(map.healthZ, 75) * unit;
 			std::vector<scene::Material> material(1, barModel.items[0].material);
 			for (const UnitView& u : map.units)
 			{
 				const int plot = u.x + u.y * map.width;
-				const float health = std::clamp(u.health, 0.0f, 1.0f);
-				if ((fog && !map.plots[size_t(plot)].visible) || health <= 0)
+				const float health = std::clamp(u.health, 0.0f, 1.0f), width = u.healthBar * unit;
+				if ((fog && !map.plots[size_t(plot)].visible) || width <= 0)
 					continue;
 				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				if (const auto it = unitPositions.find(uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id)); it != unitPositions.end())
 					at = it->second;
 				at = at + toward * radius;
-				at.z = ground(at.x, at.y) + z;
+				at.z = ground(at.x, at.y);
+				at = at + up * z; // (..._Z along the screen's up, as a billboard is moved)
 				at.x += wrapOffset(at.x);
 				if (!frustum.sphere(at, width))
 					continue;
 				Affine place;
-				place.translation = at - right * (width * (1 - health));
+				place.translation = at;
 				for (int r = 0; r < 3; ++r)
 				{
-					place.rotation.m[size_t(r)][0] = (r == 0 ? right.x : r == 1 ? right.y : right.z) * width * health;
-					place.rotation.m[size_t(r)][1] = -(r == 0 ? toward.x : r == 1 ? toward.y : 0.0f);
-					place.rotation.m[size_t(r)][2] = r == 2 ? height : 0.0f;
+					place.rotation.m[size_t(r)][0] = (r == 0 ? right.x : r == 1 ? right.y : right.z) * width;
+					place.rotation.m[size_t(r)][1] = r == 0 ? facing.x : r == 1 ? facing.y : facing.z;
+					place.rotation.m[size_t(r)][2] = (r == 0 ? up.x : r == 1 ? up.y : up.z) * height;
 				}
-				const nif::Color3 colour = health > 2 / 3.0f ? nif::Color3{ 0, 1, 0 } : health > 1 / 3.0f ? nif::Color3{ 1, 1, 0 } : nif::Color3{ 1, 0, 0 };
+				const nif::Color3 colour = health >= 2 / 3.0f ? nif::Color3{ 0, 1, 0 } : health >= 1 / 3.0f ? nif::Color3{ 1, 1, 0 } : nif::Color3{ 1, 0, 0 };
 				material[0].emissive = colour;
 				const Affine world[] = { place };
 				const uint8_t visible[] = { 1 };
