@@ -1394,6 +1394,7 @@ namespace oc4::render
 							m.decal = renderer->createTexture(cloth->width, cloth->height, 1, 1, TextureFormat::BGRA8, std::span(&bytes, 1));
 						}
 						m.view = std::make_unique<ModelView>(*renderer, resolver, it.flagNif, it.flagKfm, 0.0f, 0.0f, 1.0f, true, std::string(), m.decal.get());
+						m.view->frameAsFlag();
 					}
 					m.used = true;
 					continue;

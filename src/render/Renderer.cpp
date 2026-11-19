@@ -73,7 +73,7 @@ cbuffer Object : register(b1, UNIFORMS)
 	float4 world[3];    // rigid items: 3x4 rows, p' = (dot(row0,p), dot(row1,p), dot(row2,p))
 	float4 baseUv[2];   // 2x3 rows: uv' = (dot(row0.xyz, (u,v,1)), dot(row1.xyz, (u,v,1)))
 	float4 decalUv[2];
-	uint flags;         // bit0 base map, bit1 alpha test, bits2-3 vertex color mode, bit4 lit, bit5 decal, bit6 team colour base, bit7 skinned, bit8 on ground, bit11 leader, bit12 flag
+	uint flags;         // bit0 base map, bit1 alpha test, bits2-3 vertex color mode, bit4 lit, bit5 decal, bit6 team colour base, bit7 skinned, bit8 on ground, bit11 leader, bit12 flag, bit13 alpha twice
 	uint alphaFunc;
 	float alphaRef;
 	uint treesCut;      // a forest piece (its vertices' red: the tree, 1-based): trees 1..32 by bit not drawn
@@ -304,6 +304,8 @@ float4 PSMain(PSIn i, bool front : SV_IsFrontFace) : SV_Target
 	c.rgb *= fogAt(i.world.xy);
 	if (flags & 1024)
 		c.a = 1; // (opaque on a picture on nothing: its texture's alpha is no coverage)
+	if (flags & 8192)
+		c = float4(c.rgb * c.a, c.a * c.a); // (blended by its alpha squared: colour times alpha cubed)
 	return c;
 }
 )hlsl";
@@ -1051,10 +1053,11 @@ float4 PSOverlay(Out p) : SV_Target
 		oc.emissive = clothFlag ? XMFLOAT4{ 1, 1, 1, 1 } : XMFLOAT4{ m.emissive.r, m.emissive.g, m.emissive.b, 1 };
 		oc.teamColor = { teamColor.x, teamColor.y, teamColor.z, 1 };
 		writeRows(mesh.node >= 0 && size_t(mesh.node) < world.size() ? world[size_t(mesh.node)] : Affine{}, oc.world);
+		const bool alphaTwice = m_inView && m_viewAlphaTwice && m.alphaBlend && m.srcBlend == scene::Blend::SrcAlpha && m.dstBlend == scene::Blend::InvSrcAlpha;
 		oc.flags = (mesh.texture ? 1u : 0u) | (m.alphaTest ? 2u : 0u) | (clothFlag ? 0u : (m.vertexColorMode & 3u) << 2) | (m.lightingMode && !clothFlag ? 16u : 0u) |
 			(mesh.decal ? 32u : 0u) | (m.baseIsTeamColor ? 64u : 0u) | (mesh.skinned ? 128u : 0u) | (onGround ? 256u : 0u) |
 			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) |
-			(clothFlag ? 4096u : 0u);
+			(clothFlag ? 4096u : 0u) | (alphaTwice ? 8192u : 0u);
 		oc.alphaFunc = static_cast<uint32_t>(m.alphaFunc);
 		oc.alphaRef = m.alphaRef;
 		oc.treesCut = m.treesCut;
@@ -1250,7 +1253,7 @@ float4 PSOverlay(Out p) : SV_Target
 	}
 
 	void Renderer::beginView(OffscreenTarget& t, uint32_t width, uint32_t height, std::span<const float, 16> viewProj, Vec3 eye, const ViewLight& light,
-		Vec3 clearColor, float clearAlpha)
+		Vec3 clearColor, float clearAlpha, bool alphaTwice)
 	{
 		width = std::max(width, 1u);
 		height = std::max(height, 1u);
@@ -1287,6 +1290,7 @@ float4 PSOverlay(Out p) : SV_Target
 		m_deferredMaterials.clear();
 		m_particleDraws.clear();
 		m_viewOnNothing = clearAlpha < 1;
+		m_viewAlphaTwice = alphaTwice;
 		m_target = { t.color->texture, t.depth->texture, width, height };
 		m_clearColor = m_clearDepth = true;
 		m_clear[0] = clearColor.x * clearAlpha, m_clear[1] = clearColor.y * clearAlpha, m_clear[2] = clearColor.z * clearAlpha, m_clear[3] = clearAlpha;
