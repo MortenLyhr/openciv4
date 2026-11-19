@@ -221,15 +221,26 @@ float4 PSTerrain(PSIn i) : SV_Target
 	// The grid, as the original draws it: each terrain's blend atlas swapped for its grid twin,
 	// the same tiles with a line along the plot edges (through the middle of each tile). So it
 	// lies in the ground itself: over hills and down to the sea floor, under the water, rivers,
-	// forests and improvements, lit and fogged as the ground is. Its texels filter as the
-	// atlas's do: up close a line of lineWidth smoothed over a texel; far away spread over the
-	// pixel and fainter (the mips), until it fades out.
+	// forests and improvements, lit and fogged as the ground is. The grid textures' mips are
+	// drawn by hand: down to 16 texels a plot each draws the line again, as many texels wide
+	// and as dark as the full texture does (so it stays a pixel or two wide, not fainter), and
+	// the smaller ones have none. Sampled as they are: trilinear (isotropic), bilinear texels.
 	if (showGrid)
 	{
 		float2 edge = abs(p - round(p)); // plots to the nearest edge
-		float footprint = max(length(float2(dcx.x, dcy.x)), length(float2(dcx.y, dcy.y))); // plots a pixel (isotropic, as the original's mips)
-		float spread = max(lineWidth, footprint);
-		float2 cover = lineWidth / spread * saturate(1 - edge / spread);
+		float footprint = max(length(float2(dcx.x, dcy.x)), length(float2(dcx.y, dcy.y))); // plots a pixel
+		float lod = max(log2(footprint * 128), 0); // the mip, 128 texels a plot at the top
+		float level = floor(lod);
+		float2 cover = 0;
+		[unroll] for (int m = 0; m < 2; ++m)
+		{
+			float l = level + m;
+			float texel = exp2(l) / 128;
+			float width = lineWidth * exp2(l); // (as many texels as at the top)
+			// a line of `width` filtered over a texel; none from 8 texels a plot down
+			float2 c = clamp((width + texel) * 0.5 - edge, 0, min(width, texel)) / texel;
+			cover += (l <= 3 ? c : 0) * (m == 0 ? 1 - (lod - level) : lod - level);
+		}
 		color = lerp(color, lineColor, saturate(cover.x + cover.y - cover.x * cover.y));
 	}
 
