@@ -696,6 +696,10 @@ namespace oc4::host
 		m_cities.clear();
 		if (pNewValue)
 		{
+			// A city's screen and selected units go not together: the units are let go (as
+			// CvGame::selectUnit lets go of the cities; once the screen closes the game core
+			// selects the next unit that waits, CvGame::updateSelectionList).
+			m_selection.clear();
 			m_cities.insertAtEnd(pNewValue->getIDInfo());
 			m_cityScreen = true;
 			lookAtX = pNewValue->getX();
