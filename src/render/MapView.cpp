@@ -1955,7 +1955,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 			};
 
 			// Trees and ice tile by plot corners: each corner takes the piece for the plots
-			// around it that have the feature.
+			// around it that have the feature. (The original grows no trees on water: a forest
+			// or jungle on a water plot isn't drawn, while ice, fallout and the others are.)
+			const auto shownFeature = [&](const PlotView* p) {
+				if (!p)
+					return -1;
+				const FeatureArt* art = featureArt(p->feature);
+				return art && art->tiling == FeatureArt::Tiling::Trees && p->water ? -1 : p->feature;
+			};
 			const int cornersX = map.wrapX ? W : W + 1, cornersY = map.wrapY ? H : H + 1;
 			for (int cy = 0; cy < cornersY; ++cy)
 				for (int cx = 0; cx < cornersX; ++cx)
@@ -1965,7 +1972,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					int done[4] = { -1, -1, -1, -1 };
 					for (int k = 0; k < 4; ++k)
 					{
-						const int f = around[k] ? around[k]->feature : -1;
+						const int f = shownFeature(around[k]);
 						const FeatureArt* art = featureArt(f);
 						if (!art || (art->tiling != FeatureArt::Tiling::Trees && art->tiling != FeatureArt::Tiling::HalfTiling) ||
 							std::find(std::begin(done), std::end(done), f) != std::end(done))
@@ -1973,7 +1980,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 						done[k] = f;
 						int mask = 0;
 						for (int j = 0; j < 4; ++j)
-							if (around[j] && around[j]->feature == f)
+							if (shownFeature(around[j]) == f)
 								mask |= bits[j];
 						if (art->varieties.empty())
 							continue;
