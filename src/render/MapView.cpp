@@ -36,6 +36,7 @@ namespace oc4::render
 		constexpr uint16_t kNoOverlay = 0xFFFF;
 		constexpr int kBorderRes = 16;       // culture border texels per plot side
 		constexpr float kBorderReach = 0.75f; // plots: the border texture's distances go this far
+		constexpr float kBorderCorner = 0.11f; // plots: the ground within this of a texel decides its owner (rounds the borders' corners)
 
 		// DirectionTypes bits, as in the game's connection masks.
 		constexpr int kNorthEast = 1 << 1, kSouthEast = 1 << 3, kSouthWest = 1 << 5, kNorthWest = 1 << 7;
@@ -265,17 +266,30 @@ float4 PSTerrain(PSIn i) : SV_Target
 		float2 t = p * res - 0.5;
 		int2 t0 = int2(floor(t));
 		float2 ft = t - t0;
-		uint owner = borderAt(int2(floor(p * res)), tsize).r;
-		if (owner != 0)
+		// (the pixel is the ground of the owner, of the four texels round it, whose distance
+		// blended between them is inside its edge: the edge runs smoothly between the texels)
+		uint2 b[4];
+		[unroll] for (int k = 0; k < 4; ++k)
+			b[k] = borderAt(t0 + int2(k & 1, k >> 1), tsize).rg;
+		uint owner = 0;
+		float dist = 0; // plots
+		[unroll] for (int c = 0; c < 4; ++c)
 		{
 			float v[4];
 			[unroll] for (int k = 0; k < 4; ++k)
 			{
-				uint2 b = borderAt(t0 + int2(k & 1, k >> 1), tsize).rg;
-				float dist = b.y / 65535.0 * reach;
-				v[k] = b.x == owner ? dist : -dist;
+				float d = b[k].y / 65535.0 * reach;
+				v[k] = b[k].x == b[c].x ? d : -d;
 			}
-			float dist = max(lerp(lerp(v[0], v[1], ft.x), lerp(v[2], v[3], ft.x), ft.y), 0); // plots
+			float inside = lerp(lerp(v[0], v[1], ft.x), lerp(v[2], v[3], ft.x), ft.y);
+			if (inside > dist)
+			{
+				dist = inside;
+				owner = b[c].x;
+			}
+		}
+		if (owner != 0)
+		{
 			float3 oc = playerColors[min(owner - 1, 255)].rgb;
 			float aa = max(max(pw.x, pw.y), 1e-5);
 			float glow = 1 - saturate(dist / 0.45);
@@ -1716,7 +1730,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 						ty = (ty % TH + TH) % TH;
 					return tx < 0 || ty < 0 || tx >= TW || ty >= TH ? -1 : ty * TW + tx;
 				};
-				for (int round = 0; round < 2; ++round)
+				for (int round = 0; round < 1; ++round)
 				{
 					std::vector<uint16_t> smoothed = owner;
 					for (int ty = 0; ty < TH; ++ty)
@@ -1760,6 +1774,99 @@ float4 PSTerrain(PSIn i) : SV_Target
 			};
 			const float reach = kBorderReach * float(R);
 			std::vector<float> edge(label.size(), reach);
+			// The borders' corners rounded, as the original's: in the plots along a border each
+			// texel is the owner's of most of the ground within kBorderCorner of it (a straight
+			// edge stays where it is; a corner, outwards or inwards, is cut round). Then how far
+			// the texel is from the edge, to less than a texel: from how much of that ground is
+			// another's (a straight edge that far from the middle of a disc cuts that much off).
+			{
+				std::vector<uint8_t> along(map.plots.size(), 0);
+				for (int py = 0; py < H; ++py)
+					for (int px = 0; px < W; ++px)
+						for (int dy = -1; dy <= 1 && !along[size_t(px + py * W)]; ++dy)
+							for (int dx = -1; dx <= 1; ++dx)
+								if (const int n = plotIndex(px + dx, py + dy); n >= 0 && (owners[size_t(n)] != owners[size_t(px + py * W)] || zone[size_t(n)]))
+								{
+									along[size_t(px + py * W)] = 1;
+									break;
+								}
+				// (the disc's sample points, two a texel side, as steps from the texel)
+				const float radius = kBorderCorner * float(R);
+				std::vector<std::pair<int8_t, int8_t>> disc;
+				for (int j = -int(radius * 2) - 1; j <= int(radius * 2); ++j)
+					for (int i = -int(radius * 2) - 1; i <= int(radius * 2); ++i)
+					{
+						const float ox = (float(i) + 0.5f) * 0.5f, oy = (float(j) + 0.5f) * 0.5f;
+						if (ox * ox + oy * oy <= radius * radius)
+							disc.push_back({ int8_t(std::floor(ox + 0.5f)), int8_t(std::floor(oy + 0.5f)) });
+					}
+				const auto each = [&](auto&& texel) {
+					for (int py = 0; py < H; ++py)
+						for (int px = 0; px < W; ++px)
+							if (along[size_t(px + py * W)])
+								for (int ty = py * R; ty < (py + 1) * R; ++ty)
+									for (int tx = px * R; tx < (px + 1) * R; ++tx)
+										texel(tx, ty);
+				};
+				std::vector<uint16_t> rounded = owner;
+				each([&](int tx, int ty) {
+					std::pair<uint16_t, int> counts[8];
+					int kinds = 0;
+					for (const auto& [dx, dy] : disc)
+					{
+						const int n = at(tx + dx, ty + dy);
+						if (n < 0)
+							continue;
+						const uint16_t o = owner[size_t(n)];
+						int k = 0;
+						while (k < kinds && counts[k].first != o)
+							++k;
+						if (k == kinds)
+						{
+							if (kinds == 8)
+								continue;
+							counts[kinds++] = { o, 0 };
+						}
+						++counts[k].second;
+					}
+					int best = 0;
+					for (int k = 1; k < kinds; ++k)
+						if (counts[k].second > counts[best].second)
+							best = k;
+					// (not along a river between owners: there the ground is the river bank's, bends and all)
+					if (kinds > 1 && !zone[size_t(tx / R + (ty / R) * W)])
+						rounded[size_t(ty) * TW + tx] = counts[best].first;
+				});
+				owner = std::move(rounded);
+				// (how far from the middle of a disc of radius 1 a straight edge cuts the share q off it)
+				static const std::array<float, 65> kChord = [] {
+					std::array<float, 65> table{};
+					for (size_t k = 0; k < table.size(); ++k)
+					{
+						const float q = 0.5f * float(k) / float(table.size() - 1);
+						float lo = 0, hi = 1;
+						for (int it = 0; it < 30; ++it)
+						{
+							const float x = (lo + hi) / 2;
+							((std::acos(x) - x * std::sqrt(1 - x * x)) / std::numbers::pi_v<float> > q ? lo : hi) = x;
+						}
+						table[k] = (lo + hi) / 2;
+					}
+					return table;
+				}();
+				each([&](int tx, int ty) {
+					const uint16_t own = owner[size_t(ty) * TW + tx];
+					int other = 0, all = 0;
+					for (const auto& [dx, dy] : disc)
+						if (const int n = at(tx + dx, ty + dy); n >= 0)
+							++all, other += owner[size_t(n)] != own;
+					if (other == 0)
+						return;
+					const float q = std::min(float(other) / float(all), 0.5f) * 2 * float(kChord.size() - 1);
+					const size_t k = std::min(size_t(q), kChord.size() - 2);
+					edge[size_t(ty) * TW + tx] = std::max(0.02f, radius * std::lerp(kChord[k], kChord[k + 1], q - float(k)));
+				});
+			}
 			for (int ty = 0; ty < TH; ++ty)
 				for (int tx = 0; tx < TW; ++tx)
 				{
@@ -1767,7 +1874,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					for (const auto& s : kStep)
 						if (const int n = at(tx + s[0], ty + s[1]); n >= 0 && owner[size_t(n)] != owner[size_t(i)])
 						{
-							edge[size_t(i)] = 0.5f;
+							edge[size_t(i)] = std::min(edge[size_t(i)], 0.5f);
 							break;
 						}
 				}
