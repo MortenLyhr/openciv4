@@ -445,6 +445,23 @@ namespace oc4::render
 			keepOnMap();
 		}
 
+		// The game looks at a plot (a unit selected, a city chosen): the camera moves there and
+		// keeps the distance it is on its way to, so a glide (out of the city screen) or a wheel
+		// zoom in progress still ends where it was going.
+		void centerOn(int x, int y)
+		{
+			if (cityView)
+				return; // (the city screen's view holds while it is up)
+			const Vec3 to{ (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 };
+			if (glide)
+			{
+				glide->to.target = to;
+				return;
+			}
+			camera.target = to;
+			keepOnMap();
+		}
+
 		void showWholeMap()
 		{
 			const Vec3 size = view->worldSize();
@@ -2340,7 +2357,7 @@ namespace oc4::render
 	void MapWindow::leaveCityView() { m->leaveCityView(); }
 	void MapWindow::centerOn(int x, int y)
 	{
-		m->lookAt(x, y, m->camera.distance / m->plot());
+		m->centerOn(x, y);
 		// (the plot cursor goes where the game looks: the unit it selected, the city it chose)
 		if (m->padMode == PadMode::Cursor)
 			m->padPlotX = x, m->padPlotY = y;
