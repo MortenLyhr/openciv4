@@ -86,7 +86,7 @@ def _int(value, default=-1):
 
 class _Widget(object):
 	__slots__ = ('name', 'kind', 'parent', 'mode', 'x', 'y', 'z', 'w', 'h', 'style', 'pstyle', 'text', 'help', 'tex', 'tex2',
-		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'scroll', 'children',
+		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'sideways', 'scroll', 'children',
 		'bars', 'lists', 'columns', 'rows', 'headers', 'iconw', 'iconh', 'items', 'selected', 'color', 'size', 'defw', 'defh', 'points',
 		'offset', 'extent', 'picked', 'hoffset', 'hextent', 'cells', 'sort', 'inset', 'maxChars', 'allowed')
 
@@ -111,6 +111,7 @@ class _Widget(object):
 		self.hittest = 0
 		self.seq = 0
 		self.vertical = True
+		self.sideways = True   # (a scrolling panel: also scrolls sideways (addScrollPanel); not one laid out top to bottom)
 		self.scroll = False
 		self.children = []
 		self.maxChars = 0      # an edit box's: at most this many characters (0: any)
@@ -604,6 +605,9 @@ class CyGInterfaceScreen(object):
 		w = self._s.add(szName, 'panel')
 		w.text, w.help, w.vertical, w.scroll = _text(title), _text(helpText), bool(bVerticalLayout), bool(bScrollable)
 		w.x, w.y, w.w, w.h, w.pstyle = int(iX), int(iY), int(iWidth), int(iHeight), _style(_cpe.PanelStyles, eStyle)
+		# (one laid out top to bottom scrolls only down: in the original the espionage advisor's
+		# leader list shows no sideways scroll bar though its icons reach past the rows' right edge)
+		w.sideways = not w.vertical
 
 	def addScrollPanel(self, szName, title, iX, iY, iWidth, iHeight, eStyle):
 		w = self._s.add(szName, 'panel')
@@ -1513,6 +1517,11 @@ def _size(s, w):
 		# placed in it, attachXAt, down to its lowest)
 		held = [cw for cw in [s.widgets.get(c) for c in w.children] if cw is not None and cw.shown]
 		heights = [_size(s, cw)[1] for cw in held if cw.mode == 'flow']
+		if [cw for cw in held if cw.kind == 'separator' and cw.mode == 'flow']:
+			# (a separator sets the height of the panel it is in: the espionage advisor's leader
+			# rows, a separator 30 long and the leader's texts placed in it, are 32 high in the
+			# original, 34 apart; what is placed in it doesn't make it higher)
+			return w.w, 2 + (sum(heights) + 2 * (len(heights) - 1) if w.vertical else max(heights))
 		height = 8 + (sum([h + 2 for h in heights]) if w.vertical else max(heights + [0]))
 		for cw in held:
 			if cw.mode == 'rel':
@@ -1675,15 +1684,22 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 	text = w.text
 	if kind == 'edit' and _editFocus[0] == (s.id, w.name):
 		text = text + u'|' # (the caret: typed into)
-	out.append((base + (-1,), kind, x, y, x + width, y + height, clip, w.style if w.style else w.pstyle, text, w.tex, w.tex2, w.font, flags,
-		w.state, w.enabled, w.hittest, color, w.wt, w.d1, w.d2, w.opt, w.z, w.seq))
+	owner = s.widgets.get(w.parent) if w.parent else None
+	if not (kind == 'panel' and w.mode == 'rel' and owner is not None and owner.mode == 'flow'):
+		# (a panel placed in a row of a list (attachPanelAt in an attachPanel's) isn't seen and
+		# takes no clicks: the espionage advisor's leader names' panels, made after the leaders'
+		# buttons, show nothing in the original, and the buttons are clicked)
+		out.append((base + (-1,), kind, x, y, x + width, y + height, clip, w.style if w.style else w.pstyle, text, w.tex, w.tex2, w.font, flags,
+			w.state, w.enabled, w.hittest, color, w.wt, w.d1, w.d2, w.opt, w.z, w.seq))
 	if w.children:
 		inner, left, top = clip, x, y
 		scrolls = kind == 'panel' and w.scroll and width > 0 and height > 0
 		if scrolls:
 			inner, left, top = _clipTo(clip, (x, y, x + width, y + height)), x - w.hoffset, y - w.offset
 		first = len(out)
-		childFlow = [left + 4, top + 4 + (18 if w.text else 0), w.vertical, max(0, width - 8), left + 4]
+		# (in a row a separator sets, 1 in: the espionage advisor's rows, 32 high)
+		edge = 1 if [cw for cw in [s.widgets.get(c) for c in w.children] if cw is not None and cw.kind == 'separator' and cw.mode == 'flow'] else 4
+		childFlow = [left + edge, top + edge + (18 if w.text else 0), w.vertical, max(0, width - 2 * edge), left + edge]
 		for c in w.children:
 			cw = s.widgets.get(c)
 			if cw is not None:
@@ -1692,11 +1708,13 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 			held = [i for i in out[first:] if i[1] != 'scrollbar']
 			# (the margin below and right of what it holds only once that overflows: a strip of
 			# buttons as big as its panel, the WorldBuilder's load/save one, has no scroll bars)
-			extent = max([i[5] for i in held] + [childFlow[1]]) - top
+			# (the gap after the last of a top to bottom flow isn't held: the espionage advisor's
+			# 17 rows end at its list's bottom edge, with no scroll bar in the original)
+			extent = max([i[5] for i in held] + [childFlow[1] - (2 if w.vertical and childFlow[1] > top + 4 else 0)]) - top
 			hextent = max([i[4] for i in held] + [left]) - left
 			w.extent = extent + 4 if extent > height else extent
 			w.hextent = hextent + 4 if hextent > width else hextent
-			_scrolls(w, x, y, x + width, y + height, s.id, _LIST_ROW, out, True)
+			_scrolls(w, x, y, x + width, y + height, s.id, _LIST_ROW, out, w.sideways)
 
 
 def dump(path):
