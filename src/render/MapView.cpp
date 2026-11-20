@@ -2050,7 +2050,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 
 		// What the plot LSystem lays out on a plot: models standing, and nodes of models (a
 		// farm's crops) laid on the ground, each over the one before it.
-		void addLayout(const std::vector<PlotPiece>& pieces, Vec3 center, uint32_t h)
+		void addLayout(const std::vector<PlotPiece>& pieces, Vec3 center, uint32_t h, int state = 0)
 		{
 			float lift = 0.5f;
 			for (const PlotPiece& piece : pieces)
@@ -2060,7 +2060,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					layoutCuts.push_back({ at, piece.cut * S() });
 				if (piece.node.empty())
 				{
-					addDecor(piece.model, at, piece.yaw, h++);
+					addDecor(piece.model, at, piece.yaw, h++, state);
 					continue;
 				}
 				if (piece.model < 0 || size_t(piece.model) >= map.models.size())
@@ -2227,9 +2227,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 					if (p.route >= 0)
 						addRoute(x, y, p);
 					if (p.layout >= 0 && size_t(p.layout) < map.plotLayouts.size())
-						addLayout(map.plotLayouts[size_t(p.layout)], center, hash(x, y, 7));
+						addLayout(map.plotLayouts[size_t(p.layout)], center, hash(x, y, 7), p.improvementState);
 					else if (p.improvement >= 0 && size_t(p.improvement) < map.improvements.size())
-						addDecor(map.improvements[size_t(p.improvement)], center, 0, hash(x, y, 7));
+						addDecor(map.improvements[size_t(p.improvement)], center, 0, hash(x, y, 7), p.improvementState);
 					if (p.bonus >= 0 && size_t(p.bonus) < map.bonuses.size())
 						addDecor(map.bonuses[size_t(p.bonus)], center, 0, hash(x, y, 8), p.bonusState, !p.water);
 				}
@@ -3649,8 +3649,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 			shape[i] = uint8_t((p.water ? 1 : 0) | (p.hills ? 2 : 0) | (p.peak ? 4 : 0) | (p.riverSouth ? 8 : 0) | (p.riverEast ? 16 : 0));
 			featureKey[i] = int32_t(p.feature) << 8 | p.featureVariety;
 			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint16_t(p.route)) << 32 |
-				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0xFFF) << 50 |
-				uint64_t(p.bonusState & 3) << 62; // (the layout's 12 bits: two layouts 4096 apart on a plot would look unchanged)
+				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0x7FF) << 50 |
+				uint64_t(p.improvementState == 3) << 61 | uint64_t(p.bonusState & 3) << 62; // (the layout's 11 bits: two layouts 2048 apart on a plot would look unchanged)
 		}
 		const bool reshaped = resized || shape != m->shape;
 		const bool refeatured = reshaped || newArt || featureKey != m->featureKey;

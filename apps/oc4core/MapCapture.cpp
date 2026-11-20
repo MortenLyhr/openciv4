@@ -1069,6 +1069,13 @@ namespace oc4::host
 				plot->getVisibleBonusState(shownBonus, improved, worked);
 				v.bonusState = uint8_t(!improved ? 1 : worked ? 3 : 2);
 			}
+			{
+				// (the improvement's KFM: On, a worked plot's (the mine's cart and smoke, ...); NotWorked)
+				ImprovementTypes shownImprovement = NO_IMPROVEMENT;
+				bool worked = false;
+				plot->getVisibleImprovementState(shownImprovement, worked);
+				v.improvementState = uint8_t(shownImprovement == NO_IMPROVEMENT ? 0 : worked ? 3 : 2);
+			}
 			v.water = plot->isWater();
 			v.hills = plot->isHills();
 			v.peak = plot->isPeak();
