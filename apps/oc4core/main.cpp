@@ -768,6 +768,7 @@ namespace
 		std::vector<int> actionIds; // the action of each button the window shows
 		std::optional<std::pair<int, int>> pathShown; // where the way the window shows leads
 		std::pair<const void*, int> pathFrom{};        // (the unit it starts from and its plot: the gamepad's plot cursor shows it all the while)
+		int pathFoundIn = NO_INTERFACEMODE;            // (the interface mode it was found in: Route To's rings are green)
 		std::tuple<const void*, const void*, int, int> coloredFor{}; // what was selected when the plots were last coloured
 		uint64_t marksShown = ~0ull; // the marks the window has
 		uint64_t cameraShown = 0;     // the game's camera turn and tilt the window has (engine.cameraVersion)
@@ -1489,10 +1490,11 @@ namespace
 			const InterfaceModeTypes pathMode = ui.getInterfaceMode();
 			window.setGoingTo(playing && pathMode > NO_INTERFACEMODE && pathMode < NUM_INTERFACEMODE_TYPES && GC.getInterfaceModeInfo(pathMode).getGotoPlot() &&
 				pathHead && pathHead->getOwner() == me);
-			if (const auto target = playing ? window.pathTarget() : std::nullopt; target != pathShown || (target && from != pathFrom))
+			if (const auto target = playing ? window.pathTarget() : std::nullopt; target != pathShown || (target && (from != pathFrom || pathMode != pathFoundIn)))
 			{
 				pathShown = target;
 				pathFrom = from;
+				pathFoundIn = ui.getInterfaceMode();
 				ui.setGotoPlot(target ? GC.getMap().plot(target->first, target->second) : nullptr);
 				window.setPath(target ? findPath(ui, *target) : render::MapWindow::PathView{});
 			}
