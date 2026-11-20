@@ -692,14 +692,31 @@ namespace oc4::render
 			if (m_besideFor != m_help)
 			{
 				m_besideFor = m_help;
-				const float lines = o.richHeight(m_help, kWrap, size, false);
-				float lo = 20, hi = kWrap; // (the narrowest width that wraps no more than kWrap does)
-				while (hi - lo > 1)
+				// (its lines wrapped word by word at kWrap; the widest of them)
+				float widest = 0;
+				size_t start = 0;
+				while (start <= m_help.size())
 				{
-					const float mid = (lo + hi) / 2;
-					(o.richHeight(m_help, mid, size, false) > lines ? lo : hi) = mid;
+					const size_t end = std::min(m_help.find(L'\n', start), m_help.size());
+					std::wstring line;
+					size_t word = start;
+					while (word < end)
+					{
+						const size_t space = std::min(m_help.find(L' ', word), end);
+						const std::wstring next = (line.empty() ? L"" : line + L" ") + m_help.substr(word, space - word);
+						if (!line.empty() && o.richWidth(next, size, false) > kWrap)
+						{
+							widest = std::max(widest, o.richWidth(line, size, false));
+							line = m_help.substr(word, space - word);
+						}
+						else
+							line = next;
+						word = space + 1;
+					}
+					widest = std::max(widest, o.richWidth(line, size, false));
+					start = end + 1;
 				}
-				m_besideWidth = hi;
+				m_besideWidth = std::clamp(std::ceil(widest) + 1, 20.0f, kWrap);
 			}
 			const float w = m_besideWidth + 2 * kPad, h = o.richHeight(m_help, m_besideWidth, size, false) + 10;
 			const float left = std::min(it.x0, it.x1), right = std::max(it.x0, it.x1);
