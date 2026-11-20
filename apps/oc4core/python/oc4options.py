@@ -123,6 +123,7 @@ def _applyGraphics():
 		for i, on in _profile['graphic'].items():
 			oc4host.set_graphic_option(int(i), bool(on))
 		oc4host.set_ui_scale(_profile['uiScale'])
+		_applyPlayerOptions()
 		oc4host.set_wasd_pan(_profile['wasdPan'])
 		oc4host.set_auto_end_turn(_profile['autoEndTurn'])
 		oc4host.set_edge_scroll(_profile['edgeScroll'])
@@ -130,9 +131,40 @@ def _applyGraphics():
 		pass
 
 
-# W A S D panning (openciv4's own option, no game's): its check box on the options' Game tab,
-# above the language; while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
+def _applyPlayerOptions():
+	"""The player options the profile has, to the host: the game core sends them to the active
+	player at the start of every game, new or loaded, as the original's profile (a save's own are
+	overwritten)."""
+	try:
+		oc4host.reset_player_options()
+		for i, on in _profile['player'].items():
+			oc4host.set_player_option(int(i), bool(on))
+	except Exception:
+		pass
+
+
+def _syncPlayerOptions():
+	"""The player options as the host has them now (a choice on the options screen goes to the
+	game core, CyMessageControl().sendPlayerOption, and into the profile there), for the file."""
+	try:
+		for i in range(64):
+			state = oc4host.player_option_state(i)
+			if state:
+				_profile['player'][i] = state == 2
+	except Exception:
+		pass
+
+
+def _playerDefault(i):
+	try:
+		return bool(_cpe.CyGlobalContext().getPlayerOptionsInfoByIndex(int(i)).getDefault())
+	except Exception:
+		return False
+
+
+# W A S D panning (openciv4's own option, no game's): its check box on the options' OpenCiv4 tab; while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
 WASD_PAN_CHECKBOX = 'Oc4WasdPanCheckBox'
+OC4_FORM = 'Oc4Form' # (the options' OpenCiv4 tab)
 
 
 def setWasdPan(on):
@@ -195,7 +227,7 @@ def _autoEndTurnOn():
 
 
 # Edge scrolling (openciv4's own option, on by default as in the original): its check box under
-# the others on the Game tab.
+# the others on the OpenCiv4 tab.
 EDGE_SCROLL_CHECKBOX = 'Oc4EdgeScrollCheckBox'
 
 
@@ -264,7 +296,15 @@ class _UserProfile(object):
 				_profile['volume'][v], _profile['nosound'][v] = _VOLUME_STOPS, False
 			_applyVolumes()
 		elif eTab == _cpe.TabGroupTypes.TABGROUP_GAME:
+			# (the XML's defaults, to the profile and to the player in a game)
 			_profile['player'].clear()
+			_applyPlayerOptions()
+			try:
+				gc = _cpe.CyGlobalContext()
+				for i in range(gc.getNumPlayerOptionInfos()):
+					_cpe.CyMessageControl().sendPlayerOption(i, _playerDefault(i))
+			except Exception:
+				pass
 		elif eTab == _cpe.TabGroupTypes.TABGROUP_CLOCK:
 			_profile['clock'] = _profile['hours24'] = False
 
@@ -304,17 +344,22 @@ class _UserProfile(object):
 		w, h = oc4host.ui_size_at(scale)
 		return '%dx%d (%s)' % (w, h, '%d%%' % scale if scale else 'Auto')
 
-	# the player's options (the game's own when one is on: the active player's)
+	# the player's options (the profile's, the same in every game: the game core sends them to the
+	# active player when a game starts or is loaded, and a choice sent from the screen comes back here)
 	def getPlayerOption(self, i):
 		try:
-			game = _cpe.CyGame()
-			player = _cpe.CyGlobalContext().getPlayer(game.getActivePlayer())
-			if player is not None and not player.isNone():
-				return player.isOption(int(i))
+			state = oc4host.player_option_state(int(i))
+			if state:
+				return state == 2
 		except Exception:
 			pass
-		return _profile['player'].get(int(i), False)
-	def setPlayerOption(self, i, b): _profile['player'][int(i)] = bool(b)
+		return _profile['player'].get(int(i), _playerDefault(i))
+	def setPlayerOption(self, i, b):
+		_profile['player'][int(i)] = bool(b)
+		try:
+			oc4host.set_player_option(int(i), bool(b))
+		except Exception:
+			pass
 
 	# sounds
 	def getVolumeStops(self): return _VOLUME_STOPS
@@ -449,25 +494,37 @@ class CyGTabCtrl(object):
 		self._byName[n.name] = n
 		self._tabs.append((n, _text(szLabel)))
 		_schedule()
+		# (the game's own options screen: openciv4's own options on a tab of their own, after Other)
+		if str(szName) == 'OtherForm':
+			self._attachOpenCiv4Tab()
+
+	def _attachOpenCiv4Tab(self):
+		"""OpenCiv4's options, none of the original's: W A S D panning, ending idle turns, edge
+		scrolling (kept in the profile as wasdPan, autoEndTurn, edgeScroll)."""
+		self.attachTabItem(OC4_FORM, u'OpenCiv4')
+		self.attachVBox(OC4_FORM, 'Oc4VBox')
+		parent = 'Oc4Panel'
+		self.attachPanel('Oc4VBox', parent)
+		self.setStyle(parent, 'Panel_Tan15_Style')
+		self.setLayoutFlag(parent, 'LAYOUT_SIZE_HEXPANDING')
+		self.setLayoutFlag(parent, 'LAYOUT_SIZE_VEXPANDING')
+		self.attachCheckBox(parent, WASD_PAN_CHECKBOX, u'Pan the map with W A S D (Ctrl+Shift+W turns it off)', 'oc4options', 'handleWasdPanClicked',
+			WASD_PAN_CHECKBOX, _wasdPanOn())
+		self.setToolTip(WASD_PAN_CHECKBOX, u'Holding W, A, S or D on its own moves the map, as the arrows do. Their own hotkeys '
+			u'(S Sentry, A Automate, W next unit, D destroy) then need the unit\'s buttons; with Shift, Ctrl or Alt they are the '
+			u'game\'s as ever, and in menus and screens they are letters.')
+		self.attachCheckBox(parent, AUTO_END_TURN_CHECKBOX, u'End idle turns automatically (Ctrl+Shift+E)', 'oc4options', 'handleAutoEndTurnClicked',
+			AUTO_END_TURN_CHECKBOX, _autoEndTurnOn())
+		self.setToolTip(AUTO_END_TURN_CHECKBOX, u'When no unit needs orders and nothing is open, the turn ends after 2 seconds '
+			u'even if you did nothing in it. Press a key or click while it waits to stay on that turn. Popups, the city '
+			u'screen and other screens pause it. Pair with Automate Production and automated workers to let the game run.')
+		self.attachCheckBox(parent, EDGE_SCROLL_CHECKBOX, u'Scroll the map at the screen edge', 'oc4options', 'handleEdgeScrollClicked',
+			EDGE_SCROLL_CHECKBOX, _edgeScrollOn())
+		self.setToolTip(EDGE_SCROLL_CHECKBOX, u'Moving the mouse to the edge of the screen or window moves the map that way. '
+			u'Turn it off to pan only with the arrow keys (or W A S D) and the mouse.')
 
 	def attachVBox(self, parent, name): self._node('vbox', parent, name)
 	def attachHBox(self, parent, name):
-		# (openciv4's own option, on the Game tab above the language)
-		if str(parent) == 'GamePanelCenter' and str(name) == 'LangHBox':
-			self.attachCheckBox(parent, WASD_PAN_CHECKBOX, u'Pan the map with W A S D (Ctrl+Shift+W turns it off)', 'oc4options', 'handleWasdPanClicked',
-				WASD_PAN_CHECKBOX, _wasdPanOn())
-			self.setToolTip(WASD_PAN_CHECKBOX, u'Holding W, A, S or D on its own moves the map, as the arrows do. Their own hotkeys '
-				u'(S Sentry, A Automate, W next unit, D destroy) then need the unit\'s buttons; with Shift, Ctrl or Alt they are the '
-				u'game\'s as ever, and in menus and screens they are letters.')
-			self.attachCheckBox(parent, AUTO_END_TURN_CHECKBOX, u'End idle turns automatically (Ctrl+Shift+E)', 'oc4options', 'handleAutoEndTurnClicked',
-				AUTO_END_TURN_CHECKBOX, _autoEndTurnOn())
-			self.setToolTip(AUTO_END_TURN_CHECKBOX, u'When no unit needs orders and nothing is open, the turn ends after 2 seconds '
-				u'even if you did nothing in it. Press a key or click while it waits to stay on that turn. Popups, the city '
-				u'screen and other screens pause it. Pair with Automate Production and automated workers to let the game run.')
-			self.attachCheckBox(parent, EDGE_SCROLL_CHECKBOX, u'Scroll the map at the screen edge', 'oc4options', 'handleEdgeScrollClicked',
-				EDGE_SCROLL_CHECKBOX, _edgeScrollOn())
-			self.setToolTip(EDGE_SCROLL_CHECKBOX, u'Moving the mouse to the edge of the screen or window moves the map that way. '
-				u'Turn it off to pan only with the arrow keys (or W A S D) and the mouse.')
 		self._node('hbox', parent, name)
 	def attachPanel(self, parent, name): self._node('panel', parent, name)
 	def attachScrollPanel(self, parent, name): self._node('vbox', parent, name)
@@ -569,6 +626,13 @@ class CyGTabCtrl(object):
 			_schedule()
 
 	def setFocus(self, *args): pass
+
+	def setActiveTab(self, i):
+		if 0 <= int(i) < len(self._tabs):
+			self._tab = int(i)
+			_schedule()
+
+	def getActiveTab(self): return self._tab
 	def setEnabled(self, *args): pass
 
 
@@ -650,7 +714,9 @@ def _place(screen, n, x, y, w, h):
 	if k == 'label':
 		screen.setLabel(name, 'Background', u'<font=2>' + n.text + u'</font>', 1 << 0, x, y + 2, 0, font, general, -1, -1)
 	elif k in ('checkbox', 'radio'):
-		screen.addCheckBoxGFC(name, '', '', x, y, 20, 20, general, -1, -1, '')
+		# (the theme's check box, as the custom game screen's: GFC_Control_StandardCheckBox_Style)
+		screen.addCheckBoxGFC(name, '', '', x, y, 20, 20, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
+		screen.setStyle(name, 'GFC_Control_StandardCheckBox_Style')
 		w_ = screen._s.get(name)
 		if w_ is not None:
 			w_.state = bool(n.value)
@@ -817,6 +883,9 @@ def _call(n, args):
 	except Exception:
 		import traceback
 		traceback.print_exc()
+	# (every choice kept at once, as the original writes its profile: a player option too)
+	_syncPlayerOptions()
+	_save()
 
 
 # ---------------------------------------------------------------- in place
