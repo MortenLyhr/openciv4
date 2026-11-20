@@ -891,8 +891,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			if (!sampler || !detailWrap)
 				throw std::runtime_error(std::string("terrain samplers: ") + SDL_GetError());
 
-			// The water: blended over the ground at its alpha, writing depth (Water.fx: ZWriteEnable),
-			// so that what is under the water's level is hidden by it.
+			// The water: blended over the ground at its alpha, not writing depth. (Water.fx writes it,
+			// but OpenCiv4's river beds dip below the water's level at the coast: the rivers' deltas,
+			// drawn after, would end in a hard edge where the sea starts instead of running out into it.)
 			const std::string waterSource = std::string(kFrameConstantsHlsl) + kWaterHlsl;
 			waterVS = renderer.compile(waterSource, "water.hlsl", "VSWater", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 2);
 			waterPS = renderer.compile(waterSource, "water.hlsl", "PSWater", SDL_GPU_SHADERSTAGE_FRAGMENT, 2, 0, 2);
@@ -909,6 +910,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			target.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
 			target.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
 			target.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+			ci.depth_stencil_state.enable_depth_write = false;
 			if (!(waterPipeline = SDL_CreateGPUGraphicsPipeline(dev, &ci)))
 				throw std::runtime_error(std::string("water pipeline: ") + SDL_GetError());
 			// (Water.fx's sampler: linear, mipmapped, no anisotropy; the texture repeats)
