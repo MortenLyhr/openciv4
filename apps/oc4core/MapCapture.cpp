@@ -795,7 +795,9 @@ namespace oc4::host
 				piece.model = whole(*goal);
 				piece.x = to.x / 12;
 				piece.y = to.y / 12;
-				piece.yaw = twistOf(*goal) + (to.rotate + turnOf(*goal) + goal->rotate) * kDegrees;
+				// (not turned by its fTwist: the original's forts stand square to the plot, in
+				// every era; fTwist turns the lots of a layout, and these have none)
+				piece.yaw = (to.rotate + turnOf(*goal) + goal->rotate) * kDegrees;
 				piece.cut = centerCut(*goal);
 				return;
 			}
