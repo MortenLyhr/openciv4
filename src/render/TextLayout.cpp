@@ -38,7 +38,10 @@ namespace oc4::render
 		const auto measure = [&](Item& it, int face) {
 			const Fonts::Metrics& m = fonts.metrics(face);
 			const float size = it.style->size;
-			it.ascent = m.ascent * size, it.descent = m.descent * size, it.gap = m.lineGap * size;
+			// (in whole pixels, each rounded up, as Windows' text metrics (GDI's tmAscent, tmDescent) give
+			// them to the original's interface: Sylfaen at 16 px is 17 + 5 = 22 px a line, not 21.07; the
+			// Corporation Advisor's city lists, measured in Wine, are 22 px a line)
+			it.ascent = std::ceil(m.ascent * size - 0.01f), it.descent = std::ceil(m.descent * size - 0.01f), it.gap = std::round(m.lineGap * size);
 			it.underlinePosition = m.underlinePosition * size, it.underlineThickness = std::max(1.0f, m.underlineThickness * size);
 		};
 
