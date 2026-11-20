@@ -31,7 +31,7 @@
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
 // one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
+// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -1216,6 +1216,14 @@ namespace
 						press({ render::key::Escape, false, false, false });
 					else if (std::isalnum(static_cast<unsigned char>(c)) || c == ' ')
 						press({ unsigned(std::toupper(static_cast<unsigned char>(c))), shift, ctrl, alt });
+					else if (c == '%' && n + 1 < script.size())
+					{
+						// ("^%l": an arrow, Return or Tab with Ctrl held, as the game's hotkeys have them:
+						// Ctrl+Left turns the camera)
+						if (const unsigned k = scriptedKey(script[n + 1]))
+							press({ k, shift, ctrl, alt });
+						++n;
+					}
 					script.erase(0, std::min(n + 1, script.size()));
 					changed = true;
 				}
