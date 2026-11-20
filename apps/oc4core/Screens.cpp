@@ -1336,12 +1336,15 @@ if _walls:
 		if (now ? m_movedOn && same(*m_movedOn, *now) : !m_movedOn)
 			return;
 		const std::optional<Item> before = std::exchange(m_movedOn, now);
+		// (getMouseX is the mouse's x in pixels then, as in the original, not a table's column: BUG's
+		// religion and domestic advisors zoom to a row's city when it is 0, whatever the notify)
+		const int mouseX = window.mousePosition().first;
 		if (before)
 			// (to the widget as it is now, if it is still there)
 			if (const auto it = std::ranges::find_if(m_items, [&](const Item& i) { return same(i, *before); }); it != m_items.end())
-				scriptInput(Item(*it), kMoveOff, it->part < 0 ? 0 : (it->part & 0xFFFF), 0, false, false, false, false);
+				scriptInput(Item(*it), kMoveOff, it->part < 0 ? 0 : (it->part & 0xFFFF), mouseX, false, false, false, false);
 		if (now)
-			scriptInput(*now, kMoveOn, now->part < 0 ? 0 : (now->part & 0xFFFF), 0, false, false, false, false);
+			scriptInput(*now, kMoveOn, now->part < 0 ? 0 : (now->part & 0xFFFF), mouseX, false, false, false, false);
 	}
 
 	bool Screens::click(const std::string& name, int part, bool shift, bool ctrl, bool alt)
