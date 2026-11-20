@@ -198,6 +198,9 @@ float3 globeBend(float3 p)
 		void drawParticles(const GpuModel& model, size_t system, const scene::Material& material, std::vector<scene::Vertex>&& vertices);
 		// Draws the blended items of this frame's instances, back to front, then the particles.
 		void endFrame();
+		// Draws now the blended items laid on the ground (rivers' water, roads) queued so far, back
+		// to front, so that what is drawn next (the sea's water) goes over them.
+		void drawGroundBlended();
 		// Draws models into a target of its own (made width x height), as a camera of its own
 		// sees them: viewProj is its view * projection (DirectXMath's row vectors, p * M), at eye;
 		// no ground, no fog. endView draws its blended items and goes back to the frame's own

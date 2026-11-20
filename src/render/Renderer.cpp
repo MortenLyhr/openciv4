@@ -1187,6 +1187,19 @@ float4 PSOverlay(Out p) : SV_Target
 		m_particleDraws.push_back(std::move(d));
 	}
 
+	void Renderer::drawGroundBlended()
+	{
+		std::vector<Deferred> ground;
+		std::erase_if(m_deferred, [&](const Deferred& d) {
+			if (d.onGround)
+				ground.push_back(d);
+			return d.onGround;
+		});
+		std::ranges::stable_sort(ground, std::greater<>(), &Deferred::distance);
+		for (const auto& d : ground)
+			drawMesh(*d.mesh, m_deferredMaterials[d.material], m_deferredWorlds[d.world], d.teamColor, d.onGround);
+	}
+
 	void Renderer::endFrame()
 	{
 		// (the particles' vertices first, in one buffer: an upload ends the pass)

@@ -338,7 +338,8 @@ SamplerState waterSampler : register(s0, space2);
 struct WaterIn
 {
 	float3 pos : TEXCOORD0;   // world, at the water's level
-	float depth : TEXCOORD1;  // of the ground under it, world units
+	float depth : TEXCOORD1;  // of the land/water levels under it, world units
+	float bed : TEXCOORD2;    // how far a river's bed is carved below those levels there, world units
 };
 
 struct WaterOut
@@ -348,6 +349,7 @@ struct WaterOut
 	float2 uv2 : TEXCOORD1;
 	float2 plot : TEXCOORD2;
 	float depth : TEXCOORD3;
+	float bed : TEXCOORD4;
 };
 
 WaterOut VSWater(WaterIn i)
@@ -358,6 +360,7 @@ WaterOut VSWater(WaterIn i)
 	o.uv2 = float2(dot(i.pos.xy, waterUv2.xy), dot(i.pos.xy, waterUv2.zw)) + waterScroll.zw;
 	o.plot = i.pos.xy / waterPlotSize;
 	o.depth = i.depth;
+	o.bed = i.bed;
 	return o;
 }
 
@@ -405,7 +408,9 @@ float4 PSWater(WaterOut i) : SV_Target
 	// The shore: where the ground is that deep, a little in or out along it (the original's coast
 	// fade is a ragged edge), the water ending over a short way.
 	float wobble = 0.65 * waterNoise(i.plot, 1.5) + 0.35 * waterNoise(i.plot, 4) - 0.5;
-	float coast = saturate((i.depth - waterShore * (1 + 0.2 * wobble)) / waterShoreWidth);
+	// (in a river's mouth the sea comes in gradually, over the river's own water)
+	float mouth = saturate(i.bed / (0.25 * waterShore)) * waterShore;
+	float coast = saturate((i.depth - waterShore * (1 + 0.2 * wobble) + mouth) / (waterShoreWidth + mouth));
 	clip(coast - 1.0 / 255);
 	float4 a = waterTex.Sample(waterSampler, i.uv1);
 	float4 b = waterTex.Sample(waterSampler, i.uv2);
@@ -427,7 +432,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		struct WaterVertex
 		{
 			Vec3 position;
-			float depth;
+			float depth, bed;
 		};
 
 		struct WaterConstants
@@ -892,8 +897,10 @@ float4 PSWater(WaterOut i) : SV_Target
 				throw std::runtime_error(std::string("terrain samplers: ") + SDL_GetError());
 
 			// The water: blended over the ground at its alpha, not writing depth. (Water.fx writes it,
-			// but OpenCiv4's river beds dip below the water's level at the coast: the rivers' deltas,
-			// drawn after, would end in a hard edge where the sea starts instead of running out into it.)
+			// but OpenCiv4's river beds dip below the water's level at the coast: the rivers' deltas
+			// would end in a hard edge where the sea starts instead of running out into it.) Drawn
+			// after the rivers' water (Renderer::drawGroundBlended), so a delta's water out at sea is
+			// seen through the sea's.
 			const std::string waterSource = std::string(kFrameConstantsHlsl) + kWaterHlsl;
 			waterVS = renderer.compile(waterSource, "water.hlsl", "VSWater", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 2);
 			waterPS = renderer.compile(waterSource, "water.hlsl", "PSWater", SDL_GPU_SHADERSTAGE_FRAGMENT, 2, 0, 2);
@@ -901,8 +908,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			ci.fragment_shader = waterPS;
 			const SDL_GPUVertexBufferDescription wvbd{ 0, sizeof(WaterVertex), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0 };
 			const SDL_GPUVertexAttribute wattributes[] = { { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(WaterVertex, position) },
-				{ 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(WaterVertex, depth) } };
-			ci.vertex_input_state = { &wvbd, 1, wattributes, 2 };
+				{ 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(WaterVertex, depth) },
+				{ 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(WaterVertex, bed) } };
+			ci.vertex_input_state = { &wvbd, 1, wattributes, 3 };
 			target.blend_state.enable_blend = true;
 			target.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
 			target.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -1600,7 +1608,8 @@ float4 PSWater(WaterOut i) : SV_Target
 						for (int i = 0; i <= nx; ++i)
 						{
 							const float x = x0 + (x1 - x0) * float(i) / float(nx), y = y0 + (y1 - y0) * float(j) / float(ny);
-							vertices.push_back({ { x, y, kWaterLevel }, kWaterLevel - levelHeight(x, y) });
+							const float level = levelHeight(x, y);
+							vertices.push_back({ { x, y, kWaterLevel }, kWaterLevel - level, std::max(level - terrainHeight(x, y), 0.0f) });
 						}
 					for (int j = 0; j < ny; ++j)
 						for (int i = 0; i < nx; ++i)
@@ -4064,13 +4073,16 @@ float4 PSWater(WaterOut i) : SV_Target
 		++m->effectFrame;
 		m->effectsThisFrame.clear();
 		m->drawTerrain(frustum, options);
-		m->drawWater(frustum, options);
 		m->renderer.setFog(options.fog ? m->plotTex.get() : nullptr, m->S(), uint32_t(m->map.width), uint32_t(m->map.height), m->map.wrapX,
 			m->map.wrapY);
 		if (options.features)
 			m->drawInstances(m->features, frustum);
 		if (options.improvements)
 			m->drawInstances(m->decor, frustum);
+		// The sea's water over what is under it: the rivers' water laid on the ground (a delta's,
+		// out at sea, seen through the sea's) and what stands in the water.
+		m->renderer.drawGroundBlended();
+		m->drawWater(frustum, options);
 		if (options.cities)
 			m->drawInstances(m->cities, frustum);
 		m->figureHits.clear();
