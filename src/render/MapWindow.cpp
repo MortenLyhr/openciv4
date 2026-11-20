@@ -1795,7 +1795,8 @@ namespace oc4::render
 				overlay->rect(x1 - 2, y0 + 2, x1, y1 - 2, { 0, 0, 0 }, 1);
 				const float tx[4] = { sx - kTipW / 2, sx + kTipW / 2, sx, sx }, ty[4] = { y1, y1, y1 + kTipH, y1 + kTipH };
 				overlay->quad(tx, ty, { 0, 0, 0 }, 1);
-				overlay->text(text, sx, y0 + 2, kSize, { 0.92f, 0.93f, 0.9f }, 1, true, Overlay::Align::Center);
+				// (its ink 4 px under the top rim and 4-5 over the bottom one, as the original's)
+				overlay->text(text, sx, y0 - 1, kSize, { 0.92f, 0.93f, 0.9f }, 1, true, Overlay::Align::Center);
 			}
 		}
 
