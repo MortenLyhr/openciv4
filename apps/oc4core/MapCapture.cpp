@@ -767,6 +767,11 @@ namespace oc4::host
 			return it == r.lists.end() || it->second.empty() ? 0.0f : std::strtof(it->second[next() % it->second.size()].c_str(), nullptr);
 		};
 		constexpr float kDegrees = std::numbers::pi_v<float> / 180;
+		// (fCenterCut: the trees round it go, in world units)
+		const auto centerCut = [](const LArtRef& r) {
+			const float plot = std::max(float(GC.getPLOT_SIZE()), 1.0f);
+			return std::strtof(r.scalar("fCenterCut").c_str(), nullptr) / plot;
+		};
 		const auto whole = [&](const LArtRef& goal) {
 			if (!goal.nif.empty())
 				return modelIndex(&goal, goal.nif.c_str(), goal.kfm.c_str(), goal.scale * improvementScale);
@@ -791,6 +796,7 @@ namespace oc4::host
 				piece.x = to.x / 12;
 				piece.y = to.y / 12;
 				piece.yaw = twistOf(*goal) + (to.rotate + turnOf(*goal) + goal->rotate) * kDegrees;
+				piece.cut = centerCut(*goal);
 				return;
 			}
 		}
@@ -856,8 +862,16 @@ namespace oc4::host
 			}
 		}
 		const float twist = twistOf(*goal), c = std::cos(twist), sn = std::sin(twist);
-		const auto add = [&](const LArtRef& art, float x, float y, float degrees) {
+		const auto add = [&](const LArtRef& art, float x, float y, float degrees, const std::string& leaf) {
 			render::PlotPiece& piece = pieces.emplace_back();
+			// (bCutTrees: the trees on its leaf go)
+			if (art.scalar("bCutTrees") == "1" && leaf.size() > 6)
+			{
+				int w = 0, h = 0;
+				std::sscanf(leaf.c_str() + 6, "%dx%d", &w, &h);
+				piece.cut = std::hypot(float(w), float(h)) / 2 / 12;
+			}
+			piece.cut = std::max(piece.cut, centerCut(art));
 			piece.node = art.node;
 			piece.model = art.node.empty() ? whole(art) : modelIndex(&art, art.nif.c_str(), "", art.scale);
 			piece.standing = !art.node.empty();
@@ -866,7 +880,15 @@ namespace oc4::host
 			piece.yaw = twist + (degrees + turnOf(art) + art.rotate) * kDegrees;
 		};
 		if (goal->scalar("bPlace") != "0")
-			add(*goal, gx, gy, gdeg);
+			add(*goal, gx, gy, gdeg, goalNode);
+		else if (const float cut = centerCut(*goal); cut > 0)
+		{
+			// (no model: only the clearing round its lot)
+			render::PlotPiece& piece = pieces.emplace_back();
+			piece.x = (gx * c - gy * sn) / 12;
+			piece.y = (gx * sn + gy * c) / 12;
+			piece.cut = cut;
+		}
 		// The rest by their distance from the goal, a little at random.
 		std::vector<std::pair<float, const Leaf*>> nearest;
 		for (const Leaf& l : leaves)
@@ -880,7 +902,7 @@ namespace oc4::host
 					if (!used[i])
 						if (const LArtRef* art = artOf(nearest[i].second->node, [&](const LArtRef& r) { return r.name == extra && !r.nif.empty(); }))
 						{
-							add(*art, nearest[i].second->x, nearest[i].second->y, nearest[i].second->degrees);
+							add(*art, nearest[i].second->x, nearest[i].second->y, nearest[i].second->degrees, nearest[i].second->node);
 							used[i] = true;
 							break;
 						}
@@ -898,7 +920,7 @@ namespace oc4::host
 			});
 			if (!art)
 				continue;
-			add(*art, l.x, l.y, l.degrees);
+			add(*art, l.x, l.y, l.degrees, l.node);
 			area += cells(l.node);
 		}
 	}

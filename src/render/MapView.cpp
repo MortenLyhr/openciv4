@@ -575,6 +575,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		std::unordered_map<std::string, WaterAlpha> waterAlpha; // by texture
 		std::map<std::string, std::shared_ptr<const nif::File>> kfCache;
 		std::vector<Instance> features, decor, cities, units;
+		std::vector<std::pair<Vec3, float>> layoutCuts; // laid-out pieces' clearings: where, radius (world units)
 		// Each city's pieces by its plot, kept while what it shows stays the same (cleared with the terrain or the art).
 		struct CityLayout
 		{
@@ -2055,6 +2056,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 			for (const PlotPiece& piece : pieces)
 			{
 				const Vec3 at{ center.x + piece.x * S(), center.y + piece.y * S(), 0 };
+				if (piece.cut > 0)
+					layoutCuts.push_back({ at, piece.cut * S() });
 				if (piece.node.empty())
 				{
 					addDecor(piece.model, at, piece.yaw, h++);
@@ -2214,6 +2217,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		void buildDecor()
 		{
 			decor.clear();
+			layoutCuts.clear();
 			addRivers();
 			for (int y = 0; y < map.height; ++y)
 				for (int x = 0; x < map.width; ++x)
@@ -2254,6 +2258,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 				if (d.model->water)
 					waters[plotKey(d.place.translation.x, d.place.translation.y)].push_back(&d);
 			}
+			for (const auto& [c, r] : layoutCuts)
+				cuts[plotKey(c.x, c.y)].push_back({ c, r });
 			if (cuts.empty() && waters.empty())
 				return;
 			// In a river piece's water: the texture's alpha where the point is on its grid.
