@@ -956,9 +956,17 @@ namespace oc4::render
 			if (const Value* h = m->resolve(s, m->property(s, "GFC_Control_Table_StyleId_HHeader"));
 				h && h->kind == Value::Kind::Call && h->text == "GPropertyId" && !h->args.empty())
 				if (const Style* hs = m->findStyle(h->args[0].text))
+				{
 					if (const Value* b = m->resolve(hs, m->property(hs, "GFC_Control_Header_StyleId_HButton"));
 						b && b->kind == Value::Kind::Call && b->text == "GPropertyId" && !b->args.empty())
 						t->header = button(b->args[0].text);
+					static const char* const kSort[] = { "GFC_Control_Header_StyleId_HSortAscendButton", "GFC_Control_Header_StyleId_HSortDescendButton" };
+					for (size_t d = 0; d < 2; ++d)
+						if (const Value* b = m->resolve(hs, m->property(hs, kSort[d]));
+							b && b->kind == Value::Kind::Call && b->text == "GPropertyId" && !b->args.empty())
+							if (const Button* arrow = button(b->args[0].text))
+								t->sortArrow[d] = arrow->image[size_t(State::Default)];
+				}
 			m->margins(s, m->property(s, "GFC_Control_Table_Size_CellContentMargin"), t->content);
 			// (the standard table's: table_innerTB.tga in the theme's BG; a GFlags(...) NoInnerFill none)
 			const Value* noFill = m->resolve(s, m->property(s, "GFC_Control_Table_Flag_NoInnerFill"));

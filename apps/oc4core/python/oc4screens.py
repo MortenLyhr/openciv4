@@ -17,11 +17,14 @@
 ## screens; a click on a row of a table or a list box selects it (Ctrl adds or takes one,
 ## Shift a range) and the script hears NOTIFY_LISTBOX_ITEM_SELECTED.
 
+import re
 import time
 import oc4host
 import CvPythonExtensions as _cpe
 
 _FONT_LEFT, _FONT_RIGHT, _FONT_CENTER = 1 << 0, 1 << 1, 1 << 2
+_SORT_UP, _SORT_DOWN = 1 << 8, 1 << 9  # (a header's flags: its table is sorted by it, up or down)
+_markup = re.compile(u'<[^<>]*>')
 
 _version = [1]          # bumped on every change the display list shows
 _screens = {}           # python file id -> _Screen
@@ -88,7 +91,7 @@ class _Widget(object):
 	__slots__ = ('name', 'kind', 'parent', 'mode', 'x', 'y', 'z', 'w', 'h', 'style', 'pstyle', 'text', 'help', 'tex', 'tex2',
 		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'scroll', 'children',
 		'bars', 'lists', 'columns', 'rows', 'headers', 'iconw', 'iconh', 'items', 'selected', 'color', 'size', 'defw', 'defh', 'points',
-		'offset', 'extent', 'picked', 'hoffset', 'hextent', 'cells', 'sort', 'inset', 'maxChars', 'allowed')
+		'offset', 'extent', 'picked', 'hoffset', 'hextent', 'cells', 'sort', 'inset', 'maxChars', 'allowed', 'selectable')
 
 	def __init__(self, name, kind):
 		self.name = name
@@ -134,6 +137,7 @@ class _Widget(object):
 		self.points = None     # lines
 		self.cells = None      # tables: {(row, column): the name of the control attached there}
 		self.sort = None       # tables that sort: (column, descending) the rows are shown by, or (-1, False)
+		self.selectable = False  # tables: enableSelect(True): with no row selected, the first shown has the selected look
 		self.inset = 0         # scroll panels (addScrollPanel): where what is placed in them (attach...At) starts
 
 
@@ -1118,9 +1122,10 @@ class CyGInterfaceScreen(object):
 		self.setTableText(szName, iColumn, iRow, text, szIcon, eWidgetType, iData1, iData2, iJustify)
 
 	def getTableText(self, szName, iColumn, iRow):
+		# (the cell's text without its markup, as the original gives it back: BUG's red "-1" is "-1")
 		w = self._s.get(szName)
 		try:
-			return w.rows[int(iRow)][int(iColumn)][0]
+			return _markup.sub(u'', w.rows[int(iRow)][int(iColumn)][0])
 		except (AttributeError, IndexError, KeyError, TypeError):
 			return u''
 
@@ -1139,7 +1144,11 @@ class CyGInterfaceScreen(object):
 		if w is not None and w.rows is not None and w.sort is None:
 			w.sort = (-1, False)
 			_changed()
-	def enableSelect(self, szName, bSelect): pass
+	def enableSelect(self, szName, bSelect):
+		w = self._s.get(szName)
+		if w is not None and w.rows is not None and w.selectable != bool(bSelect):
+			w.selectable = bool(bSelect)
+			_changed()
 	def enableGridlines(self, *args): pass
 
 	def selectRow(self, szName, iRow, bSelected):
@@ -1638,7 +1647,10 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 			cx = x
 			for ci, c in enumerate(w.columns):
 				# (a table that sorts: each header a part of its own, -100 - column, that a click sorts by)
-				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + headerHeight, box, style, c[0], '', '', 2, _FONT_RIGHT if c[2] else _FONT_LEFT,
+				sortFlags = 0
+				if w.sort is not None and w.sort[0] == ci:
+					sortFlags = _SORT_DOWN if w.sort[1] else _SORT_UP
+				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + headerHeight, box, style, c[0], '', '', 2, (_FONT_RIGHT if c[2] else _FONT_LEFT) | sortFlags,
 					False, True, 0, None, -1, -1, -1, False, w.z, w.seq))
 				cx += c[1]
 			top += headerHeight
@@ -1657,7 +1669,10 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 				continue
 			# (the row's look under its cells: every other one the theme's Alt_, selected; as wide
 			# as its columns, as in the original: BUG's domestic advisor's rows end with its last)
-			out.append((base + (-200 - ri,), 'row', x, cy, x + (sum(c[1] for c in w.columns) or width), cy + rowHeight, body, style, u'', '', '', 0, at & 1, ri in w.picked, True, 0, None,
+			# (a table one selects rows of shows its first row selected while none is, as the original's
+			# GTable its current row: BUG's Domestic Advisor opens with its first city lit)
+			lit = ri in w.picked or (w.selectable and not w.picked and at == 0)
+			out.append((base + (-200 - ri,), 'row', x, cy, x + (sum(c[1] for c in w.columns) or width), cy + rowHeight, body, style, u'', '', '', 0, at & 1, lit, True, 0, None,
 				-1, -1, -1, False, w.z, w.seq))
 			cx = x
 			for ci, c in enumerate(w.columns):
