@@ -203,6 +203,7 @@ namespace oc4::render
 		std::pair<uint64_t, uint64_t> screenPixelsFor{ ~0ull, ~0ull };
 		int downX = 0, downY = 0;
 		bool downLeft = false;
+		int buttonClicks = 1; // the mouse button's clicks in a row (2: a double click)
 		std::function<std::string(int, int)> plotHelp;
 		ButtonArt art;
 		Theme theme;
@@ -1234,7 +1235,10 @@ namespace oc4::render
 				// (a city's bar is over the figures: a click on it is on its city)
 				const auto figure = view->cityBarAt(float(x), float(y)) ? std::nullopt : figureUnder(x, y);
 				if (const auto p = figure ? *figure : hoveredPlot(); p.first >= 0)
+				{
 					clicks.push_back({ p.first, p.second, !downLeft, mods.shift, mods.ctrl, mods.alt, figure.has_value() });
+					clicks.back().twice = buttonClicks >= 2;
+				}
 			}
 			if (down)
 			{
@@ -2302,7 +2306,10 @@ namespace oc4::render
 					orbiting = down;
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)
+				{
+					buttonClicks = e.button.clicks;
 					onButton(down && e.button.button == SDL_BUTTON_LEFT, down, x, y);
+				}
 				break;
 			}
 			case SDL_EVENT_MOUSE_WHEEL:
