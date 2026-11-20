@@ -19,7 +19,6 @@
 #include "CvGameTextMgr.h"
 #include "CvMap.h"
 #include "CvPlayerAI.h"
-#include "CvTeamAI.h"
 #include "CvPlot.h"
 #include "CvPopupInfo.h"
 #include "CvSelectionGroup.h"
@@ -1021,22 +1020,17 @@ if _walls:
 			// (CvScreensInterface.forceScreenUpdate: "forced from net message"): a tech clicked,
 			// queued with Shift, learnt, the turns left. Its techs then take their colours and
 			// numbers again (CvTechChooser.updateTechRecords).
-			if (techChooser && GC.getGame().getActivePlayer() != NO_PLAYER)
-			{
-				const CvPlayerAI& player = CvPlayerAI::getPlayerNonInl(GC.getGame().getActivePlayer());
-				const CvTeamAI& team = CvTeamAI::getTeamNonInl(player.getTeam());
-				std::vector<int> research{ GC.getGame().getGameTurn(), player.getCurrentResearch(), team.getResearchProgress(player.getCurrentResearch() < 0 ? TechTypes(0) : player.getCurrentResearch()), player.calculateResearchRate() };
-				for (int i = 0; i < GC.getNumTechInfos(); ++i)
-					research.push_back(team.isHasTech(TechTypes(i)) ? -1 : player.getQueuePosition(TechTypes(i)));
-				if (research != m_research)
-				{
-					// (redrawn when it comes up: the original's shows the turns left at once)
-					entry.attr(m_research.empty() ? "forceScreenRedraw" : "forceScreenUpdate")(py::make_tuple(m_techChooserId));
-					m_research = std::move(research);
-				}
-			}
-			else
+			// (read through the scripts' CyPlayer and CyTeam, oc4screens.researchState: the core's
+			// own functions are not all exported to the engine on Windows)
+			const std::string research = techChooser ? screens.attr("researchState")().cast<std::string>() : std::string();
+			if (research.empty())
 				m_research.clear();
+			else if (research != m_research)
+			{
+				// (redrawn when it comes up: the original's shows the turns left at once)
+				entry.attr(m_research.empty() ? "forceScreenRedraw" : "forceScreenUpdate")(py::make_tuple(m_techChooserId));
+				m_research = research;
+			}
 			if (ui.anyDirty())
 				entry.attr("forceScreenRedraw")(py::make_tuple(m_mainId));
 			// Diplomacy: the next talk waiting, when nothing is up (the game's script says what the
