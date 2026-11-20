@@ -449,7 +449,6 @@ namespace
 		case CONTROL_CYCLE_CAMERA_FLYING_MODES:
 		case CONTROL_FLYING_CAMERA:
 		case CONTROL_MOUSE_FLYING_CAMERA:
-		case CONTROL_TOP_DOWN_CAMERA:
 			return false;
 		default:
 			return true;
@@ -713,6 +712,7 @@ namespace
 		std::pair<const void*, int> pathFrom{};        // (the unit it starts from and its plot: the gamepad's plot cursor shows it all the while)
 		std::tuple<const void*, const void*, int, int> coloredFor{}; // what was selected when the plots were last coloured
 		uint64_t marksShown = ~0ull; // the marks the window has
+		uint64_t cameraShown = 0;     // the game's camera turn and tilt the window has (engine.cameraVersion)
 		uint64_t globeShown = 0;      // ... and the globe's state it shows (engine.globeVersion)
 		int globeTurn = -1;
 		std::vector<render::MapWindow::PlotMarks::Mark> globeMarks;
@@ -1407,6 +1407,11 @@ namespace
 									engine.mark({ p->getX(), p->getY(), 1, 1, 1, 0.55f, AREA_BORDER_LAYER_FOUNDING_BORDER, true, false });
 			}
 			coloredFor = selected;
+			if (const uint64_t c = engine.cameraVersion; c != cameraShown)
+			{
+				cameraShown = c;
+				window.setCameraAngles(engine.baseTurn, engine.basePitch, engine.satellite);
+			}
 			// The globe: its view, and its layer's plots coloured (the game core's colours for the
 			// active player, again each turn).
 			if (const uint64_t g = engine.globeVersion; g != globeShown || (engine.globeLayer >= 0 && game.getGameTurn() != globeTurn))
