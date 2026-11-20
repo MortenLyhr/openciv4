@@ -1136,12 +1136,17 @@ if _walls:
 			CvWStringBuffer text;
 			CvWidgetDataStruct w{ item.data1, item.data2, item.option, static_cast<WidgetTypes>(item.widget) };
 			CvDLLWidgetData::getInstance().parseHelp(text, w);
-			g_help = text.getCString();
-			return gameMarkup(text.getCString());
+			if (!text.isEmpty())
+			{
+				g_help = text.getCString();
+				return gameMarkup(text.getCString());
+			}
+			// (the widget types the original's executable answers itself, as the World Builder's
+			// buttons: their help from the script's own text, then the executable's)
 		}
 		try
 		{
-			const std::wstring text = toWide(py::module_::import("oc4screens").attr("widgetText")(item.screen, item.name));
+			const std::wstring text = toWide(py::module_::import("oc4screens").attr("widgetText")(item.screen, item.name, item.widget != WIDGET_GENERAL ? item.widget : -1, item.data1, item.data2, item.option));
 			g_help = text;
 			return gameMarkup(text.c_str());
 		}

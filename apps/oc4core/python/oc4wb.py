@@ -164,6 +164,29 @@ def initWBToolEditCtrlTab(bUnit):
 
 def refreshWBEditCtrlReligionButtons(b): _draw()
 def refreshWBEditCtrlCorporationButtons(b): _draw()
+# The diplomacy mode's window (CvWorldBuilderDiplomacyScreen): the executable's tab control, as
+# the options screen's (oc4options.CyGTabCtrl, one window of tabs, centred).
+_diplomacy = {'ctrl': None}
+
+
+def initWBDiplomacyCtrl(szName, bStatic=True, bCloseButton=False):
+	import oc4options
+	_diplomacy['ctrl'] = oc4options.CyGTabCtrl(szName, bStatic, bCloseButton)
+
+
+def getWBToolDiplomacyTabCtrl(): return _diplomacy['ctrl']
+
+
+def destroyWBDiplomacyCtrl():
+	ctrl, _diplomacy['ctrl'] = _diplomacy['ctrl'], None
+	if ctrl is not None:
+		ctrl.destroy()
+
+
+def saveDiplomacySettings(): pass
+def setDiplomacySettings(): pass
+
+
 def isMouseOverGameSurface(): return bool(oc4host.ui_mouse_over_map())
 def setFocusToCVG(): pass
 def getWBSaveExtension(): return '.CivBeyondSwordWBSave'
@@ -445,6 +468,10 @@ def _draw():
 					screen.setImageButtonAt(_add(name, ('item', ctrl, item)), grid, item[2], cx, cy, _ICON, _ICON, general, -1, -1)
 				else:
 					screen.setTextAt(_add(name, ('item', ctrl, item)), grid, item[3][:6], 0, cx, cy + 8, -0.3, _cpe.FontTypes.SMALL_FONT, general, -1, -1)
+				# (its help: the item's name, as the original's palette shows it under the mouse)
+				w = screen._s.get(name)
+				if w is not None:
+					w.help = _u(item[3])
 	if _flyout is not None and _flyout.items:
 		mx, my = 300, 200
 		screen.addPanel(_add('OC4WBFlyout'), u'', u'', True, False, mx, my, 240, 24 * len(_flyout.items) + 12, _cpe.PanelStyles.PANEL_STYLE_MAIN)
@@ -540,6 +567,24 @@ def widgetClicked(widget, iData1, iData2):
 	_draw()
 
 
+def widgetHelp(widget, iData1, iData2):
+	"""The help the executable gives the WorldBuilder's own buttons (WIDGET_WB_...), from its
+	texts; u'' for any other widget."""
+	W = _cpe.WidgetTypes
+	keys = {
+		W.WIDGET_WB_SAVE_BUTTON: 'TXT_KEY_ACTION_SAVE', W.WIDGET_WB_LOAD_BUTTON: 'TXT_KEY_ACTION_LOAD',
+		W.WIDGET_WB_ALL_PLOTS_BUTTON: 'TXT_KEY_WB_CHANGE_ALL_PLOTS', W.WIDGET_WB_ERASE_BUTTON: 'TXT_KEY_WB_ERASE_PLOTS',
+		W.WIDGET_WB_LANDMARK_BUTTON: 'TXT_KEY_WB_LANDMARK_PLOTS', W.WIDGET_WB_EXIT_BUTTON: 'TXT_KEY_WB_EXIT',
+		W.WIDGET_WB_UNIT_EDIT_BUTTON: 'TXT_KEY_WB_EDIT_UNIT', W.WIDGET_WB_CITY_EDIT_BUTTON: 'TXT_KEY_WB_EDIT_CITY',
+		W.WIDGET_WB_NORMAL_PLAYER_TAB_MODE_BUTTON: 'TXT_KEY_WB_NORMAL_PLAYER', W.WIDGET_WB_NORMAL_MAP_TAB_MODE_BUTTON: 'TXT_KEY_WB_NORMAL_MAP',
+		W.WIDGET_WB_REVEAL_TAB_MODE_BUTTON: 'TXT_KEY_WB_REVEAL_TILE', W.WIDGET_WB_REVEAL_ALL_BUTTON: 'TXT_KEY_WB_REVEAL_ALL',
+		W.WIDGET_WB_UNREVEAL_ALL_BUTTON: 'TXT_KEY_WB_UNREVEAL_ALL', W.WIDGET_WB_REGENERATE_MAP: 'TXT_KEY_WB_REGENERATE_MAP',
+		W.WIDGET_WB_DIPLOMACY_MODE_BUTTON: 'TXT_KEY_WB_DIPLOMACY',
+	}
+	key = keys.get(widget)
+	return _text(key) if key else u''
+
+
 def _save():
 	"""The world as a WorldBuilder save (CvWBInterface.writeDesc), into the original's folder of
 	them: Documents\\My Games\\Beyond the Sword\\Saves\\WorldBuilder, named by the time."""
@@ -560,5 +605,6 @@ def _save():
 for _name in ('initWBToolPlayerControl', 'getWBToolNormalPlayerTabCtrl', 'addWBPlayerControlTabs', 'getWBToolNormalMapTabCtrl',
 		'setWBInitialCtrlTabPlacement', 'initWBToolAdvancedStartControl', 'getWBToolAdvancedStartTabCtrl', 'addWBAdvancedStartControlTabs',
 		'initWBToolEditCtrl', 'getWBToolEditTabCtrl', 'initWBToolEditCtrlTab', 'refreshWBEditCtrlReligionButtons',
-		'refreshWBEditCtrlCorporationButtons', 'isMouseOverGameSurface', 'setFocusToCVG', 'getWBSaveExtension', 'CyGFlyoutMenu'):
+		'refreshWBEditCtrlCorporationButtons', 'initWBDiplomacyCtrl', 'getWBToolDiplomacyTabCtrl', 'destroyWBDiplomacyCtrl',
+		'saveDiplomacySettings', 'setDiplomacySettings', 'isMouseOverGameSurface', 'setFocusToCVG', 'getWBSaveExtension', 'CyGFlyoutMenu'):
 	setattr(_cpe, _name, globals()[_name])
