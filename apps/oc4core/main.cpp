@@ -547,6 +547,10 @@ namespace
 		for (const FAStarNode* n = gDLL->getFAStarIFace()->GetLastNode(finder); n; n = n->m_pParent)
 			way.points.push_back({ n->m_iX, n->m_iY, n->m_iData2 });
 		std::ranges::reverse(way.points);
+		// (an enemy the units see there: the move ends in an attack, its ring red; a worker's road
+		// there, Route To: its rings green)
+		way.attack = GC.getMap().plot(destX, destY)->isVisibleEnemyUnit(head->getOwner());
+		way.route = ui.getInterfaceMode() == INTERFACEMODE_ROUTE_TO;
 		return way;
 	}
 
