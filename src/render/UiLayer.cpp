@@ -333,9 +333,10 @@ namespace oc4::render
 	}
 
 	void UiLayer::draw(Overlay& o, const std::function<void(float, float, float, float, bool)>& minimap, double clock,
-		const std::function<bool(const Item&)>& leaderhead)
+		const std::function<bool(const Item&)>& leaderhead, const std::function<void()>& underScreens)
 	{
 		const float sw = o.screenWidth(), sh = o.screenHeight();
+		bool screensReached = false;
 		const Item* map = nullptr;
 		for (const Item& it : m_items)
 			if (it.kind == Kind::Minimap)
@@ -343,6 +344,12 @@ namespace oc4::render
 		for (size_t i = 0; i < m_items.size(); ++i)
 		{
 			Item& it = m_items[i];
+			if (!screensReached && !it.mainInterface)
+			{
+				screensReached = true;
+				if (underScreens)
+					underScreens();
+			}
 			const bool hot = int(i) == m_hover && it.enabled;
 			const float x0 = it.x0, y0 = it.y0, x1 = it.x1, y1 = it.y1, w = x1 - x0, h = y1 - y0;
 			const float alpha = it.alpha * (it.enabled ? 1.0f : 0.45f);
@@ -671,6 +678,8 @@ namespace oc4::render
 			if (it.clipped)
 				o.unclip();
 		}
+		if (!screensReached && underScreens)
+			underScreens(); // (no screen: over the main interface, under its help)
 		// The help for what is under the mouse, in the help area (growing up from it unless it
 		// expands down).
 		// (what the keyboard chose: the mouse's highlight alone is too faint to follow)
