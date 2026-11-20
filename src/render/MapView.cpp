@@ -333,6 +333,8 @@ cbuffer Water : register(b1, UNIFORMS)
 	float waterShoreWidth; // world units of depth over which it fades in there
 };
 
+static const float kWaterRedOffset = 14.0 / 255;
+
 Texture2D waterTex : register(t0, space2);   // the water plane's base texture
 Texture2D waterPlots : register(t1, space2); // as the terrain's plots: flags in alpha (4 revealed, 8 visible)
 SamplerState waterSampler : register(s0, space2);
@@ -418,7 +420,9 @@ float4 PSWater(WaterOut i) : SV_Target
 	clip(coast - 1.0 / 255);
 	float4 a = waterTex.Sample(waterSampler, i.uv1);
 	float4 b = waterTex.Sample(waterSampler, i.uv2);
-	float3 color = lerp(a.rgb, b.rgb, 0.5) + a.a * b.a * coast;
+	// (less red than Water.dds gives: measured in the original over open sea, coast and lakes, the
+	// water 14/255 less red at its 0.5 alpha, its sparkles as white as here; cause not found)
+	float3 color = lerp(a.rgb, b.rgb, 0.5) - float3(kWaterRedOffset, 0, 0) + a.a * b.a * coast;
 	if (waterShowFog)
 	{
 		// (as the terrain: blended between plot centres, black where never seen, dimmed where not seen now)
@@ -430,7 +434,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		color *= k.x * lerp(0.55, 1, k.y);
 	}
 	// (D3D fogs a pixel before blending it: the water darkens over a floor darkened as much)
-	return float4(color * distanceFog(i.drawn), waterAlpha * coast);
+	return float4(saturate(color) * distanceFog(i.drawn), waterAlpha * coast);
 }
 )hlsl";
 

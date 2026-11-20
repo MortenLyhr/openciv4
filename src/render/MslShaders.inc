@@ -1532,34 +1532,34 @@ struct VSWater_in
 vertex VSWater_out VSWater(VSWater_in in [[stage_in]], constant Frame& _25 [[buffer(0)]], constant Water& _129 [[buffer(1)]])
 {
     VSWater_out out = {};
-    float3 _277 = in.i_pos + float3(_129.waterOffset);
-    float3 _270 = _277;
-    float3 _469;
+    float3 _278 = in.i_pos + float3(_129.waterOffset);
+    float3 _271 = _278;
+    float3 _470;
     do
     {
         if (_25.globe.z <= 0.0)
         {
-            _469 = _277;
+            _470 = _278;
             break;
         }
-        float2 _347 = _277.xy - _25.globe.xy;
+        float2 _348 = _278.xy - _25.globe.xy;
         if (_25.globe.w > 0.0)
         {
-            _347.x -= (_25.globe.w * rint(_347.x / _25.globe.w));
+            _348.x -= (_25.globe.w * rint(_348.x / _25.globe.w));
         }
-        float _386 = length(_347);
-        float _391 = fast::min(_386 / _25.globe.z, 3.141590118408203125);
-        float _404 = _25.globe.z + _270.z;
-        _469 = float3(_25.globe.xy + ((select(float2(0.0), _347 / float2(_386), bool2(_386 > 9.9999997473787516355514526367188e-05)) * _404) * sin(_391)), (_404 * cos(_391)) - _25.globe.z);
+        float _387 = length(_348);
+        float _392 = fast::min(_387 / _25.globe.z, 3.141590118408203125);
+        float _405 = _25.globe.z + _271.z;
+        _470 = float3(_25.globe.xy + ((select(float2(0.0), _348 / float2(_387), bool2(_387 > 9.9999997473787516355514526367188e-05)) * _405) * sin(_392)), (_405 * cos(_392)) - _25.globe.z);
         break;
     } while(false);
-    out.gl_Position = float4(_469, 1.0) * _25.viewProj;
+    out.gl_Position = float4(_470, 1.0) * _25.viewProj;
     out._entryPointOutput_uv1 = float2(dot(in.i_pos.xy, _129.waterUv1.xy), dot(in.i_pos.xy, _129.waterUv1.zw)) + _129.waterScroll.xy;
     out._entryPointOutput_uv2 = float2(dot(in.i_pos.xy, _129.waterUv2.xy), dot(in.i_pos.xy, _129.waterUv2.zw)) + _129.waterScroll.zw;
     out._entryPointOutput_plot = in.i_pos.xy / float2(_129.waterPlotSize);
     out._entryPointOutput_depth = in.i_depth;
     out._entryPointOutput_bed = in.i_bed;
-    out._entryPointOutput_drawn = _469;
+    out._entryPointOutput_drawn = _470;
     return out;
 }
 
@@ -1660,177 +1660,177 @@ struct PSWater_in
 fragment PSWater_out PSWater(PSWater_in in [[stage_in]], constant Frame& _42 [[buffer(0)]], constant Water& _75 [[buffer(1)]], texture2d<float> waterTex [[texture(0)]], texture2d<float> waterPlots [[texture(1)]], sampler waterSampler [[sampler(0)]])
 {
     PSWater_out out = {};
-    float2 _693 = in.i_plot * 1.5;
-    float2 _695 = floor(_693);
-    float2 _698 = _693 - _695;
-    float2 _683 = (_698 * _698) * (float2(3.0) - (_698 * 2.0));
-    float2 _684 = float2(_75.waterMapSize) * 1.5;
-    float2 _686 = _695;
+    float2 _703 = in.i_plot * 1.5;
+    float2 _705 = floor(_703);
+    float2 _708 = _703 - _705;
+    float2 _693 = (_708 * _708) * (float2(3.0) - (_708 * 2.0));
+    float2 _694 = float2(_75.waterMapSize) * 1.5;
+    float2 _696 = _705;
     if (_75.waterWrapX != int(0u))
     {
-        _686.x -= (_684.x * floor(_686.x / _684.x));
+        _696.x -= (_694.x * floor(_696.x / _694.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _686.y -= (_684.y * floor(_686.y / _684.y));
+        _696.y -= (_694.y * floor(_696.y / _694.y));
     }
-    uint _770 = (uint(_686.x) * 2654435761u) ^ (uint(_686.y) * 2246822519u);
-    uint _776 = (_770 ^ (_770 >> uint(15))) * 739982445u;
-    spvUnsafeArray<float, 4> _688;
-    _688[0] = float((_776 ^ (_776 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _686 = _695 + float2(1.0, 0.0);
+    uint _780 = (uint(_696.x) * 2654435761u) ^ (uint(_696.y) * 2246822519u);
+    uint _786 = (_780 ^ (_780 >> uint(15))) * 739982445u;
+    spvUnsafeArray<float, 4> _698;
+    _698[0] = float((_786 ^ (_786 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _696 = _705 + float2(1.0, 0.0);
     if (_75.waterWrapX != int(0u))
     {
-        _686.x -= (_684.x * floor(_686.x / _684.x));
+        _696.x -= (_694.x * floor(_696.x / _694.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _686.y -= (_684.y * floor(_686.y / _684.y));
+        _696.y -= (_694.y * floor(_696.y / _694.y));
     }
-    uint _1758 = (uint(_686.x) * 2654435761u) ^ (uint(_686.y) * 2246822519u);
-    uint _1761 = (_1758 ^ (_1758 >> uint(15))) * 739982445u;
-    _688[1] = float((_1761 ^ (_1761 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _686 = _695 + float2(0.0, 1.0);
+    uint _1770 = (uint(_696.x) * 2654435761u) ^ (uint(_696.y) * 2246822519u);
+    uint _1773 = (_1770 ^ (_1770 >> uint(15))) * 739982445u;
+    _698[1] = float((_1773 ^ (_1773 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _696 = _705 + float2(0.0, 1.0);
     if (_75.waterWrapX != int(0u))
     {
-        _686.x -= (_684.x * floor(_686.x / _684.x));
+        _696.x -= (_694.x * floor(_696.x / _694.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _686.y -= (_684.y * floor(_686.y / _684.y));
+        _696.y -= (_694.y * floor(_696.y / _694.y));
     }
-    uint _1825 = (uint(_686.x) * 2654435761u) ^ (uint(_686.y) * 2246822519u);
-    uint _1828 = (_1825 ^ (_1825 >> uint(15))) * 739982445u;
-    _688[2] = float((_1828 ^ (_1828 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _686 = _695 + float2(1.0);
+    uint _1837 = (uint(_696.x) * 2654435761u) ^ (uint(_696.y) * 2246822519u);
+    uint _1840 = (_1837 ^ (_1837 >> uint(15))) * 739982445u;
+    _698[2] = float((_1840 ^ (_1840 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _696 = _705 + float2(1.0);
     if (_75.waterWrapX != int(0u))
     {
-        _686.x -= (_684.x * floor(_686.x / _684.x));
+        _696.x -= (_694.x * floor(_696.x / _694.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _686.y -= (_684.y * floor(_686.y / _684.y));
+        _696.y -= (_694.y * floor(_696.y / _694.y));
     }
-    uint _1892 = (uint(_686.x) * 2654435761u) ^ (uint(_686.y) * 2246822519u);
-    uint _1895 = (_1892 ^ (_1892 >> uint(15))) * 739982445u;
-    _688[3] = float((_1895 ^ (_1895 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    float2 _820 = in.i_plot * 4.0;
-    float2 _822 = floor(_820);
-    float2 _825 = _820 - _822;
-    float2 _810 = (_825 * _825) * (float2(3.0) - (_825 * 2.0));
-    float2 _811 = float2(_75.waterMapSize) * 4.0;
-    float2 _813 = _822;
+    uint _1904 = (uint(_696.x) * 2654435761u) ^ (uint(_696.y) * 2246822519u);
+    uint _1907 = (_1904 ^ (_1904 >> uint(15))) * 739982445u;
+    _698[3] = float((_1907 ^ (_1907 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    float2 _830 = in.i_plot * 4.0;
+    float2 _832 = floor(_830);
+    float2 _835 = _830 - _832;
+    float2 _820 = (_835 * _835) * (float2(3.0) - (_835 * 2.0));
+    float2 _821 = float2(_75.waterMapSize) * 4.0;
+    float2 _823 = _832;
     if (_75.waterWrapX != int(0u))
     {
-        _813.x -= (_811.x * floor(_813.x / _811.x));
+        _823.x -= (_821.x * floor(_823.x / _821.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _813.y -= (_811.y * floor(_813.y / _811.y));
+        _823.y -= (_821.y * floor(_823.y / _821.y));
     }
-    uint _897 = (uint(_813.x) * 2654435761u) ^ (uint(_813.y) * 2246822519u);
-    uint _903 = (_897 ^ (_897 >> uint(15))) * 739982445u;
-    spvUnsafeArray<float, 4> _815;
-    _815[0] = float((_903 ^ (_903 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _813 = _822 + float2(1.0, 0.0);
+    uint _907 = (uint(_823.x) * 2654435761u) ^ (uint(_823.y) * 2246822519u);
+    uint _913 = (_907 ^ (_907 >> uint(15))) * 739982445u;
+    spvUnsafeArray<float, 4> _825;
+    _825[0] = float((_913 ^ (_913 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _823 = _832 + float2(1.0, 0.0);
     if (_75.waterWrapX != int(0u))
     {
-        _813.x -= (_811.x * floor(_813.x / _811.x));
+        _823.x -= (_821.x * floor(_823.x / _821.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _813.y -= (_811.y * floor(_813.y / _811.y));
+        _823.y -= (_821.y * floor(_823.y / _821.y));
     }
-    uint _1557 = (uint(_813.x) * 2654435761u) ^ (uint(_813.y) * 2246822519u);
-    uint _1560 = (_1557 ^ (_1557 >> uint(15))) * 739982445u;
-    _815[1] = float((_1560 ^ (_1560 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _813 = _822 + float2(0.0, 1.0);
+    uint _1569 = (uint(_823.x) * 2654435761u) ^ (uint(_823.y) * 2246822519u);
+    uint _1572 = (_1569 ^ (_1569 >> uint(15))) * 739982445u;
+    _825[1] = float((_1572 ^ (_1572 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _823 = _832 + float2(0.0, 1.0);
     if (_75.waterWrapX != int(0u))
     {
-        _813.x -= (_811.x * floor(_813.x / _811.x));
+        _823.x -= (_821.x * floor(_823.x / _821.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _813.y -= (_811.y * floor(_813.y / _811.y));
+        _823.y -= (_821.y * floor(_823.y / _821.y));
     }
-    uint _1624 = (uint(_813.x) * 2654435761u) ^ (uint(_813.y) * 2246822519u);
-    uint _1627 = (_1624 ^ (_1624 >> uint(15))) * 739982445u;
-    _815[2] = float((_1627 ^ (_1627 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    _813 = _822 + float2(1.0);
+    uint _1636 = (uint(_823.x) * 2654435761u) ^ (uint(_823.y) * 2246822519u);
+    uint _1639 = (_1636 ^ (_1636 >> uint(15))) * 739982445u;
+    _825[2] = float((_1639 ^ (_1639 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    _823 = _832 + float2(1.0);
     if (_75.waterWrapX != int(0u))
     {
-        _813.x -= (_811.x * floor(_813.x / _811.x));
+        _823.x -= (_821.x * floor(_823.x / _821.x));
     }
     if (_75.waterWrapY != int(0u))
     {
-        _813.y -= (_811.y * floor(_813.y / _811.y));
+        _823.y -= (_821.y * floor(_823.y / _821.y));
     }
-    uint _1691 = (uint(_813.x) * 2654435761u) ^ (uint(_813.y) * 2246822519u);
-    uint _1694 = (_1691 ^ (_1691 >> uint(15))) * 739982445u;
-    _815[3] = float((_1694 ^ (_1694 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
-    float _569 = fast::clamp(in.i_bed / (0.25 * _75.waterShore), 0.0, 1.0) * _75.waterShore;
-    float _586 = fast::clamp(((in.i_depth - (_75.waterShore * (1.0 + (0.20000000298023223876953125 * (((0.64999997615814208984375 * mix(mix(_688[0], _688[1], _683.x), mix(_688[2], _688[3], _683.x), _683.y)) + (0.3499999940395355224609375 * mix(mix(_815[0], _815[1], _810.x), mix(_815[2], _815[3], _810.x), _810.y))) - 0.5))))) + _569) / (_75.waterShoreWidth + _569), 0.0, 1.0);
-    if ((_586 - 0.0039215688593685626983642578125) < 0.0)
+    uint _1703 = (uint(_823.x) * 2654435761u) ^ (uint(_823.y) * 2246822519u);
+    uint _1706 = (_1703 ^ (_1703 >> uint(15))) * 739982445u;
+    _825[3] = float((_1706 ^ (_1706 >> uint(12))) & 65535u) * 1.525902189314365386962890625e-05;
+    float _575 = fast::clamp(in.i_bed / (0.25 * _75.waterShore), 0.0, 1.0) * _75.waterShore;
+    float _592 = fast::clamp(((in.i_depth - (_75.waterShore * (1.0 + (0.20000000298023223876953125 * (((0.64999997615814208984375 * mix(mix(_698[0], _698[1], _693.x), mix(_698[2], _698[3], _693.x), _693.y)) + (0.3499999940395355224609375 * mix(mix(_825[0], _825[1], _820.x), mix(_825[2], _825[3], _820.x), _820.y))) - 0.5))))) + _575) / (_75.waterShoreWidth + _575), 0.0, 1.0);
+    if ((_592 - 0.0039215688593685626983642578125) < 0.0)
     {
         discard_fragment();
     }
-    float4 _597 = waterTex.sample(waterSampler, in.i_uv1);
-    float4 _536 = _597;
-    float4 _603 = waterTex.sample(waterSampler, in.i_uv2);
-    float4 _537 = _603;
-    float3 _618 = mix(_597.xyz, _603.xyz, float3(0.5)) + float3((_536.w * _537.w) * _586);
-    float3 _1492;
+    float4 _603 = waterTex.sample(waterSampler, in.i_uv1);
+    float4 _542 = _603;
+    float4 _609 = waterTex.sample(waterSampler, in.i_uv2);
+    float4 _543 = _609;
+    float3 _625 = (mix(_603.xyz, _609.xyz, float3(0.5)) - float3(0.0549019612371921539306640625, 0.0, 0.0)) + float3((_542.w * _543.w) * _592);
+    float3 _1502;
     if (_75.waterShowFog != 0u)
     {
-        float2 _626 = in.i_plot - float2(0.5);
-        int2 _629 = int2(floor(_626));
-        float2 _541 = smoothstep(float2(0.0), float2(1.0), _626 - float2(_629));
-        int2 _936 = _629;
-        float2 _975 = float2(_75.waterMapSize);
-        int2 _970 = _629 - int2(_975 * floor((float2(_629) + float2(0.5)) / _975));
-        _936.x = (_75.waterWrapX != int(0u)) ? _970.x : clamp(_936.x, 0, _75.waterMapSize.x - 1);
-        _936.y = (_75.waterWrapY != int(0u)) ? _970.y : clamp(_936.y, 0, _75.waterMapSize.y - 1);
-        uint _957 = uint(rint(waterPlots.read(uint2(int3(_936, 0).xy), 0).w * 65535.0));
-        int2 _638 = _629 + int2(1, 0);
-        int2 _1062 = _638;
-        float2 _1101 = float2(_75.waterMapSize);
-        int2 _1096 = _638 - int2(_1101 * floor((float2(_638) + float2(0.5)) / _1101));
-        _1062.x = (_75.waterWrapX != int(0u)) ? _1096.x : clamp(_1062.x, 0, _75.waterMapSize.x - 1);
-        _1062.y = (_75.waterWrapY != int(0u)) ? _1096.y : clamp(_1062.y, 0, _75.waterMapSize.y - 1);
-        uint _1083 = uint(rint(waterPlots.read(uint2(int3(_1062, 0).xy), 0).w * 65535.0));
-        int2 _645 = _629 + int2(0, 1);
-        int2 _1188 = _645;
-        float2 _1227 = float2(_75.waterMapSize);
-        int2 _1222 = _645 - int2(_1227 * floor((float2(_645) + float2(0.5)) / _1227));
-        _1188.x = (_75.waterWrapX != int(0u)) ? _1222.x : clamp(_1188.x, 0, _75.waterMapSize.x - 1);
-        _1188.y = (_75.waterWrapY != int(0u)) ? _1222.y : clamp(_1188.y, 0, _75.waterMapSize.y - 1);
-        uint _1209 = uint(rint(waterPlots.read(uint2(int3(_1188, 0).xy), 0).w * 65535.0));
-        int2 _648 = _629 + int2(1);
-        int2 _1314 = _648;
-        float2 _1353 = float2(_75.waterMapSize);
-        int2 _1348 = _648 - int2(_1353 * floor((float2(_648) + float2(0.5)) / _1353));
-        _1314.x = (_75.waterWrapX != int(0u)) ? _1348.x : clamp(_1314.x, 0, _75.waterMapSize.x - 1);
-        _1314.y = (_75.waterWrapY != int(0u)) ? _1348.y : clamp(_1314.y, 0, _75.waterMapSize.y - 1);
-        uint _1335 = uint(rint(waterPlots.read(uint2(int3(_1314, 0).xy), 0).w * 65535.0));
-        float2 _542 = mix(mix(float2(float(int((_957 & 4u) != 0u)), float(int((_957 & 8u) != 0u))), float2(float(int((_1083 & 4u) != 0u)), float(int((_1083 & 8u) != 0u))), float2(_541.x)), mix(float2(float(int((_1209 & 4u) != 0u)), float(int((_1209 & 8u) != 0u))), float2(float(int((_1335 & 4u) != 0u)), float(int((_1335 & 8u) != 0u))), float2(_541.x)), float2(_541.y));
-        _1492 = _618 * (_542.x * mix(0.550000011920928955078125, 1.0, _542.y));
+        float2 _633 = in.i_plot - float2(0.5);
+        int2 _636 = int2(floor(_633));
+        float2 _547 = smoothstep(float2(0.0), float2(1.0), _633 - float2(_636));
+        int2 _946 = _636;
+        float2 _985 = float2(_75.waterMapSize);
+        int2 _980 = _636 - int2(_985 * floor((float2(_636) + float2(0.5)) / _985));
+        _946.x = (_75.waterWrapX != int(0u)) ? _980.x : clamp(_946.x, 0, _75.waterMapSize.x - 1);
+        _946.y = (_75.waterWrapY != int(0u)) ? _980.y : clamp(_946.y, 0, _75.waterMapSize.y - 1);
+        uint _967 = uint(rint(waterPlots.read(uint2(int3(_946, 0).xy), 0).w * 65535.0));
+        int2 _645 = _636 + int2(1, 0);
+        int2 _1072 = _645;
+        float2 _1111 = float2(_75.waterMapSize);
+        int2 _1106 = _645 - int2(_1111 * floor((float2(_645) + float2(0.5)) / _1111));
+        _1072.x = (_75.waterWrapX != int(0u)) ? _1106.x : clamp(_1072.x, 0, _75.waterMapSize.x - 1);
+        _1072.y = (_75.waterWrapY != int(0u)) ? _1106.y : clamp(_1072.y, 0, _75.waterMapSize.y - 1);
+        uint _1093 = uint(rint(waterPlots.read(uint2(int3(_1072, 0).xy), 0).w * 65535.0));
+        int2 _652 = _636 + int2(0, 1);
+        int2 _1198 = _652;
+        float2 _1237 = float2(_75.waterMapSize);
+        int2 _1232 = _652 - int2(_1237 * floor((float2(_652) + float2(0.5)) / _1237));
+        _1198.x = (_75.waterWrapX != int(0u)) ? _1232.x : clamp(_1198.x, 0, _75.waterMapSize.x - 1);
+        _1198.y = (_75.waterWrapY != int(0u)) ? _1232.y : clamp(_1198.y, 0, _75.waterMapSize.y - 1);
+        uint _1219 = uint(rint(waterPlots.read(uint2(int3(_1198, 0).xy), 0).w * 65535.0));
+        int2 _655 = _636 + int2(1);
+        int2 _1324 = _655;
+        float2 _1363 = float2(_75.waterMapSize);
+        int2 _1358 = _655 - int2(_1363 * floor((float2(_655) + float2(0.5)) / _1363));
+        _1324.x = (_75.waterWrapX != int(0u)) ? _1358.x : clamp(_1324.x, 0, _75.waterMapSize.x - 1);
+        _1324.y = (_75.waterWrapY != int(0u)) ? _1358.y : clamp(_1324.y, 0, _75.waterMapSize.y - 1);
+        uint _1345 = uint(rint(waterPlots.read(uint2(int3(_1324, 0).xy), 0).w * 65535.0));
+        float2 _548 = mix(mix(float2(float(int((_967 & 4u) != 0u)), float(int((_967 & 8u) != 0u))), float2(float(int((_1093 & 4u) != 0u)), float(int((_1093 & 8u) != 0u))), float2(_547.x)), mix(float2(float(int((_1219 & 4u) != 0u)), float(int((_1219 & 8u) != 0u))), float2(float(int((_1345 & 4u) != 0u)), float(int((_1345 & 8u) != 0u))), float2(_547.x)), float2(_547.y));
+        _1502 = _625 * (_548.x * mix(0.550000011920928955078125, 1.0, _548.y));
     }
     else
     {
-        _1492 = _618;
+        _1502 = _625;
     }
-    float _1493;
+    float _1503;
     do
     {
         if (_42.fogDistance <= 0.0)
         {
-            _1493 = 1.0;
+            _1503 = 1.0;
             break;
         }
-        _1493 = fast::clamp((1.7999999523162841796875 - (length(in.i_drawn - float3(_42.eyePos)) / _42.fogDistance)) * 1.66666662693023681640625, 0.0, 1.0);
+        _1503 = fast::clamp((1.7999999523162841796875 - (length(in.i_drawn - float3(_42.eyePos)) / _42.fogDistance)) * 1.66666662693023681640625, 0.0, 1.0);
         break;
     } while(false);
-    out._entryPointOutput = float4(_1492 * _1493, _75.waterAlpha * _586);
+    out._entryPointOutput = float4(fast::clamp(_1502, float3(0.0), float3(1.0)) * _1503, _75.waterAlpha * _592);
     return out;
 }
 
