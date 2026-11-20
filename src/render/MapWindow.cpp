@@ -1899,8 +1899,8 @@ namespace oc4::render
 						}
 					}
 				}
-			// (the farther ones first, so a nearer bubble covers them)
-			std::ranges::sort(bubbles, {}, &Bubble::y);
+			// (in the plots' order, south to north and west to east, as the original draws them: where
+			// bubbles crowd, the farther and the more easterly one covers its neighbour)
 			for (const Bubble& b : bubbles)
 				drawResourceBubble(b.x, b.y, *b.icon);
 			if (low && layers.units)
