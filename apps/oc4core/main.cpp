@@ -439,6 +439,7 @@ namespace
 	// moves nothing else while it is busy (CvPlayerAI::AI_unitUpdate waits for !hasBusyUnit): one
 	// group at a time, a stack as one. The timer counts game updates, so these run a slice of time
 	// apart while one is on, as the original's engine does; with nothing shown they run flat out.
+	// (Measured in the original under Wine: a game update every 0.26 s, a shown move every 4 updates.)
 	constexpr std::chrono::milliseconds kShownMoveSlice{ 250 };
 	bool shownMoveOn()
 	{
@@ -1602,8 +1603,10 @@ namespace
 								Sleep(5);
 							else
 							{
+								// (the update that ends a timer too: the next group's move a slice later)
+								const bool wasShown = shownMoveOn();
 								session.update();
-								if (shownMoveOn())
+								if (wasShown || shownMoveOn())
 								{
 									nextShownMoveUpdate = Clock::now() + kShownMoveSlice;
 									break;
