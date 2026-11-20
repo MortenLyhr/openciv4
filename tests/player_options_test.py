@@ -178,6 +178,23 @@ def main():
 		host, options = start(folder)
 		check(host.states[:NUM] == [0] * NUM, "an older profile: none chosen")
 		check(options._profile['edgeScroll'] is False, "the other keys still read")
+
+		# A profile the old options screen wrote (no version): its "off" for the options on by
+		# default (it showed them off) gives way to the default once; the other choices stay.
+		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
+			f.write('name=openciv4\nplayer.0=0\nplayer.1=0\nplayer.2=0\nplayer.6=1\nplayer.13=0\n')
+		host, options = start(folder)
+		profile = options._UserProfile()
+		check(profile.getPlayerOption(2) and profile.getPlayerOption(0) and profile.getPlayerOption(6) and not profile.getPlayerOption(13),
+			"an old screen's profile: Wait at End of Turn on again, Quick Moves kept")
+		check(host.states[2] == 0 and host.states[6] == 2, "... and the host has those (%s)" % host.states[:8])
+		options._save()
+		lines = profileLines(folder)
+		check('version=2' in lines and 'player.6=1' in lines and 'player.2=0' not in lines, "saved with its version: %s" % sorted(lines))
+		# Once: then Wait at End of Turn off is the player's choice and stays.
+		click(options, optionsScreen(options), 'GameOptionCheckBox_2')
+		host, options = start(folder)
+		check(not options._UserProfile().getPlayerOption(2), "after that, off is kept")
 	finally:
 		shutil.rmtree(folder, ignore_errors=True)
 

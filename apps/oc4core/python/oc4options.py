@@ -58,6 +58,13 @@ def _path():
 		return ''
 
 
+# The profile's form: 2 since the player options are the player's choices (before, the options
+# screen wrote every player option it had shown, those it had never read as off).
+_VERSION = 2
+# (the options CIV4PlayerOptionInfos.xml has on: advisor pop-ups, Sid's tips, Wait at End of Turn)
+_DEFAULTS_ON = (0, 1, 2)
+
+
 def _load():
 	path = _path()
 	if not path:
@@ -66,6 +73,7 @@ def _load():
 		f = open(path, 'r')
 	except IOError:
 		return
+	version = 1
 	try:
 		for line in f:
 			if '=' not in line:
@@ -85,17 +93,26 @@ def _load():
 					_profile[parts[0]] = int(value)
 				elif parts[0] in ('name', 'speakers', 'musicPath'):
 					_profile[parts[0]] = value
+				elif parts[0] == 'version':
+					version = int(value)
 			except (ValueError, IndexError):
 				pass
 	finally:
 		f.close()
+	# A profile the old options screen wrote: an option that is on by default and off there was
+	# most likely never chosen (the screen showed it off), so it is the default again, once. (With
+	# Wait at End of Turn off the game core ends a turn by itself after a unit moved.)
+	if version < _VERSION:
+		for i in _DEFAULTS_ON:
+			if _profile['player'].get(i) is False:
+				del _profile['player'][i]
 
 
 def _save():
 	path = _path()
 	if not path:
 		return
-	lines = []
+	lines = ['version=%d' % _VERSION]
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
 	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
