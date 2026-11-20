@@ -173,39 +173,54 @@ class CyStatistics(object):
 	with the game): units built, killed and lost by type, buildings built, cities built and razed,
 	religions founded, golden ages. Players never alive have none (asking would make a record)."""
 
-	def _get(self, iPlayer, key):
+	def _get(self, iPlayer, index):
+		"""Value number index of the game core's report (oc4host.player_statistics): 0 victory, 1 time
+		played, 2 leader, 3 cities built, 4 razed, 5 golden ages, then built, killed, lost for each
+		unit, built for each building, founded for each religion."""
+		gc = _cpe.CyGlobalContext()
 		iPlayer = int(iPlayer)
-		if iPlayer < 0 or iPlayer >= _cpe.CyGlobalContext().getMAX_PLAYERS() or not _cpe.CyGlobalContext().getPlayer(iPlayer).isEverAlive():
+		if index < 0 or iPlayer < 0 or iPlayer >= gc.getMAX_PLAYERS() or not gc.getPlayer(iPlayer).isEverAlive():
 			return 0
-		value = oc4host.player_statistic(iPlayer, key)
-		return value if value is not None else 0
+		values = oc4host.player_statistics(iPlayer)
+		if len(values) != 6 + 3 * gc.getNumUnitInfos() + gc.getNumBuildingInfos() + gc.getNumReligionInfos():
+			return 0
+		return values[index] if index < len(values) else 0
+
+	def _unit(self, iUnit, offset):
+		return 6 + 3 * int(iUnit) + offset if 0 <= int(iUnit) < _cpe.CyGlobalContext().getNumUnitInfos() else -1
 
 	def getPlayerNumUnitsBuilt(self, iPlayer, iUnit):
-		return self._get(iPlayer, 'unit_%d_built' % int(iUnit))
+		return self._get(iPlayer, self._unit(iUnit, 0))
 
 	def getPlayerNumUnitsKilled(self, iPlayer, iUnit):
-		return self._get(iPlayer, 'unit_%d_killed' % int(iUnit))
+		return self._get(iPlayer, self._unit(iUnit, 1))
 
 	def getPlayerNumUnitsLost(self, iPlayer, iUnit):
-		return self._get(iPlayer, 'unit_%d_lost' % int(iUnit))
+		return self._get(iPlayer, self._unit(iUnit, 2))
 
 	def getPlayerNumBuildingsBuilt(self, iPlayer, iBuilding):
-		return self._get(iPlayer, 'building_%d_built' % int(iBuilding))
+		gc = _cpe.CyGlobalContext()
+		if not 0 <= int(iBuilding) < gc.getNumBuildingInfos():
+			return 0
+		return self._get(iPlayer, 6 + 3 * gc.getNumUnitInfos() + int(iBuilding))
 
 	def getPlayerNumCitiesBuilt(self, iPlayer):
-		return self._get(iPlayer, 'citiesbuilt')
+		return self._get(iPlayer, 3)
 
 	def getPlayerNumCitiesRazed(self, iPlayer):
-		return self._get(iPlayer, 'citiesrazed')
+		return self._get(iPlayer, 4)
 
 	def getPlayerNumGoldenAges(self, iPlayer):
-		return self._get(iPlayer, 'goldenages')
+		return self._get(iPlayer, 5)
 
 	def getPlayerReligionFounded(self, iPlayer, iReligion):
-		return self._get(iPlayer, 'religion_%d_founded' % int(iReligion)) != 0
+		gc = _cpe.CyGlobalContext()
+		if not 0 <= int(iReligion) < gc.getNumReligionInfos():
+			return False
+		return self._get(iPlayer, 6 + 3 * gc.getNumUnitInfos() + gc.getNumBuildingInfos() + int(iReligion)) != 0
 
 	def getPlayerTimePlayed(self, iPlayer):
-		return self._get(iPlayer, 'timeplayed')
+		return self._get(iPlayer, 1)
 
 # No tech splash popups without a screen.
 CyInterface.noTechSplash = lambda self: True
