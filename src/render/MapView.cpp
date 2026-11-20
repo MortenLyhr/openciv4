@@ -17,6 +17,7 @@
 #include <deque>
 #include <format>
 #include <functional>
+#include <limits>
 #include <map>
 #include <numbers>
 #include <queue>
@@ -1940,6 +1941,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 						return &p;
 				return nullptr;
 			};
+			// (a piece stands on the ground, or at `at.z` where that is higher: the water's level 0)
+			constexpr float kOnGround = -std::numeric_limits<float>::infinity();
 			const auto add = [&](const FeatureArt& art, const FeatureArt::Piece& piece, Vec3 at, uint32_t h) {
 				if (piece.models.empty())
 					return;
@@ -1949,7 +1952,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					return;
 				if (LoadedModel* lm = model(nif, {}))
 				{
-					at.z = ground(at.x, at.y);
+					at.z = std::max(ground(at.x, at.y), at.z);
 					features.push_back(placeStatic(lm, placement(at, -float(rotation) * std::numbers::pi_v<float> / 2, art.scale)));
 				}
 			};
@@ -1986,7 +1989,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 							continue;
 						const size_t variety = std::min<size_t>(around[k]->featureVariety, art->varieties.size() - 1);
 						if (const auto* piece = findPiece(art->varieties[variety], mask))
-							add(*art, *piece, { float(cx) * S(), float(cy) * S(), 0 }, hash(cx, cy, f));
+							add(*art, *piece, { float(cx) * S(), float(cy) * S(), kOnGround }, hash(cx, cy, f));
 					}
 				}
 			// The others stand in their plot.
@@ -2001,8 +2004,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 					const auto* piece = findPiece(pieces, 0);
 					if (!piece && !pieces.empty())
 						piece = &pieces.front();
+					// (on a water plot it stands on the water, at the level of the original's plot point
+					// there: an oasis's pool and sand over the sea, not under it on the sea floor)
 					if (piece)
-						add(*art, *piece, { (float(x) + 0.5f) * S(), (float(y) + 0.5f) * S(), 0 }, hash(x, y, p.feature));
+						add(*art, *piece, { (float(x) + 0.5f) * S(), (float(y) + 0.5f) * S(), p.water ? 0.0f : kOnGround }, hash(x, y, p.feature));
 				}
 		}
 
