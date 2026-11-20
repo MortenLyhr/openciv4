@@ -467,8 +467,8 @@ namespace oc4::render
 				return;
 			}
 			const Vec3 way = shortestWay(camera.target, to);
-			const float far = view->map().cameraTravelDistance / std::max(view->map().plotSize, 1.0f) * plot();
-			if (std::hypot(way.x, way.y) > far)
+			const float jumpDistance = view->map().cameraTravelDistance / std::max(view->map().plotSize, 1.0f) * plot();
+			if (std::hypot(way.x, way.y) > jumpDistance)
 			{
 				travelTo.reset();
 				camera.target = to;
