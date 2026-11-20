@@ -608,7 +608,10 @@ class CyGInterfaceScreen(object):
 	def addScrollPanel(self, szName, title, iX, iY, iWidth, iHeight, eStyle):
 		w = self._s.add(szName, 'panel')
 		w.text, w.scroll = _text(title), True
-		w.x, w.y, w.w, w.h, w.pstyle = int(iX), int(iY), int(iWidth), int(iHeight), _style(_cpe.PanelStyles, eStyle)
+		# (drawn as nothing whatever its style: the engine's GScrollPanel is transparent,
+		# GFC_CF_TRANSPARENT in Civ4Theme_ScrollPanel.thm; the tech advisor's techs lie on its
+		# parchment, SCREEN_BG_OPAQUE under the panel, not on the external style's blue)
+		w.x, w.y, w.w, w.h, w.pstyle = int(iX), int(iY), int(iWidth), int(iHeight), 'PANEL_STYLE_EMPTY'
 		# (inside the theme's layout margin, GFC_Control_Layout's Size_OuterMargin of 8: the
 		# WorldBuilder's load/save buttons, at 0 in their panel at 70, line up with its landmark and
 		# erase buttons at 8 and 43; the city screen's resource names fit their columns)
