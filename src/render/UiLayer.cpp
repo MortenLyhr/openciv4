@@ -500,7 +500,9 @@ namespace oc4::render
 			case Kind::Text:
 				// (a text, CyGInterfaceScreen.setText, is in the theme's normal font, size 3, whatever
 				// font it names; a label in the one it names)
-				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), fontBold(it.font), it.interactive && hot ? kHot : kText);
+				// (only a text lights up under the mouse; a label keeps its colour, its help aside)
+				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), fontBold(it.font),
+					it.kind == Kind::Text && it.interactive && hot ? kHot : kText);
 				break;
 			case Kind::EndTurnText:
 				if (!it.text.empty())
@@ -678,7 +680,41 @@ namespace oc4::render
 			const float x0 = std::min(it.x0, it.x1), x1 = std::max(it.x0, it.x1);
 			o.frame(x0 - 2, it.y0 - 2, x1 + 2, it.y1 + 2, kHot, 1, 3, 2);
 		}
-		if (!m_help.empty())
+		if (!m_help.empty() && m_hover >= 0 && size_t(m_hover) < m_items.size() && !m_items[size_t(m_hover)].mainInterface)
+		{
+			// A screen's widget (not the main interface's, which has its help area): the help in the
+			// theme's tooltip beside it, as the original: its top at the widget's, its right edge at
+			// the widget's left (on its right when there is no room), wrapped at 220 and as wide as
+			// its widest line (measured in Wine, BUG's Finance Advisor at 1600x900).
+			const Item& it = m_items[size_t(m_hover)];
+			constexpr float kWrap = 220, kPad = 10;
+			const float size = m_sizes[2];
+			if (m_besideFor != m_help)
+			{
+				m_besideFor = m_help;
+				const float lines = o.richHeight(m_help, kWrap, size, false);
+				float lo = 20, hi = kWrap; // (the narrowest width that wraps no more than kWrap does)
+				while (hi - lo > 1)
+				{
+					const float mid = (lo + hi) / 2;
+					(o.richHeight(m_help, mid, size, false) > lines ? lo : hi) = mid;
+				}
+				m_besideWidth = hi;
+			}
+			const float w = m_besideWidth + 2 * kPad, h = o.richHeight(m_help, m_besideWidth, size, false) + 10;
+			const float left = std::min(it.x0, it.x1), right = std::max(it.x0, it.x1);
+			const float x = left - w >= 0 ? left - w : std::min(right, std::max(sw - w, 0.0f));
+			const float y = std::clamp(it.y0, 0.0f, std::max(sh - h, 0.0f));
+			if (!m_tooltip.empty())
+				Theme::draw(o, m_tooltip, x, y, x + w, y + h);
+			else
+			{
+				o.rect(x, y, x + w, y + h, kPanel, 0.93f, 5);
+				o.frame(x, y, x + w, y + h, kEdge, 0.6f, 5, 1);
+			}
+			o.richBlock(m_help, x + kPad, y + 5, m_besideWidth, size, false, kText);
+		}
+		else if (!m_help.empty())
 		{
 			// A help taller than the room it grows into gets wider, then is kept on the screen.
 			const float room = std::max(m_helpDown ? sh - m_helpY : m_helpY, 100.0f);

@@ -108,5 +108,7 @@ namespace oc4::render
 		std::wstring m_help;
 		float m_helpX = 0, m_helpY = 0, m_helpWidth = 350;
 		bool m_helpRight = true, m_helpDown = false;
+		std::wstring m_besideFor; // (the help m_besideWidth was measured for)
+		float m_besideWidth = 0;
 	};
 }
