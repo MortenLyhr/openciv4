@@ -795,9 +795,9 @@ namespace oc4::host
 				piece.model = whole(*goal);
 				piece.x = to.x / 12;
 				piece.y = to.y / 12;
-				// (not turned by its fTwist: the original's forts stand square to the plot, in
-				// every era; fTwist turns the lots of a layout, and these have none)
-				piece.yaw = (to.rotate + turnOf(*goal) + goal->rotate) * kDegrees;
+				// (a goal with an fTwist, the forts: square to the plot, the long side east-west,
+				// as the original draws them in every era; turning by fTwist made a diamond)
+				piece.yaw = (to.rotate + turnOf(*goal) + goal->rotate + (goal->scalar("fTwist").empty() ? 0.0f : 90.0f)) * kDegrees;
 				piece.cut = centerCut(*goal);
 				return;
 			}
