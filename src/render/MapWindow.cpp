@@ -1871,7 +1871,7 @@ namespace oc4::render
 		// 1600 x 900, backlog #47): white dots on the ground from the units to the plot, sliding the
 		// way they go; at each turn's end a ring laid on the ground, turning, with the number of
 		// turns over it and an arrow along the way on. The last ring red for an attack; a red ring
-		// alone where they cannot go; green rings without numbers for a worker's road (Route To).
+		// alone where they cannot go; a green ring without a number at the end of a worker's road (Route To).
 		void drawPath()
 		{
 			if ((!pathing && !goingTo && !padShowsPath()) || path.points.empty())
@@ -1960,7 +1960,8 @@ namespace oc4::render
 			for (size_t i = 1; i < at.size(); ++i)
 			{
 				const bool last = i + 1 == at.size();
-				if (!last && path.points[i + 1].turn == path.points[i].turn)
+				// (Route To: the ring at its end alone)
+				if (!last && (path.route || path.points[i + 1].turn == path.points[i].turn))
 					continue;
 				const Color tint = path.route ? green : last && path.attack ? red : white;
 				const auto& c = at[i];
