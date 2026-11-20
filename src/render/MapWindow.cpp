@@ -1782,9 +1782,10 @@ namespace oc4::render
 					continue;
 				// The original's plaque (measured in its pictures at 1600x900): the ground seen through
 				// it ~40% darker, a black rim (2 px, the top's lighter), the caption in white, and a
-				// black pointer under its middle (16 px wide, 17 tall) whose tip is on the plot.
+				// black pointer under its middle (16 px wide, 17 tall) whose tip is on the plot. The
+				// caption is in the theme's size 3 bold (Sylfaen 16; its width matches the original's).
 				const std::wstring text = widen(s.caption);
-				constexpr float kHeight = 21, kPad = 10, kTipW = 16, kTipH = 17, kSize = 14;
+				constexpr float kHeight = 21, kPad = 10, kTipW = 16, kTipH = 17, kSize = 16;
 				const float w = overlay->width(text, kSize, true) + 2 * kPad;
 				const float x0 = std::round(sx - w / 2), x1 = x0 + std::round(w), y1 = std::round(sy - kTipH), y0 = y1 - kHeight;
 				overlay->rect(x0, y0, x1, y1, { 0, 0, 0 }, 0.38f);
