@@ -2954,10 +2954,10 @@ def diploShow():
 	_diplo['answers'] = answers
 
 	# The sides: what each one has (its tradeable items), what each offers; as tall as the frame.
-	# Only while they trade (the script's startTrade / showAllTrade, until its endTrade) or an
-	# offer is on the table (the AI's deal): a greeting, a first contact, the talk's menu show
-	# the leader alone, as in the original.
-	if trading or not (oc4host.diplo_our_empty() and oc4host.diplo_their_empty()):
+	# Only while they trade (an AI's proposal, the script's startTrade / showAllTrade, until its
+	# endTrade): a greeting, a first contact, the talk's menu show the leader alone, as in the
+	# original.
+	if trading:
 		SW = 254
 		lx, rx = cx - 9 - SW, cx + CW + 8
 		top, bottom, split = fy(_FRAME_TOP), fy(_FRAME_BOTTOM), fy(_FRAME_SPEECH[0])
