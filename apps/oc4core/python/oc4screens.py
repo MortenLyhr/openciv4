@@ -1433,7 +1433,24 @@ def version():
 _LIST_ROW = 20   # a step of the wheel in what scrolls by pixels
 _DROP_ROW = 22   # a row of a pull down's open list
 _heights = {}    # (text, width, font) -> how high it is
-_tableRows = {}  # a table style -> (least row height, room above, room below a cell's content), the theme's
+_tableRows = {}  # a table style -> (least row height, room above, room below a cell's content, header height), the theme's
+
+
+def _tableRow(style):
+	row = _tableRows.get(style)
+	if row is None:
+		try:
+			row = tuple(oc4host.ui_table_row(style))
+		except Exception:
+			row = (24, 2, 2, 22)
+		_tableRows[style] = row
+	return row
+
+
+def _headerHeight(style, rowHeight):
+	"""A table's header row: the theme's Size_Header (22), a row's height if the theme has none."""
+	row = _tableRow(style)
+	return int(row[3]) if len(row) > 3 and row[3] > 0 else rowHeight
 
 
 def _rowHeight(style, size, least=0):
@@ -1441,13 +1458,7 @@ def _rowHeight(style, size, least=0):
 	taller for a line of its text (font size: a table's 2, a list box's 3) and the room the style
 	leaves above and below it (Size_CellContentMargin: BUG's Table_StandardCiv_Style 1 and 2, its
 	military advisor's list 25 high), or for its pictures."""
-	row = _tableRows.get(style)
-	if row is None:
-		try:
-			row = tuple(oc4host.ui_table_row(style))
-		except Exception:
-			row = (24, 2, 2)
-		_tableRows[style] = row
+	row = _tableRow(style)
 	line = _textHeight(u'<font=%d>Ag</font>' % size, 4096)
 	return int(max(row[0], least, line + row[1] + row[2]))
 
@@ -1620,16 +1631,17 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 		rowHeight = _rowHeight(style, 2, w.iconh if pictures else 0)
 		# (its rows scroll under its headers, in its box)
 		box = _clipTo(clip, (x, y, x + width, y + height)) if height else clip
-		_tableInner(base, x, y, width, height or (len(w.rows) + (1 if w.headers else 0)) * rowHeight, box, style, w, out)
+		headerHeight = _headerHeight(style, rowHeight) if w.headers else 0
+		_tableInner(base, x, y, width, height or len(w.rows) * rowHeight + headerHeight, box, style, w, out)
 		top = y
 		if w.headers:
 			cx = x
 			for ci, c in enumerate(w.columns):
 				# (a table that sorts: each header a part of its own, -100 - column, that a click sorts by)
-				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + rowHeight, box, w.style, c[0], '', '', 2, _FONT_RIGHT if c[2] else _FONT_LEFT,
+				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + headerHeight, box, style, c[0], '', '', 2, _FONT_RIGHT if c[2] else _FONT_LEFT,
 					False, True, 0, None, -1, -1, -1, False, w.z, w.seq))
 				cx += c[1]
-			top += rowHeight
+			top += headerHeight
 		body = _clipTo(box, (x, top, x + width, y + height)) if height else box
 		w.extent = len(w.rows) * rowHeight
 		_scrolls(w, x, top, x + width, y + height if height else top + w.extent, s.id, rowHeight, out)

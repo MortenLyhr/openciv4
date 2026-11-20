@@ -2633,11 +2633,11 @@ namespace oc4::render
 	{
 		return int(std::ceil(m->overlay->richHeight(widen(markup), float(std::max(20, width)), m->ui.textSize(font), font == 0 || font == 4)));
 	}
-	std::array<float, 3> MapWindow::tableRow(const std::string& style) const
+	std::array<float, 4> MapWindow::tableRow(const std::string& style) const
 	{
 		if (const Theme::Table* t = m->theme.loaded() ? m->theme.table(style) : nullptr)
-			return { t->cellHeight, t->content[1], t->content[3] };
-		return { 24, 2, 2 };
+			return { t->cellHeight, t->content[1], t->content[3], t->headerHeight };
+		return { 24, 2, 2, 22 };
 	}
 	std::pair<int, int> MapWindow::mousePosition() const { return { m->mouseX, m->mouseY }; }
 	std::string MapWindow::cameraText() const

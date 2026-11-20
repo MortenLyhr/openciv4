@@ -127,7 +127,7 @@ namespace oc4::host
 		std::function<int(const std::string&, int)> g_textWidth; // how wide a text is in the window
 		render::MapWindow::UiDisplay g_display; // the window's, for the scale's choices
 		std::function<int(const std::string&, int, int)> g_textHeight; // how high it is, wrapped at a width
-		std::function<std::array<float, 3>(const std::string&)> g_tableRow; // a table style's row: least height, room above and below
+		std::function<std::array<float, 4>(const std::string&)> g_tableRow; // a table style's row: least height, room above and below; its headers' height
 
 		// (before the window is up: its markup left out, a symbol about two letters wide)
 		int estimatedWidth(const std::wstring& text)
@@ -532,10 +532,10 @@ namespace oc4::host
 			return g_textHeight ? g_textHeight(gameMarkup(toWide(text).c_str()), width, font) : (int(toWide(text).size()) * 7 / std::max(1, width) + 1) * 16;
 		});
 
-		// a table style's row, as the theme has it: (least height, room above, room below its content)
+		// a table style's row, as the theme has it: (least height, room above, room below its content, its headers' height)
 		host.def("ui_table_row", [](const std::string& style) {
-			const std::array<float, 3> r = g_tableRow ? g_tableRow(style) : std::array<float, 3>{ 24, 2, 2 };
-			return py::make_tuple(r[0], r[1], r[2]);
+			const std::array<float, 4> r = g_tableRow ? g_tableRow(style) : std::array<float, 4>{ 24, 2, 2, 22 };
+			return py::make_tuple(r[0], r[1], r[2], r[3]);
 		});
 
 		// the plot list (the main interface's row size for the DLL's clicks on it)
@@ -713,7 +713,7 @@ if _walls:
 
 	void Screens::setTextWidth(std::function<int(const std::string&, int)> width) { g_textWidth = std::move(width); }
 	void Screens::setTextHeight(std::function<int(const std::string&, int, int)> height) { g_textHeight = std::move(height); }
-	void Screens::setTableRow(std::function<std::array<float, 3>(const std::string&)> row) { g_tableRow = std::move(row); }
+	void Screens::setTableRow(std::function<std::array<float, 4>(const std::string&)> row) { g_tableRow = std::move(row); }
 
 	bool Screens::start(int width, int height)
 	{

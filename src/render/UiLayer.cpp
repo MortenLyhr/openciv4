@@ -27,6 +27,8 @@ namespace oc4::render
 		}
 
 		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.93f, 0.93f, 0.9f }, kHot{ 1, 0.9f, 0.6f };
+		// (a table header's text: the original's, dark brown on the parchment)
+		constexpr Color kHeaderText{ 65 / 255.f, 40 / 255.f, 38 / 255.f };
 
 		// The built-in panel styles that draw nothing (PANEL_STYLE_EMPTY, PANEL_STYLE_EXTERNAL).
 		bool emptyPanel(const std::string& style)
@@ -541,10 +543,24 @@ namespace oc4::render
 				break;
 			}
 			case Kind::Header:
-				o.rect(x0, y0, x1, y1, { 0.1f, 0.11f, 0.15f }, 0.9f, 0);
-				o.richText(widen(it.text), (it.flags & 2) ? x1 - 4 : x0 + 4, y0 + 2, m_sizes[1], true, { 1, 0.9f, 0.65f }, 1,
+			{
+				// A table's column header: the theme's header button (Civ4Theme_Table.thm's
+				// Header_Table_HButtonStyle: the parchment of bg_header.tga, header_h.tga's edges
+				// between the columns), its text in the button's colours, in the middle of its height.
+				const Theme::Table* t = m_theme.loaded() ? m_theme.table(it.style) : nullptr;
+				const Theme::Button* b = t ? t->header : nullptr;
+				const std::wstring text = widen(it.text);
+				const size_t state = hot ? size_t(Theme::State::Rollover) : size_t(Theme::State::Default);
+				if (b && !b->skin[state].empty())
+					Theme::draw(o, b->skin[state], x0, y0, x1, y1, alpha);
+				else
+					o.rect(x0, y0, x1, y1, { 0.1f, 0.11f, 0.15f }, 0.9f, 0);
+				const Color colour = b && b->coloured ? b->text[state] : b ? kHeaderText : Color{ 1, 0.9f, 0.65f };
+				const float ty = y0 + (h - o.richHeight(text, 4096, m_sizes[2], false)) / 2;
+				o.richText(text, (it.flags & 2) ? x1 - 4 : x0 + 4, ty, m_sizes[2], false, colour, alpha,
 					(it.flags & 2) ? Overlay::Align::Right : Overlay::Align::Left);
 				break;
+			}
 			case Kind::Cell:
 			{
 				if (it.style == "__option")

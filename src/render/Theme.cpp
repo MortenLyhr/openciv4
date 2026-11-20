@@ -950,6 +950,15 @@ namespace oc4::render
 					t->row[alt][i] = m->skin(s, m->property(s, std::string("GFC_CtrlTheme_Bitmap_Control_Table_Skin_Row_") + (alt ? "Alt_" : "") + kRow[i]));
 			if (const Value* v = m->resolve(s, m->property(s, "GFC_Control_Table_Size_CellHeight")); v && v->kind == Value::Kind::Number && v->number > 0)
 				t->cellHeight = float(v->number);
+			if (const Value* v = m->resolve(s, m->property(s, "GFC_Control_Table_Size_Header"));
+				v && v->kind == Value::Kind::Call && v->args.size() >= 2 && v->args[1].kind == Value::Kind::Number && v->args[1].number > 0)
+				t->headerHeight = float(v->args[1].number);
+			if (const Value* h = m->resolve(s, m->property(s, "GFC_Control_Table_StyleId_HHeader"));
+				h && h->kind == Value::Kind::Call && h->text == "GPropertyId" && !h->args.empty())
+				if (const Style* hs = m->findStyle(h->args[0].text))
+					if (const Value* b = m->resolve(hs, m->property(hs, "GFC_Control_Header_StyleId_HButton"));
+						b && b->kind == Value::Kind::Call && b->text == "GPropertyId" && !b->args.empty())
+						t->header = button(b->args[0].text);
 			m->margins(s, m->property(s, "GFC_Control_Table_Size_CellContentMargin"), t->content);
 			// (the standard table's: table_innerTB.tga in the theme's BG; a GFlags(...) NoInnerFill none)
 			const Value* noFill = m->resolve(s, m->property(s, "GFC_Control_Table_Flag_NoInnerFill"));
