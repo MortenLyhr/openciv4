@@ -528,7 +528,7 @@ class CyGTabCtrl(object):
 	def attachHBox(self, parent, name):
 		self._node('hbox', parent, name)
 	def attachPanel(self, parent, name): self._node('panel', parent, name)
-	def attachScrollPanel(self, parent, name): self._node('vbox', parent, name)
+	def attachScrollPanel(self, parent, name): self._node('scroll', parent, name)
 	def attachSpacer(self, parent): self._node('spacer', parent, '')
 	def attachHSeparator(self, parent, name): self._node('hsep', parent, name)
 	def attachVSeparator(self, parent, name): self._node('vsep', parent, name)
@@ -648,10 +648,69 @@ def _screen():
 
 # ---------------------------------------------------------------- laying it out
 
-_ROW = {'label': 20, 'checkbox': 22, 'radio': 22, 'dropdown': 26, 'button': 28, 'edit': 26, 'hslider': 18, 'hsep': 10,
+# The boxes laid out as the original's GFC does it, measured on its options screen: a control's
+# default height is 31 (the theme's GFC_Control_Size Default, GSize(64, 31)), so a check box's row is
+# 28 and the gap 3; a box's children are as wide as they need, and what is left goes to those that
+# expand (LAYOUT_SIZE_HEXPANDING) or, in a column, to its spacers (the Language row at the panel's
+# foot); a row with LAYOUT_HCENTER is centred (Restore Defaults and Exit).
+_ROW = {'label': 28, 'checkbox': 28, 'radio': 28, 'dropdown': 28, 'button': 31, 'edit': 26, 'hslider': 18, 'hsep': 10,
 	'spacer': 8, 'image': 4, 'vsep': 0}
 _GAP = 3
 _PAD = 8
+_SCROLL_PAD = 4 # (a scroll panel's inside, left and right)
+_FONT = u'<font=3>' # (the controls' text: the theme's SF_CtrlTheme_Civ4_Control_Font_Size3_Normal, 16 px)
+_BOX = 20 # (a check box's picture; its mark is 14 across inside it)
+_BOX_TEXT = 24 # (from the box's left to its text's)
+
+
+def _width(text):
+	try:
+		return oc4screens._textWidth(_FONT + text + u'</font>', _cpe.FontTypes.GAME_FONT)
+	except Exception:
+		return 8 * len(text)
+
+
+def _pad(n):
+	"""A box's inside: a panel's 8 all round, a scroll panel's 4 at the sides."""
+	if n.kind == 'panel':
+		return _PAD, _PAD
+	if n.kind == 'scroll':
+		return _SCROLL_PAD, 0
+	return 0, 0
+
+
+def _hgrow(n):
+	return 'LAYOUT_SIZE_HEXPANDING' in n.flags or 'LAYOUT_SIZE_HPREFERREDEXPANDING' in n.flags
+
+
+def _vgrow(n):
+	return 'LAYOUT_SIZE_VEXPANDING' in n.flags or 'LAYOUT_SIZE_VPREFERREDEXPANDING' in n.flags
+
+
+def _natural(n):
+	"""How wide a control is of itself (None: as wide as it is given)."""
+	k = n.kind
+	if k == 'label':
+		return _width(n.text) + 8
+	if k in ('checkbox', 'radio'):
+		return _BOX_TEXT + _width(n.text) + 8
+	if k == 'button':
+		return max(59, _width(n.text) + 20)
+	if k == 'dropdown':
+		return max([_width(i) for i in n.items] or [40]) + 36
+	if k in ('spacer', 'vsep'):
+		return 12
+	if k in ('vbox', 'scroll', 'panel'):
+		widths = [_natural(c) for c in n.children]
+		if None in widths:
+			return None
+		return max(widths or [0]) + 2 * _pad(n)[0]
+	if k == 'hbox':
+		widths = [_natural(c) for c in n.children]
+		if None in widths:
+			return None
+		return sum(widths) + _GAP * max(0, len(widths) - 1)
+	return None
 
 
 def _height(n, w):
@@ -661,34 +720,40 @@ def _height(n, w):
 	if k == 'vslider':
 		return 4 * (n.maximum - n.minimum + 1) + 4
 	if k == 'hbox':
-		widths = _shares(n, w)
+		start, widths = _shares(n, w)
 		return max([_height(c, cw) for c, cw in zip(n.children, widths)] or [0])
-	pad = _PAD if k == 'panel' else 0
-	inner = w - 2 * pad
+	if k == 'panel' and not n.children:
+		return 0 # (an empty one: the resolution's screen picture, none here)
+	px, py = _pad(n)
+	inner = w - 2 * px
 	h = sum(_height(c, inner) for c in n.children) + _GAP * max(0, len(n.children) - 1)
-	return h + 2 * pad
-
-
-def _natural(n):
-	"""A label's own width (CF_LABEL_DEFAULTSIZE, as BUG asks for its pull downs' titles)."""
-	try:
-		return oc4screens._textWidth(u'<font=2>' + n.text + u'</font>', _cpe.FontTypes.GAME_FONT) + 8
-	except Exception:
-		return 8 * len(n.text) + 8
+	return h + 2 * py
 
 
 def _shares(n, w):
-	"""The widths of an horizontal box's children: separators and spacers narrow, labels of their
+	"""Where an horizontal box's children start (from its left) and their widths: each as wide
+	as it needs, the rest shared by those that expand, else the row centred (LAYOUT_HCENTER) or
+	left as it is; when one has no width of its own, separators and spacers narrow, labels of their
 	default size (CF_LABEL_DEFAULTSIZE) as wide as their text (up to half the box), the rest alike."""
+	gaps = _GAP * max(0, len(n.children) - 1)
+	natural = [_natural(c) for c in n.children]
+	if n.children and None not in natural:
+		extra = max(0, w - sum(natural) - gaps)
+		grow = [i for i, c in enumerate(n.children) if _hgrow(c)]
+		if grow:
+			for i in grow:
+				natural[i] += extra / len(grow)
+			return 0, natural
+		return (extra / 2 if 'LAYOUT_HCENTER' in n.flags else 0), natural
 	fixed = dict((c.id, 12) for c in n.children if c.kind in ('vsep', 'spacer'))
 	if len(n.children) > 1:
 		for c in n.children:
 			if c.kind == 'label' and 'CF_LABEL_DEFAULTSIZE' in c.flags:
-				fixed[c.id] = min(_natural(c), w / 2)
+				fixed[c.id] = min(_width(c.text) + 8, w / 2)
 	others = [c for c in n.children if c.id not in fixed]
-	rest = max(0, w - sum(fixed.values()) - _GAP * max(0, len(n.children) - 1))
+	rest = max(0, w - sum(fixed.values()) - gaps)
 	each = rest / max(1, len(others))
-	return [fixed.get(c.id, each) for c in n.children]
+	return 0, [fixed.get(c.id, each) for c in n.children]
 
 
 def _place(screen, n, x, y, w, h):
@@ -697,37 +762,49 @@ def _place(screen, n, x, y, w, h):
 	general = _cpe.WidgetTypes.WIDGET_GENERAL
 	font = _cpe.FontTypes.GAME_FONT
 	if k == 'hbox':
-		cx = x
-		for c, cw in zip(n.children, _shares(n, w)):
-			_place(screen, c, cx, y, cw, _height(c, cw))
+		start, widths = _shares(n, w)
+		cx = x + start
+		for c, cw in zip(n.children, widths):
+			_place(screen, c, cx, y, cw, h if _vgrow(c) else _height(c, cw))
 			cx += cw + _GAP
 		return
-	if k in ('vbox', 'form', 'panel'):
-		pad = _PAD if k == 'panel' else 0
-		if k == 'panel':
+	if k in ('vbox', 'form', 'panel', 'scroll'):
+		px, py = _pad(n)
+		if k == 'panel' and h > 0:
 			screen.addPanel(name, u'', u'', True, False, x, y, w, h, _cpe.PanelStyles.PANEL_STYLE_IN)
-		cy = y + pad
-		for c in n.children:
-			ch = _height(c, w - 2 * pad)
-			_place(screen, c, x + pad, cy, w - 2 * pad, ch)
+			if n.style:
+				screen.setStyle(name, n.style)
+		inner = w - 2 * px
+		heights = [_height(c, inner) for c in n.children]
+		# (the height left over: to the children that expand downwards, else to the spacers; a
+		# tab's form fills the window)
+		left = h - 2 * py - sum(heights) - _GAP * max(0, len(heights) - 1)
+		if left > 0 and n.children:
+			grow = [i for i, c in enumerate(n.children) if _vgrow(c)] or \
+				[i for i, c in enumerate(n.children) if c.kind == 'spacer'] or ([0] if k == 'form' else [])
+			for i in grow:
+				heights[i] += left / len(grow)
+		cy = y + py
+		for c, ch in zip(n.children, heights):
+			_place(screen, c, x + px, cy, inner, ch)
 			cy += ch + _GAP
 		return
 	if k == 'label':
-		screen.setLabel(name, 'Background', u'<font=2>' + n.text + u'</font>', 1 << 0, x, y + 2, 0, font, general, -1, -1)
+		screen.setLabel(name, 'Background', _FONT + n.text + u'</font>', 1 << 0, x, y + 4, 0, font, general, -1, -1)
 	elif k in ('checkbox', 'radio'):
 		# (the theme's check box, as the custom game screen's: GFC_Control_StandardCheckBox_Style)
-		screen.addCheckBoxGFC(name, '', '', x, y, 20, 20, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
+		screen.addCheckBoxGFC(name, '', '', x, y + 4, _BOX, _BOX, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
 		screen.setStyle(name, 'GFC_Control_StandardCheckBox_Style')
 		w_ = screen._s.get(name)
 		if w_ is not None:
 			w_.state = bool(n.value)
-		screen.setText(name + 'L', 'Background', u'<font=2>' + n.text + u'</font>', 1 << 0, x + 26, y + 2, 0, font, general, -1, -1)
+		screen.setText(name + 'L', 'Background', _FONT + n.text + u'</font>', 1 << 0, x + _BOX_TEXT, y + 4, 0, font, general, -1, -1)
 		if n.tip:
 			w_ = screen._s.get(name)
 			if w_ is not None:
 				w_.help = n.tip
 	elif k == 'button':
-		screen.setButtonGFC(name, n.text, '', x, y, min(w, 220), 26, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
+		screen.setButtonGFC(name, n.text, '', x, y + 4, w, 25, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
 	elif k == 'edit':
 		screen.addEditBoxGFC(name, x, y, min(w, 260), 24, general, -1, -1, font)
 		screen.setEditBoxString(name, n.text)
@@ -735,7 +812,7 @@ def _place(screen, n, x, y, w, h):
 		dw = min(w, 260)
 		if 'LAYOUT_RIGHT' in n.flags:
 			x += w - dw
-		screen.addDropDownBoxGFC(name, x, y, dw, general, -1, -1, font)
+		screen.addDropDownBoxGFC(name, x, y + 1, dw, general, -1, -1, font)
 		for i, item in enumerate(n.items):
 			screen.addPullDownString(name, item, i, i, i == int(n.value))
 	elif k in ('hslider', 'vslider'):
@@ -783,36 +860,38 @@ def relayout():
 	# (the size the script asked for, setSize, kept on the display)
 	w, h = min(ctrl._size[0], RW), min(ctrl._size[1], RH)
 	x0, y0 = (RW - w) / 2, max(0, (RH - h) / 2)
-	screen.addPanel('OptBack', u'', u'', True, False, x0, y0, w, h, _cpe.PanelStyles.PANEL_STYLE_MAIN)
-	screen.setLabel('OptTitle', 'Background', u'<font=3b>' + ctrl._title + u'</font>', 1 << 2, x0 + w / 2, y0 + 10, 0,
+	# (the window as the original's: the theme's standard window under its title bar, the title on
+	# the bar at the left, the tabs under it as wide as their words, then the tab's form)
+	for name, top, height, style in (('OptBack', _TITLE_H, h - _TITLE_H, _WINDOW_INNER), ('OptFrame', _TITLE_H, h - _TITLE_H, _WINDOW_FRAME),
+			('OptTitleBar', 0, _TITLE_H, _WINDOW_TITLE)):
+		screen.addPanel(name, u'', u'', True, False, x0, y0 + top, w, height, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+		screen.setStyle(name, style)
+	screen.setLabel('OptTitle', 'Background', u'<font=3b>' + _DARK + ctrl._title + u'</color></font>', 1 << 0, x0 + 12, y0 + 3, 0,
 		_cpe.FontTypes.TITLE_FONT, _cpe.WidgetTypes.WIDGET_GENERAL, -1, -1)
-	# the tabs: each as wide as its label, in as many rows as they need (BUG's 14 do not fit one),
-	# each row stretched across the window
-	y = _tabRows(screen, ctrl, x0 + 10, y0 + 38, w - 20)
+	y = _tabRows(screen, ctrl, x0 + 14, y0 + _TAB_Y, w - 28)
 	form = ctrl._tabs[min(ctrl._tab, len(ctrl._tabs) - 1)][0]
-	_place(screen, form, x0 + 14, y + 6, w - 28, h - (y + 6 - y0) - 14)
+	_place(screen, form, x0 + 30, y + 17, w - 60, h - (y + 17 - y0) - 30)
 
 
+# The theme's window, title bar and tabs (as oc4wb draws the WorldBuilder's tool window).
+_WINDOW_INNER = '@GFC_Control_DefaultWindow_Style|GFC_CtrlTheme_Bitmap_Control_Window_Skin_Inner_Default'
+_WINDOW_TITLE = '@|SF_CtrlTheme_Civ4_Control_Window_Skin_Standard_TitleBar_Full_Default'
+_WINDOW_FRAME = '@SF_CtrlTheme_Civ4_Control_Window_NoTitleBar_InFrameBorder_Normal_Style|GFC_CtrlTheme_Bitmap_Control_Border_Skin_Full_Default'
+_TAB_SKIN = '@GFC_CtrlTheme_Bitmap_Control_Tab_SkinStyle_Top_Begin_BaseLevel_Single|GFC_CtrlTheme_Bitmap_Control_Tab_Skin_Full_'
+_TAB_BASELINE = '@GFC_CtrlTheme_Bitmap_Control_Tab_SkinStyle_Top_Begin_BaseLevel_Single|GFC_CtrlTheme_Bitmap_Control_Tab_Skin_Baseline_Default'
+_DARK = u'<color=40,28,16>' # (the title's and the tabs' words: the theme's dark brown)
+_TITLE_H = 26
+_TAB_Y = 39
 _TAB_HEIGHT = 28
 
 
 def _tabWidth(label):
-	try:
-		return oc4screens._textWidth(label, _cpe.FontTypes.GAME_FONT) + 24
-	except Exception:
-		return 9 * len(label) + 24
+	return _width(label) + 20
 
 
 def _tabRows(screen, ctrl, x, y, width):
-	"""Lays the tab buttons out in rows; returns where the row under the last one would start."""
-	n = len(ctrl._tabs)
-	tw = width / max(1, n)
-	if all(_tabWidth(label) <= tw - 4 for form, label in ctrl._tabs):
-		# (all fit alike in one row: one row of equal tabs, the game's own options screen)
-		for i, (form, label) in enumerate(ctrl._tabs):
-			screen.setButtonGFC('OptTab%d' % i, label, '', x + i * tw, y, tw - 4, _TAB_HEIGHT, _cpe.WidgetTypes.WIDGET_GENERAL, -1, -1,
-				_cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
-		return y + _TAB_HEIGHT + 4
+	"""Lays the tabs out in rows, each as wide as its word, from the left (BUG's 14 need more than
+	one row); returns where the row under the last one would start."""
 	rows, row, used = [], [], 0
 	for i, (form, label) in enumerate(ctrl._tabs):
 		tw = _tabWidth(label)
@@ -820,19 +899,21 @@ def _tabRows(screen, ctrl, x, y, width):
 			rows.append(row)
 			row, used = [], 0
 		row.append((i, label, tw))
-		used += tw + 4
+		used += tw + 2
 	if row:
 		rows.append(row)
 	for r in rows:
-		natural = sum(tw for i, label, tw in r) + 4 * (len(r) - 1)
-		extra = (width - natural) / max(1, len(r)) if len(rows) == 1 or r is not rows[-1] else 0
 		cx = x
 		for i, label, tw in r:
-			bw = tw + extra
-			screen.setButtonGFC('OptTab%d' % i, label, '', cx, y, bw, _TAB_HEIGHT, _cpe.WidgetTypes.WIDGET_GENERAL, -1, -1,
-				_cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
-			cx += bw + 4
-		y += _TAB_HEIGHT + 4
+			back = 'OptTabBack%d' % i
+			screen.addPanel(back, u'', u'', True, False, cx, y, tw, _TAB_HEIGHT, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+			screen.setStyle(back, _TAB_SKIN + ('Select' if i == ctrl._tab else 'Default'))
+			screen.setText('OptTab%d' % i, 'Background', _FONT + _DARK + label + u'</color></font>', 1 << 2, cx + tw / 2, y + 5, 0,
+				_cpe.FontTypes.GAME_FONT, _cpe.WidgetTypes.WIDGET_GENERAL, -1, -1)
+			cx += tw + 2
+		y += _TAB_HEIGHT
+	screen.addPanel('OptTabBaseline', u'', u'', True, False, x, y - 2, width, 7, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+	screen.setStyle('OptTabBaseline', _TAB_BASELINE)
 	return y
 
 
