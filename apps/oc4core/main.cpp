@@ -1400,7 +1400,8 @@ namespace
 				engine.clear(AREA_BORDER_LAYER_FOUNDING_BORDER, true);
 				bool founds = false;
 				for (int i = 0; head && head->getOwner() == me && i < GC.getNumActionInfos() && !founds; ++i)
-					founds = GC.getActionInfo(i).getMissionType() == MISSION_FOUND && game.canHandleAction(i, nullptr, true);
+					// (where it can found now: none next to a city, as in the original)
+					founds = GC.getActionInfo(i).getMissionType() == MISSION_FOUND && game.canHandleAction(i, nullptr, false);
 				if (founds)
 				{
 					const NiColorA& c = GC.getColorInfo(static_cast<ColorTypes>(GC.getPlayerColorInfo(CvPlayerAI::getPlayerNonInl(me).getPlayerColor()).getColorTypePrimary())).getColor();
