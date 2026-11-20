@@ -1169,14 +1169,16 @@ namespace
 					clicks.push_back(click);
 					script.erase(0, close + 1);
 				}
-				else if (int px = 0, py = 0; script.front() == '<' && script.find('>') != std::string::npos && std::sscanf(script.c_str() + 1, "%d,%d", &px, &py) == 2)
+				else if (int px = 0, py = 0, twice = script.starts_with("*<"); (script.front() == '<' || twice) && script.find('>') != std::string::npos &&
+					std::sscanf(script.c_str() + 1 + twice, "%d,%d", &px, &py) == 2)
 				{
 					// "<x,y>": a left click at that pixel of the window, on what is there (a popup, the
-					// screens, a unit's figure, a plot), as the mouse's.
+					// screens, a unit's figure, a city's bar, a plot), as the mouse's; "*<x,y>" a double click.
 					if (log)
 						if (const auto c = window.clickAt(px, py, false))
-							std::printf("  click at %d,%d: plot %d,%d%s\n", px, py, c->x, c->y, c->onFigure ? " (a unit's figure)" : "");
-					window.mouseClick(px, py);
+							std::printf("  %s at %d,%d: plot %d,%d%s\n", twice ? "double click" : "click", px, py, c->x, c->y,
+								c->onFigure ? " (a unit's figure)" : c->onCityBar ? " (a city's bar)" : "");
+					window.mouseClick(px, py, twice);
 					script.erase(0, script.find('>') + 1);
 				}
 				else if (const size_t mods = script.find_first_not_of("^@+"), end = script.find('}');
@@ -1329,13 +1331,26 @@ namespace
 						ui.setInterfaceMode(INTERFACEMODE_SELECTION);
 					continue;
 				}
-				// A click on one's city: its screen (the units there are in the plot list then); on
-				// one of the figures in it, as anywhere, its unit.
+				// One's city, as the original's: a double click on it or its name bar opens its screen
+				// (the units there are in the plot list then), one click on the bar selects the city
+				// (what it builds in the bottom panel); one click on its plot is any plot's (its
+				// units). On one of the figures in it, as anywhere, its unit. OpenCiv4's option opens
+				// the screen with one click on either.
 				if (!click.right && !click.onFigure && !opt.ownInterface && screens.active())
 					if (CvCity* city = plot->getPlotCity(); city && city->getOwner() == me)
 					{
-						ui.selectCity(city, true);
-						continue;
+						if (click.twice || utility.cityOneClick())
+						{
+							ui.selectCity(city, true);
+							continue;
+						}
+						if (click.onCityBar)
+						{
+							ui.clearSelectionList();
+							ui.clearSelectedCities();
+							ui.addSelectedCity(city, false);
+							continue;
+						}
 					}
 				if (!click.right)
 				{

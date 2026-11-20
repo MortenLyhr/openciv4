@@ -43,6 +43,13 @@ class Host(Anything):
 		self.path = path
 		self.states = [0] * 64
 		self.player = {} # (the active player's options, as sendPlayerOption sets them)
+		self.cityOneClick = False
+
+	def set_city_one_click(self, on):
+		self.cityOneClick = bool(on)
+
+	def city_one_click(self):
+		return self.cityOneClick
 
 	def profile_path(self):
 		return self.path
@@ -142,13 +149,24 @@ def main():
 		check(profile.getPlayerOption(2) and not profile.getPlayerOption(6), "no profile: the XML's defaults")
 		check(host.states[:NUM] == [0] * NUM, "no profile: the host has none chosen")
 
-		# The screen's tabs: the game's four, then OpenCiv4's with its three options.
+		# The screen's tabs: the game's four, then OpenCiv4's with its four options.
 		ctrl = optionsScreen(options)
 		check([label for form, label in ctrl._tabs] == ['Game', 'Graphics', 'Audio', 'Other', 'OpenCiv4'], "tabs: %s" % [l for f, l in ctrl._tabs])
 		oc4 = [n.name for n in ctrl._nodes.values() if n.kind == 'checkbox' and n.name.startswith('Oc4')]
-		check(sorted(oc4) == sorted([options.WASD_PAN_CHECKBOX, options.AUTO_END_TURN_CHECKBOX, options.EDGE_SCROLL_CHECKBOX]), "OpenCiv4's options: %s" % oc4)
+		check(sorted(oc4) == sorted([options.WASD_PAN_CHECKBOX, options.AUTO_END_TURN_CHECKBOX, options.EDGE_SCROLL_CHECKBOX, options.CITY_ONE_CLICK_CHECKBOX]), "OpenCiv4's options: %s" % oc4)
 		game = [n.name for n in ctrl._byName['GamePanelCenter'].children]
 		check(game == ['GameOptionCheckBox_2', 'GameOptionCheckBox_6', 'LangHBox'], "the Game tab has only the game's: %s" % game)
+
+		# Opening a city with one click: off (the original's double click), kept when chosen.
+		check(ctrl._byName[options.CITY_ONE_CLICK_CHECKBOX].value is False and not host.cityOneClick, "one click on a city: off by default")
+		click(options, ctrl, options.CITY_ONE_CLICK_CHECKBOX)
+		check(host.cityOneClick and 'cityOneClick=1' in profileLines(folder), "one click on a city: on, in profile.ini")
+		host, options = start(folder)
+		check(host.cityOneClick, "one click on a city: the profile's after a restart")
+		click(options, optionsScreen(options), options.CITY_ONE_CLICK_CHECKBOX)
+		check(not host.cityOneClick and 'cityOneClick=0' in profileLines(folder), "one click on a city: off again")
+		ctrl = optionsScreen(options)
+		profile = options._UserProfile()
 
 		# Wait at End of Turn off, Quick Moves on: sent to the player and kept at once.
 		click(options, ctrl, 'GameOptionCheckBox_2')

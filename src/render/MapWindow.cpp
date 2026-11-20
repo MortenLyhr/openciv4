@@ -1233,11 +1233,13 @@ namespace oc4::render
 				mouseX = x;
 				mouseY = y;
 				// (a city's bar is over the figures: a click on it is on its city)
-				const auto figure = view->cityBarAt(float(x), float(y)) ? std::nullopt : figureUnder(x, y);
+				const bool onBar = view->cityBarAt(float(x), float(y)).has_value();
+				const auto figure = onBar ? std::nullopt : figureUnder(x, y);
 				if (const auto p = figure ? *figure : hoveredPlot(); p.first >= 0)
 				{
 					clicks.push_back({ p.first, p.second, !downLeft, mods.shift, mods.ctrl, mods.alt, figure.has_value() });
 					clicks.back().twice = buttonClicks >= 2;
+					clicks.back().onCityBar = onBar;
 				}
 			}
 			if (down)
@@ -2542,23 +2544,28 @@ namespace oc4::render
 		SDL_SetCursor(it->second ? it->second : SDL_GetDefaultCursor());
 	}
 
-	void MapWindow::mouseClick(int x, int y)
+	void MapWindow::mouseClick(int x, int y, bool twice)
 	{
 		m->onMouseMove(x, y);
-		m->onButton(true, true, x, y);
-		m->onButton(false, false, x, y);
+		for (int n = 1; n <= (twice ? 2 : 1); ++n)
+		{
+			m->buttonClicks = n;
+			m->onButton(true, true, x, y);
+			m->onButton(false, false, x, y);
+		}
+		m->buttonClicks = 1;
 	}
 
 	std::optional<MapWindow::PlotClick> MapWindow::clickAt(int x, int y, bool right) const
 	{
-		// (a city's bar stands for the city, as the original's: its screen opens)
+		// (a city's bar stands for the city, as the original's)
 		const auto bar = m->view->cityBarAt(float(x), float(y));
 		const auto figure = bar ? std::nullopt : m->figureUnder(x, y);
 		const auto p = bar ? *bar : figure ? *figure : m->plotUnder(x, y);
 		if (p.first < 0)
 			return std::nullopt;
 		PlotClick c;
-		c.x = p.first, c.y = p.second, c.right = right, c.onFigure = figure.has_value();
+		c.x = p.first, c.y = p.second, c.right = right, c.onFigure = figure.has_value(), c.onCityBar = bar.has_value();
 		return c;
 	}
 	void MapWindow::setMessages(std::vector<std::pair<std::string, float>> messages)

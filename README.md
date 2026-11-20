@@ -208,11 +208,16 @@ edge" on the options' OpenCiv4 tab turns it off (on by default). It is kept in p
 `edgeScroll`, and `--no-edge-scroll` turns it off for one run (scripted runs with `--view-seconds`
 never edge scroll). The rule is `src/render/EdgeScroll.h`, tested by `tests/edge_scroll_test.cpp`.
 
+Your cities on the map open as in the original: a double click on the city or its name bar opens
+its screen, one click on the bar selects the city (what it builds in the bottom panel), and one click
+on its plot is any plot's (the units there). "Open a city with a single click" on the options'
+OpenCiv4 tab opens the screen with one click instead (off by default; `cityOneClick` in profile.ini).
+
 The player options (Options → Game: Wait at End of Turn, Quick Combat, …) are kept in the player's
 profile, as the original keeps them in its own (`Profiles\<name>.pfl`): a choice is written to
 profile.ini at once (`player.N=`), and every game, new or loaded, starts with the profile's, which
 the game core sends to the active player (a save's own options are overwritten, as in the original).
-OpenCiv4's own options (W A S D, idle turns, edge scrolling) are on a tab of their own, OpenCiv4,
+OpenCiv4's own options (W A S D, idle turns, edge scrolling, one click on a city) are on a tab of their own, OpenCiv4,
 after the original's four. Tested by `tests/player_options_test.py`.
 
 The globe view's colour layers (Culture, Trade, Religion) are drawn on the globe itself.
