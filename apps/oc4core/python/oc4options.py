@@ -131,10 +131,10 @@ def _applyGraphics():
 		pass
 
 
-# W A S D panning (openciv4's own option, no game's): its check box on the options' OpenCiv4 tab;
-# while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
+# W A S D panning (openciv4's own option, no game's): its check box on the options' Game tab,
+# above the language; while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
 WASD_PAN_CHECKBOX = 'Oc4WasdPanCheckBox'
-OC4_FORM = 'Oc4Form' # (the options' OpenCiv4 tab)
+OC4_FORM = 'Oc4Form' # (the options' OpenCiv4 tab: openciv4's own options are there now, not on the Game tab)
 
 
 def setWasdPan(on):
