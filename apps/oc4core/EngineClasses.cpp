@@ -5,6 +5,7 @@
 #include "Utility.h"
 
 #include "CvGameCoreDLL.h"
+#include "CvEventReporter.h"
 #include "CvFractal.h"
 #include "CvRandom.h"
 
@@ -102,7 +103,23 @@ namespace oc4::host
 		host.def("get_object_text", [&utility](py::handle key, int form) {
 			return fromWide(std::wstring(utility.getObjectText(CvWString(toWide(key)), static_cast<uint>(form), false)));
 		});
-		host.def("unimplemented", [](const std::string& what) { unimplemented(what.c_str()); });
+		// One of a player's game statistics (CyStatistics in oc4engine.py): the records the game core
+		// keeps from its events and saves with the game, read through its exported report.
+		host.def("player_statistic", [](int player, const std::string& key) -> py::object {
+			if (player < 0 || player >= MAX_PLAYERS)
+				return py::none();
+			std::vector<CvStatBase*> stats;
+			CvEventReporter::getInstance().getPlayerStatistics(static_cast<PlayerTypes>(player), stats);
+			py::object value = py::none();
+			for (CvStatBase* stat : stats)
+			{
+				if (value.is_none() && stat->m_strKey == key.c_str())
+					value = py::int_(static_cast<CvStatInt*>(stat)->m_iValue); // a player's statistics are all CvStatInt
+				delete stat;
+			}
+			return value;
+		});
+		host.def("unimplemented",[](const std::string& what) { unimplemented(what.c_str()); });
 		host.def("log", [&utility](const std::string& file, py::handle text) {
 			if (PyUnicode_Check(text.ptr()))
 			{
