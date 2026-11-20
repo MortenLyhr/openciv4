@@ -78,12 +78,14 @@ struct PSIn
 	float4 pos : SV_Position;
 	float3 world : TEXCOORD0;
 	float3 nrm : NORMAL;
+	float3 drawn : TEXCOORD1; // where it is drawn (the copy, bent round the globe): the distance fog's
 };
 
 PSIn VSTerrain(VSIn i)
 {
 	PSIn o;
-	o.pos = mul(float4(globeBend(i.pos + worldOffset), 1), viewProj);
+	o.drawn = globeBend(i.pos + worldOffset);
+	o.pos = mul(float4(o.drawn, 1), viewProj);
 	o.world = i.pos;
 	o.nrm = i.nrm;
 	return o;
@@ -288,7 +290,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		float2 k = lerp(lerp(known[3], known[2], w.x), lerp(known[0], known[1], w.x), w.y);
 		color *= k.x * lerp(0.55, 1, k.y);
 	}
-	return float4(color, 1);
+	return float4(color * distanceFog(i.drawn), 1);
 }
 )hlsl";
 
@@ -350,12 +352,14 @@ struct WaterOut
 	float2 plot : TEXCOORD2;
 	float depth : TEXCOORD3;
 	float bed : TEXCOORD4;
+	float3 drawn : TEXCOORD5; // (the distance fog's)
 };
 
 WaterOut VSWater(WaterIn i)
 {
 	WaterOut o;
-	o.pos = mul(float4(globeBend(i.pos + waterOffset), 1), viewProj);
+	o.drawn = globeBend(i.pos + waterOffset);
+	o.pos = mul(float4(o.drawn, 1), viewProj);
 	o.uv1 = float2(dot(i.pos.xy, waterUv1.xy), dot(i.pos.xy, waterUv1.zw)) + waterScroll.xy;
 	o.uv2 = float2(dot(i.pos.xy, waterUv2.xy), dot(i.pos.xy, waterUv2.zw)) + waterScroll.zw;
 	o.plot = i.pos.xy / waterPlotSize;
@@ -425,7 +429,8 @@ float4 PSWater(WaterOut i) : SV_Target
 			lerp(waterKnown(cell + int2(0, 1)), waterKnown(cell + int2(1, 1)), w.x), w.y);
 		color *= k.x * lerp(0.55, 1, k.y);
 	}
-	return float4(color, waterAlpha * coast);
+	// (D3D fogs a pixel before blending it: the water darkens over a floor darkened as much)
+	return float4(color * distanceFog(i.drawn), waterAlpha * coast);
 }
 )hlsl";
 

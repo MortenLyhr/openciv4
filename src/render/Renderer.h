@@ -118,7 +118,7 @@ cbuffer Frame : register(b0, UNIFORMS)
 	float3 lightDir;     float pad0;
 	float3 lightColor;   float pad1;
 	float3 ambientLight; float pad2;
-	float3 eyePos;       float pad3;
+	float3 eyePos;       float fogDistance; // the distance fog: the camera's distance from what it looks at (0: none)
 	float4 groundGrid;   // terrain heights: 1 / cell size, columns, rows, wrap width (0: none)
 	float4 fogGrid;      // the fog of war: plot size (0: none), columns, rows, wrap (1 X, 2 Y)
 	float4 globe;        // the globe view: the point it is centred on (xy), its radius (z, 0: flat), the map's wrap width (w)
@@ -138,6 +138,17 @@ float3 globeBend(float3 p)
 	const float2 dir = len > 1e-4 ? d / len : float2(0, 0);
 	const float h = globe.z + p.z;
 	return float3(globe.xy + dir * h * sin(a), h * cos(a) - globe.z);
+}
+
+// The original's distance fog (the landscape's iFogR/G/B: black), linear in the distance from the
+// eye: none up to 1.2 times the camera's distance from the point it looks at, black at 1.8 times.
+// So it scales with the zoom: seen straight down nothing is that far; at the tilted zooms the top
+// of the view (its corners most) darkens. The multiplier for a colour at p (bent: as drawn).
+float distanceFog(float3 p)
+{
+	if (fogDistance <= 0)
+		return 1;
+	return saturate((1.8 - length(p - eyePos) / fogDistance) / 0.6);
 }
 )hlsl";
 
