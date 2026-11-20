@@ -3318,6 +3318,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 				const auto& a = lm.attachments[k];
 				if (size_t(a.node) >= world.size()) // (its node itself hidden, a helper: shown all the same)
 					continue;
+				// ... unless the state playing hides it: a mine's smoke and fire, on in its On
+				// state, off in NotWorked.
+				if (inst.sequence && inst.sequence->drivesVisibility(a.node) && size_t(a.node) < visible.size() && !visible[size_t(a.node)])
+					continue;
 				const LoadedModel& am = *a.model;
 				const Affine at = world[size_t(a.node)] * placement({}, 0, a.scale);
 				anim::Pose pose = anim::Pose::bind(am.model);
@@ -3679,9 +3683,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 			const PlotView& p = snapshot.plots[i];
 			shape[i] = uint8_t((p.water ? 1 : 0) | (p.hills ? 2 : 0) | (p.peak ? 4 : 0) | (p.riverSouth ? 8 : 0) | (p.riverEast ? 16 : 0));
 			featureKey[i] = int32_t(p.feature) << 8 | p.featureVariety;
-			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint16_t(p.route)) << 32 |
-				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0x7FF) << 50 |
-				uint64_t(p.improvementState == 3) << 61 | uint64_t(p.bonusState & 3) << 62; // (the layout's 11 bits: two layouts 2048 apart on a plot would look unchanged)
+			// (the route's 8 bits and the layout's 16: two of them 256 or 65536 apart on a plot would look unchanged)
+			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint8_t(p.route)) << 32 |
+				uint64_t(p.riverSouth) << 40 | uint64_t(p.riverEast) << 41 | uint64_t(uint16_t(p.layout + 1)) << 42 |
+				uint64_t(p.improvementState & 3) << 58 | uint64_t(p.bonusState & 3) << 60;
 		}
 		const bool reshaped = resized || shape != m->shape;
 		const bool refeatured = reshaped || newArt || featureKey != m->featureKey;
