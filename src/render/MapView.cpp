@@ -2072,6 +2072,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 				});
 				if (part == lm->parts.end())
 					continue;
+				if (piece.standing)
+				{
+					// (a house of a city file: stands on the ground, as the city's own houses)
+					const Vec3 middle = part->bounds.center();
+					decor.push_back(placeStatic(lm, placement({ at.x, at.y, ground(at.x, at.y) }, piece.yaw, art.scale),
+						translation({ -middle.x, -middle.y, 0 }), &part->visible, &part->bounds));
+					continue;
+				}
 				// (the node stands somewhere in its file: moved to the middle of the plot's piece)
 				const Vec3 origin = lm->bindWorld[size_t(part->node)].translation;
 				Instance inst;

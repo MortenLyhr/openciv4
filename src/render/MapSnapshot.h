@@ -95,6 +95,7 @@ namespace oc4::render
 		int model = -1;
 		std::string node; // empty: the whole model, standing
 		float x = 0, y = 0, yaw = 0, scale = 1;
+		bool standing = false; // (a node: stands on the ground as a house, not laid on it as crops)
 	};
 
 	// A generic house of the city LSystem (CIV4CityLSystem.xml): one node of a NIF that
