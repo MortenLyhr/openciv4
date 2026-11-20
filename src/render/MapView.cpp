@@ -292,9 +292,11 @@ float4 PSTerrain(PSIn i) : SV_Target
 		{
 			float3 oc = playerColors[min(owner - 1, 255)].rgb;
 			float aa = max(max(pw.x, pw.y), 1e-5);
-			float glow = 1 - saturate(dist / 0.45);
+			// (the original's border tiles, art/terrain/routes/rivers/noriverborder*.dds: alpha 0.48
+			// beside the line, falling evenly to nothing 0.48 of a plot in, on land and water alike)
+			float wash = saturate(0.49 - dist);
 			float stroke = 1 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, dist);
-			color = lerp(color, oc, glow * sqrt(glow) * 0.6);
+			color = lerp(color, oc, wash);
 			color = lerp(color, oc * 0.85, stroke * 0.95);
 		}
 	}
