@@ -1980,10 +1980,32 @@ def helpArea():
 	return None
 
 
-def widgetText(fileId, name):
+def widgetText(fileId, name, widget=-1, data1=-1, data2=-1, option=False):
+	"""A widget's help: the help text the script gave it, else, for a widget type the game core
+	has no help for (the World Builder's buttons), hostWidgetHelp's."""
 	s = _screens.get(fileId)
 	w = s.get(name) if s is not None else None
-	return w.help if w is not None else u''
+	text = w.help if w is not None else u''
+	if not text and widget >= 0:
+		text = hostWidgetHelp(widget, data1, data2, option)
+	return text
+
+
+def hostWidgetHelp(widget, data1, data2, option=False):
+	"""What the original shows for a widget the game core has no help for: the World Builder's
+	own buttons (oc4wb, as seen in the running original under Wine), else the scripts' CvGameInterface.getWidgetHelp (BUG
+	answers its own widget types there: the great people bar, the options button, its advisors')."""
+	text = u''
+	try:
+		import oc4wb
+		text = oc4wb.widgetHelp(widget, data1, data2)
+		if not text:
+			import CvGameInterface
+			text = CvGameInterface.getWidgetHelp((int(widget), int(data1), int(data2), bool(option))) or u''
+	except Exception:
+		import traceback
+		traceback.print_exc()
+	return text
 
 
 def toggle(fileId, name):
