@@ -414,6 +414,7 @@ namespace oc4::scene
 					m.alphaTest = p.alpha->testEnabled();
 					m.alphaFunc = static_cast<Compare>(p.alpha->testFunc());
 					m.alphaRef = p.alpha->threshold;
+					m.alphaNoSorter = p.alpha->noSorter();
 				}
 				// A forest piece numbers each tree's vertices in the red of their colour (green and
 				// blue 1): no colour, the game's trees keep the texture's own.
