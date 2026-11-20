@@ -672,7 +672,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 				return false;
 			for (const UnitView& u : map.units)
 			{
-				if (!u.selected)
+				// (none under a stack while it fights, as in the original)
+				if (!u.selected || u.battle >= 0)
 					continue;
 				// (its dots: how the head unit can move)
 				if (const int d = std::clamp(u.moves + 1, 0, 3); d != ring.shown && ring.dots[d])
@@ -2802,14 +2803,16 @@ float4 PSTerrain(PSIn i) : SV_Target
 					else if (const auto w = workSince.find(key); w == workSince.end() || w->second.first != u.work)
 						workSince[key] = { u.work, time };
 					inst.soundAt = { float(u.x) + 0.5f, float(u.y) + 0.5f, 0 };
-					if (u.battle >= 0 && u.attacking && size_t(u.battle) < map.battles.size())
+					// Fighting, both sides step up towards each other and meet near the plots' border, as
+					// in the original (Wine, close up: face to face across it); one giving itself up stays.
+					if (u.battle >= 0 && size_t(u.battle) < map.battles.size())
 					{
 						const BattleView& b = map.battles[size_t(u.battle)];
 						Vec3 d{ float(b.defenderX - b.attackerX) * S(), float(b.defenderY - b.attackerY) * S(), 0 };
 						if (map.wrapX && std::abs(d.x) > worldW() / 2)
 							d.x -= std::copysign(worldW(), d.x);
-						if (const float len = length(d); len > 0)
-							inst.step = d * (0.4f * S() / len);
+						if (const float len = length(d); len > 0 && (u.attacking || !b.surrender))
+							inst.step = d * ((u.attacking ? 0.45f : -0.3f) * S() / len);
 					}
 					if (!art.shadow.empty())
 						if ((inst.shadow = model(art.shadow, {})))
@@ -2958,7 +2961,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					p.clip = &*lm.surrender, p.at = std::min(t, lm.surrender->duration());
 				return p;
 			}
-			p.step = inst.attacking ? std::clamp(t / 0.6f, 0.0f, 1.0f) * std::clamp((end - t) / 0.6f, 0.0f, 1.0f) : 0;
+			p.step = std::clamp(t / 0.6f, 0.0f, 1.0f) * std::clamp((end - t) / 0.6f, 0.0f, 1.0f);
 			const LoadedModel& lm = *inst.model;
 			const int side = inst.attacking ? 0 : 1;
 			const float roundsAt = float(kBattleSetupSlices) * slice, roundLength = float(kBattleRoundSlices) * slice;
@@ -3857,6 +3860,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 			{
 				const int plot = u.x + u.y * m->map.width;
 				if (options.fog && !m->map.plots[size_t(plot)].visible)
+					continue;
+				// (a stack fighting shows no flag, nor a ring, while the battle is on: the original's)
+				if (u.battle >= 0)
 					continue;
 				Vec3 p{ (float(u.x) + 0.5f) * m->S(), (float(u.y) + 0.5f) * m->S(), 0 };
 				const uint64_t key = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);

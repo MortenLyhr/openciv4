@@ -1151,7 +1151,7 @@ namespace oc4::host
 			m_focusAttacker = head->getIDInfo();
 	}
 
-	void Interface::lookAt(NiPoint3 pt3Target, CameraLookAtTypes eType, NiPoint3)
+	void Interface::lookAt(NiPoint3 pt3Target, CameraLookAtTypes eType, NiPoint3 attackDirection)
 	{
 		// (a point of the map, as CvPlot::getPoint gives it: the map's centre at 0)
 		CvMap& map = GC.getMap();
@@ -1161,12 +1161,15 @@ namespace oc4::host
 		const float x = pt3Target.x / size + float(map.getGridWidth()) / 2, y = pt3Target.y / size + float(map.getGridHeight()) / 2;
 		if (x < 0 || y < 0 || x >= float(map.getGridWidth()) || y >= float(map.getGridHeight()))
 			return;
-		// A battle (CvUnit::updateCombat, the camera's focus on it): the camera goes over the point
-		// half way from the attacker to the defender, at the distance it has, as the original's (in
-		// Wine it glides there; with No Combat Zoom on it does not come closer).
+		// A battle (CvUnit::updateCombat, the camera's focus on it): the camera glides over the point
+		// half way from the attacker to the defender, as the original's: at the distance it has
+		// (CAMERALOOKAT_BATTLE: the AI's attacks, or No Combat Zoom on), or close in and turned towards
+		// the attack (CAMERALOOKAT_BATTLE_ZOOM_IN: MapWindow::enterBattleView).
 		if (eType == CAMERALOOKAT_BATTLE || eType == CAMERALOOKAT_BATTLE_ZOOM_IN)
 		{
 			lookAtPointX = x, lookAtPointY = y;
+			lookAtBattleZoom = eType == CAMERALOOKAT_BATTLE_ZOOM_IN;
+			lookAtBattleDirX = attackDirection.x;
 			return;
 		}
 		lookAtX = int(x), lookAtY = int(y);

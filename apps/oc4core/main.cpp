@@ -1004,8 +1004,8 @@ namespace
 				// Enter", or ending it).
 				// OpenCiv4's option (Keep the camera on a unit after it attacks): the active player's
 				// attacker stays selected, and the camera goes to it when the battle is over, until the
-				// player clicks or types; the next unit waits till then. (Off, as the original with No
-				// Combat Zoom: the next unit is chosen as soon as the battle ends.)
+				// player clicks or types; the next unit waits till then. (Off, as the original: the next unit
+				// is chosen as soon as the battle ends, with Combat Zoom or without.)
 				if (const std::optional<IDInfo> attacker = ui.takeFocusAttacker(); attacker && utility.keepAttacker())
 					keptAttacker = KeptAttacker{ *attacker, window.inputCount(), false };
 				if (keptAttacker)
@@ -1557,9 +1557,16 @@ namespace
 			if (ui.lookAtPointX >= 0)
 			{
 				if (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA"))
-					window.centerOnPoint(ui.lookAtPointX, ui.lookAtPointY);
+				{
+					if (ui.lookAtBattleZoom)
+						window.enterBattleView(ui.lookAtPointX, ui.lookAtPointY, ui.lookAtBattleDirX);
+					else
+						window.centerOnPoint(ui.lookAtPointX, ui.lookAtPointY);
+				}
 				ui.lookAtPointX = ui.lookAtPointY = -1;
 			}
+			if (std::exchange(ui.releaseCamera, false))
+				window.leaveBattleView();
 			const auto now = Clock::now();
 				if (changed || now - captured > std::chrono::milliseconds(200))
 				{

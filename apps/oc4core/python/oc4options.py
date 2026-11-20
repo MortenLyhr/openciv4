@@ -219,8 +219,8 @@ def _edgeScrollOn():
 
 
 # After an attack, the camera and the selection stay on the unit that attacked (openciv4's own
-# option, off by default: the original, with No Combat Zoom on, selects the next unit and looks
-# at it as soon as the battle ends): its check box under edge scrolling.
+# option, off by default: the original selects the next unit and looks at it as soon as the
+# battle ends): its check box under edge scrolling.
 KEEP_ATTACKER_CHECKBOX = 'Oc4KeepAttackerCheckBox'
 
 

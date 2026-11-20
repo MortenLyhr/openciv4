@@ -141,6 +141,8 @@ namespace oc4::render
 		std::optional<Glide> glide;
 		bool cityView = false;      // straight down at a city (its screen is up)
 		std::optional<View> beforeCity; // where the camera was when the city screen came up
+		bool battleView = false;          // close in on a battle (Combat Zoom)
+		std::optional<View> beforeBattle; // the distance and turn to go back to after it
 		bool open = true, running = false, turnRequest = false, framed = false;
 		std::string status, title;
 		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
@@ -283,6 +285,11 @@ namespace oc4::render
 				camera.pitch = std::numbers::pi_v<float> / 2;
 				return;
 			}
+			if (battleView)
+			{
+				camera.pitch = kBattlePitch;
+				return;
+			}
 			const MapSnapshot& m = view->map();
 			const float span = std::max(m.cameraTopDistance - m.cameraMinDistance, 1.0f);
 			const float t = std::clamp((camera.distance - m.cameraMinDistance) / span, 0.0f, 1.0f);
@@ -423,6 +430,42 @@ namespace oc4::render
 			if (beforeCity)
 				glideTo(*beforeCity);
 			beforeCity.reset();
+		}
+
+		// The original's Combat Zoom (CAMERALOOKAT_BATTLE_ZOOM_IN, measured in Wine): the camera glides
+		// in over the battle's point (x, y in plots) to 913 units from it (5.07 plots of 180), 30 degrees
+		// above the ground, turned 40 degrees towards the side the attack goes (an attack east: the eye
+		// south-west of the battle, so the two sides face across the picture), and stays there.
+		// (Measured for attacks east; the turn is taken as the attack's east-west share.) OpenCiv4's
+		// distances are the original's eye distance / 1.59 (at zoom 0.3: 14.8 plots there, 9.3 here,
+		// the same picture), so 3.2 plots here.
+		static constexpr float kBattleDistance = 913.0f / 180.0f / 1.59f, kBattlePitch = 0.52f, kBattleTurn = 0.698f;
+		void enterBattleView(float x, float y, float dirX)
+		{
+			if (cityView)
+				return;
+			if (!battleView)
+				beforeBattle = glide ? glide->to : currentView();
+			battleView = true;
+			View to{ { x * plot(), y * plot(), 0 }, kBattleDistance * plot(), kBattlePitch, beforeBattle->yaw - kBattleTurn * std::clamp(dirX, -1.0f, 1.0f),
+				beforeBattle->tilt };
+			glideTo(to, 1.0f);
+		}
+
+		// Its end (the game core lets go of the camera, releaseLockedCamera): back out to the distance
+		// and turn from before, over where it is (the next unit's look moves it on).
+		void leaveBattleView()
+		{
+			if (!battleView)
+				return;
+			battleView = false;
+			if (beforeBattle)
+			{
+				View to = *beforeBattle;
+				to.target = glide ? glide->to.target : camera.target;
+				glideTo(to, 1.0f);
+			}
+			beforeBattle.reset();
 		}
 
 		// (distance in plots; below 0: the game's, CAMERA_START_DISTANCE)
@@ -2370,6 +2413,8 @@ namespace oc4::render
 			m->padPlotX = x, m->padPlotY = y;
 	}
 	void MapWindow::centerOnPoint(float x, float y) { m->centerOnPoint(x, y); }
+	void MapWindow::enterBattleView(float x, float y, float dirX) { m->enterBattleView(x, y, dirX); }
+	void MapWindow::leaveBattleView() { m->leaveBattleView(); }
 	void MapWindow::frame(float dt) { m->frame(dt); }
 	void MapWindow::saveScreenshot(const std::filesystem::path& png) { m->saveScreenshot(png); }
 	void MapWindow::setScreenshotFolder(const std::filesystem::path& folder) { m->screenshotFolder = folder; }

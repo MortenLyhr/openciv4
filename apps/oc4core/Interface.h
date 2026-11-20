@@ -72,6 +72,13 @@ namespace oc4::host
 		// The same for a point between plots (lookAt with a point of the map: a battle's, half way
 		// from the attacker's plot to the defender's), in plots (10.5 the middle of the plot 10).
 		float lookAtPointX = -1, lookAtPointY = -1;
+		// ... and with the original's Combat Zoom (CAMERALOOKAT_BATTLE_ZOOM_IN: the active player's attack,
+		// No Combat Zoom off): close in, turned towards the attack (its east-west share); then let go
+		// at the battle's end (releaseLockedCamera).
+		bool lookAtBattleZoom = false;
+		float lookAtBattleDirX = 0;
+		bool releaseCamera = false;
+		void releaseLockedCamera() override { releaseCamera = true; }
 		bool isSelected(const CvUnit* pUnit) const { return selected(pUnit); }
 		void lookAtCityOffset(int iCity) override;
 
