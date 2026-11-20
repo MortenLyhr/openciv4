@@ -448,11 +448,14 @@ namespace oc4::render
 		// The game looks at a plot (a unit selected, a city chosen): the camera moves there and
 		// keeps the distance it is on its way to, so a glide (out of the city screen) or a wheel
 		// zoom in progress still ends where it was going.
-		void centerOn(int x, int y)
+		void centerOn(int x, int y) { centerOnPoint(float(x) + 0.5f, float(y) + 0.5f); }
+
+		// (a point of the map in plots: x 10.5 is the middle of the plot 10)
+		void centerOnPoint(float x, float y)
 		{
 			if (cityView)
 				return; // (the city screen's view holds while it is up)
-			const Vec3 to{ (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 };
+			const Vec3 to{ x * plot(), y * plot(), 0 };
 			if (glide)
 			{
 				glide->to.target = to;
@@ -2296,7 +2299,11 @@ namespace oc4::render
 					orbiting = down;
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)
+				{
+					if (down)
+						++inputs; // (a click is the player's too: inputCount)
 					onButton(down && e.button.button == SDL_BUTTON_LEFT, down, x, y);
+				}
 				break;
 			}
 			case SDL_EVENT_MOUSE_WHEEL:
@@ -2362,6 +2369,7 @@ namespace oc4::render
 		if (m->padMode == PadMode::Cursor)
 			m->padPlotX = x, m->padPlotY = y;
 	}
+	void MapWindow::centerOnPoint(float x, float y) { m->centerOnPoint(x, y); }
 	void MapWindow::frame(float dt) { m->frame(dt); }
 	void MapWindow::saveScreenshot(const std::filesystem::path& png) { m->saveScreenshot(png); }
 	void MapWindow::setScreenshotFolder(const std::filesystem::path& folder) { m->screenshotFolder = folder; }

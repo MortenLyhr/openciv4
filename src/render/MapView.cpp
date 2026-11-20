@@ -410,6 +410,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// Hurt in a round it survives (ANIMCAT_MELEE_HURT 23, by set; the ranged have none of
 		// their own); healing (ANIMCAT_HEAL 4).
 		std::optional<anim::Sequence> hurt[3][2], heal;
+		// Giving itself up (ANIMCAT_SURRENDER: event code 1002, a worker's or a settler's), and a
+		// unit's fading out (its XFadeOut, code 1: the material's alpha to 0).
+		std::optional<anim::Sequence> surrender, fadeOut;
 		// Working, by work (irrigate, build, mine, chop, shovel, railroad: categories 50 + 3 a
 		// work): its beginning, the work, a pause in it; founding a city (ANIMCAT_FOUND 40).
 		std::optional<anim::Sequence> work[6][3], found;
@@ -1158,6 +1161,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 				for (uint32_t state = 0; state < 3; ++state)
 					wanted.emplace_back(state + 1, &lm.states[state]);
 				wanted.emplace_back(1004u, &lm.heal);
+				wanted.emplace_back(1002u, &lm.surrender);
+				wanted.emplace_back(1u, &lm.fadeOut);
 				std::vector<std::optional<anim::Sequence>> damaged(16);
 				for (uint32_t state = 0; state < 4; ++state)
 					for (uint32_t part = 0; part < 4; ++part)
@@ -2924,12 +2929,35 @@ float4 PSTerrain(PSIn i) : SV_Target
 				return p;
 			const BattleView& b = map.battles[size_t(inst.battle)];
 			const auto began = battleStarts.find(b.serial);
-			if (began == battleStarts.end() || b.rounds.empty())
+			if (began == battleStarts.end() || (b.rounds.empty() && !b.surrender))
 				return p;
 			const float slice = kBattleSliceSeconds, t = time - began->second, end = float(b.slices) * slice;
 			if (t < 0 || t > end + 1)
 				return p; // (over: as usual again)
 			p.fighting = true;
+			if (b.surrender)
+			{
+				// Giving itself up, as the original shows it: the attacker steps up and stays; the
+				// other surrenders (its clip, else it stands), fades out over the last half second (its
+				// XFadeOut, else it is gone at the end) and is not seen again until the game takes it.
+				constexpr float fade = 0.5f;
+				if (inst.attacking)
+				{
+					p.step = std::clamp(t / 0.6f, 0.0f, 1.0f);
+					return p;
+				}
+				const LoadedModel& lm = *inst.model;
+				if (t >= end - fade && lm.fadeOut)
+				{
+					p.clip = &*lm.fadeOut, p.at = std::min((t - (end - fade)) / fade * lm.fadeOut->duration(), lm.fadeOut->duration());
+					p.gone = t >= end;
+				}
+				else if (t >= end)
+					p.gone = true;
+				else if (lm.surrender)
+					p.clip = &*lm.surrender, p.at = std::min(t, lm.surrender->duration());
+				return p;
+			}
 			p.step = inst.attacking ? std::clamp(t / 0.6f, 0.0f, 1.0f) * std::clamp((end - t) / 0.6f, 0.0f, 1.0f) : 0;
 			const LoadedModel& lm = *inst.model;
 			const int side = inst.attacking ? 0 : 1;

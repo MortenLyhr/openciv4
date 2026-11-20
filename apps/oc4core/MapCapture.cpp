@@ -836,6 +836,7 @@ namespace oc4::host
 			v.elapsed = std::chrono::duration<float>(std::chrono::steady_clock::now() - b.start).count();
 			v.slices = b.slices;
 			v.collateral = b.collateral;
+			v.surrender = b.surrender;
 			v.attackerX = b.attackerX, v.attackerY = b.attackerY, v.defenderX = b.defenderX, v.defenderY = b.defenderY;
 			for (const auto& r : b.rounds)
 				v.rounds.push_back({ r.ranged, { r.killed[0], r.killed[1] }, { r.alive[0], r.alive[1] } });

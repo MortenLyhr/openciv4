@@ -554,6 +554,27 @@ namespace oc4::host
 	{
 		if (!pDefinition)
 			return;
+		if (pDefinition->getMissionType() == MISSION_SURRENDER)
+		{
+			// (CvUnit::updateCombat: its mission time is the combat timer before the surrender's is set,
+			// so the length is the mission's own, MISSION_SURRENDER's iTime: 10 updates, 2.5 s in Wine)
+			const CvUnit* attacker = pDefinition->getUnit(BATTLE_UNIT_ATTACKER);
+			const CvUnit* defender = pDefinition->getUnit(BATTLE_UNIT_DEFENDER);
+			if (!attacker || !defender)
+				return;
+			Battle b;
+			b.attacker = attacker->getIDInfo(), b.defender = defender->getIDInfo();
+			b.attackerX = attacker->getX(), b.attackerY = attacker->getY(), b.defenderX = defender->getX(), b.defenderY = defender->getY();
+			b.surrender = true;
+			b.slices = std::max(1, GC.getMissionInfo(MISSION_SURRENDER).getTime());
+			b.start = std::chrono::steady_clock::now();
+			std::lock_guard lock(g_battleMutex);
+			b.serial = ++g_battleSerial;
+			g_battles.push_back(std::move(b));
+			if (std::getenv("OC4_PLAY_LOG"))
+				std::printf("  surrender %llu: %d slices\n", static_cast<unsigned long long>(g_battleSerial), g_battles.back().slices);
+			return;
+		}
 		if (const MissionTypes m = pDefinition->getMissionType(); m != MISSION_BEGIN_COMBAT)
 		{
 			// (the missions the units act out)
@@ -1121,16 +1142,34 @@ namespace oc4::host
 		return (rows - used) * perRow;
 	}
 
-	void Interface::lookAt(NiPoint3 pt3Target, CameraLookAtTypes, NiPoint3)
+	void Interface::setCombatFocus(bool bNewValue)
 	{
-		// (a point of the map, as CvPlot::getPoint gives it: the plot under it)
+		m_combatFocus = bNewValue;
+		// (CvUnit::setCombatUnit gives the focus to the active player's attacker, whether the battle
+		// is shown or not: the selected unit then attacks)
+		if (const CvUnit* head = getHeadSelectedUnit(); bNewValue && head && head->getOwner() == GC.getGame().getActivePlayer() && head->isAttacking())
+			m_focusAttacker = head->getIDInfo();
+	}
+
+	void Interface::lookAt(NiPoint3 pt3Target, CameraLookAtTypes eType, NiPoint3)
+	{
+		// (a point of the map, as CvPlot::getPoint gives it: the map's centre at 0)
 		CvMap& map = GC.getMap();
-		const int x = map.pointXToPlotX(pt3Target.x), y = map.pointYToPlotY(pt3Target.y);
-		if (x >= 0 && y >= 0 && x < map.getGridWidth() && y < map.getGridHeight())
+		const float size = float(GC.getPLOT_SIZE());
+		if (size <= 0)
+			return;
+		const float x = pt3Target.x / size + float(map.getGridWidth()) / 2, y = pt3Target.y / size + float(map.getGridHeight()) / 2;
+		if (x < 0 || y < 0 || x >= float(map.getGridWidth()) || y >= float(map.getGridHeight()))
+			return;
+		// A battle (CvUnit::updateCombat, the camera's focus on it): the camera goes over the point
+		// half way from the attacker to the defender, at the distance it has, as the original's (in
+		// Wine it glides there; with No Combat Zoom on it does not come closer).
+		if (eType == CAMERALOOKAT_BATTLE || eType == CAMERALOOKAT_BATTLE_ZOOM_IN)
 		{
-			lookAtX = x;
-			lookAtY = y;
+			lookAtPointX = x, lookAtPointY = y;
+			return;
 		}
+		lookAtX = int(x), lookAtY = int(y);
 	}
 
 	void Interface::lookAtSelectionPlot(bool /*bRelease*/)
