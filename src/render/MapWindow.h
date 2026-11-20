@@ -217,6 +217,7 @@ namespace oc4::render
 			int flags = 1;      // 1 left, 2 right, 4 centred (x0 is the anchor)
 			bool state = false, enabled = true;
 			bool pulse = false; // (a button that glows on and off: the action recommended, GFC's multi list pulse)
+			bool listItem = false; // (a multi list's button: in the theme's MultiList_Item skins)
 			bool interactive = false; // takes clicks and has help
 			bool mainInterface = false; // the main interface's: under a menu the keys do not reach it
 			bool blocks = false;      // a screen's own panel or picture over the main interface: what is under it takes no clicks

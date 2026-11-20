@@ -1213,6 +1213,8 @@ if _walls:
 				info.movie = item.texture;
 			if (item.kind == Kind::ImageButton && t.size() >= 24)
 				item.pulse = t[23].cast<bool>();
+			if (item.kind == Kind::ImageButton && t.size() >= 25)
+				item.listItem = t[24].cast<bool>();
 			if ((item.kind == Kind::Bar || item.kind == Kind::Scrollbar) && t.size() >= 25)
 			{
 				item.barStart = t[23].cast<float>();
