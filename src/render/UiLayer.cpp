@@ -279,13 +279,15 @@ namespace oc4::render
 		// A help taller than the room it grows into gets wider, then is kept on the screen.
 		const float room = std::max(m_helpDown ? sh - m_helpY : m_helpY, 100.0f);
 		const float widest = std::max(m_helpRight ? sw - m_helpX : m_helpX, m_helpWidth);
-		float w = m_helpWidth, h = o.richHeight(text, w - 2 * inX, m_sizes[2], false) + 2 * inY;
+		// (a tooltip: as wide as its longest line, up to its width)
+		float w = m_helpFit ? std::min(std::ceil(o.richWidth(text, m_sizes[2], false)) + 2 * inX + 2, m_helpWidth) : m_helpWidth;
+		float h = o.richHeight(text, w - 2 * inX, m_sizes[2], false) + 2 * inY;
 		while (h > room && w < widest)
 		{
 			w = std::min(w * 1.5f, widest);
 			h = o.richHeight(text, w - 2 * inX, m_sizes[2], false) + 2 * inY;
 		}
-		const float x = m_helpRight ? m_helpX : m_helpX - w;
+		const float x = std::clamp(m_helpRight ? m_helpX : m_helpX - w, 0.0f, std::max(sw - w, 0.0f));
 		const float y = std::clamp(m_helpDown ? m_helpY : m_helpY - h, 0.0f, std::max(sh - h, 0.0f));
 		if (see)
 			Theme::draw(o, m_hudHelp, x, y, x + w, y + h);
@@ -352,9 +354,10 @@ namespace oc4::render
 		return MapWindow::UiClick{ pressed, m_pressedRight, shift, ctrl, alt };
 	}
 
-	void UiLayer::setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed)
+	void UiLayer::setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed, bool fit)
 	{
 		m_helpFramed = framed;
+		m_helpFit = fit;
 		m_help = widen(text);
 		m_helpX = x;
 		m_helpY = y;
