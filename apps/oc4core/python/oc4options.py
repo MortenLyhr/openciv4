@@ -131,38 +131,8 @@ def _applyGraphics():
 		pass
 
 
-def _applyPlayerOptions():
-	"""The player options the profile has, to the host: the game core sends them to the active
-	player at the start of every game, new or loaded, as the original's profile (a save's own are
-	overwritten)."""
-	try:
-		oc4host.reset_player_options()
-		for i, on in _profile['player'].items():
-			oc4host.set_player_option(int(i), bool(on))
-	except Exception:
-		pass
-
-
-def _syncPlayerOptions():
-	"""The player options as the host has them now (a choice on the options screen goes to the
-	game core, CyMessageControl().sendPlayerOption, and into the profile there), for the file."""
-	try:
-		for i in range(64):
-			state = oc4host.player_option_state(i)
-			if state:
-				_profile['player'][i] = state == 2
-	except Exception:
-		pass
-
-
-def _playerDefault(i):
-	try:
-		return bool(_cpe.CyGlobalContext().getPlayerOptionsInfoByIndex(int(i)).getDefault())
-	except Exception:
-		return False
-
-
-# W A S D panning (openciv4's own option, no game's): its check box on the options' OpenCiv4 tab; while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
+# W A S D panning (openciv4's own option, no game's): its check box on the options' OpenCiv4 tab;
+# while it is on, Ctrl+Shift+W in the window turns it off (the host calls setWasdPan).
 WASD_PAN_CHECKBOX = 'Oc4WasdPanCheckBox'
 OC4_FORM = 'Oc4Form' # (the options' OpenCiv4 tab)
 
@@ -247,6 +217,37 @@ def _edgeScrollOn():
 		return bool(oc4host.edge_scroll())
 	except Exception:
 		return _profile['edgeScroll']
+
+
+def _applyPlayerOptions():
+	"""The player options the profile has, to the host: the game core sends them to the active
+	player at the start of every game, new or loaded, as the original's profile (a save's own are
+	overwritten)."""
+	try:
+		oc4host.reset_player_options()
+		for i, on in _profile['player'].items():
+			oc4host.set_player_option(int(i), bool(on))
+	except Exception:
+		pass
+
+
+def _syncPlayerOptions():
+	"""The player options as the host has them now (a choice on the options screen goes to the
+	game core, CyMessageControl().sendPlayerOption, and into the profile there), for the file."""
+	try:
+		for i in range(64):
+			state = oc4host.player_option_state(i)
+			if state:
+				_profile['player'][i] = state == 2
+	except Exception:
+		pass
+
+
+def _playerDefault(i):
+	try:
+		return bool(_cpe.CyGlobalContext().getPlayerOptionsInfoByIndex(int(i)).getDefault())
+	except Exception:
+		return False
 
 
 def _graphicDefault(i):
