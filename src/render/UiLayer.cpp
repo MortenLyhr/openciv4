@@ -49,6 +49,9 @@ namespace oc4::render
 					}
 				ends.push_back(i + 1);
 			}
+			// (one character, an icon, is drawn whole: BUG's religion marks in 25 px columns)
+			if (ends.size() <= 1)
+				return markup;
 			for (size_t k = ends.size(); k-- > 1;)
 			{
 				const std::wstring cut = markup.substr(0, ends[k - 1]) + std::wstring(dots);
