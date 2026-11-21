@@ -2582,7 +2582,9 @@ class CyInterface(object):
 	def setCityTabSelectionRow(self, eIndex): self.__class__._cityTab = int(eIndex)
 
 	def getHelpString(self): return oc4host.ui_help_string()
-	def determineWidth(self, szBuffer): return _textWidth(_text(szBuffer))
+	# (the original measures untagged text at the size setText draws it, whatever its FontTypes:
+	# the theme's size 3, as <font=3>; Wine's "The Apostolic Palace" is 139, its <font=2> 121)
+	def determineWidth(self, szBuffer): return _textWidth(_text(szBuffer), 3)
 
 	def getEndTurnState(self): return _cpe.EndTurnButtonStates(oc4host.ui_end_turn_state())
 	def shouldDisplayEndTurn(self): return oc4host.ui_end_turn_message()
