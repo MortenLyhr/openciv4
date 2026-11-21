@@ -27,6 +27,10 @@ namespace oc4::render
 		// (as the game's popups: their width, margins, the choices' pictures, the OK button's height)
 		constexpr float kWidth = 400, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
 		constexpr float kStoneLine = 25, kStoneGap = 6, kStoneInset = 9; // (a choice's stone button)
+		// The game menu (Window_NoTitleBar_Style): 248 wide, where the other popups are (Wine at
+		// 1600 x 900 and 1280 x 1000 alike: its rim 1334-1582 and 1014-1262, from 77); its separator
+		// only a space (no line: the first button 10 under the title).
+		constexpr float kMenuWidth = 248, kMenuSeparator = 7;
 		constexpr Color kFocus{ 0.45f, 0.62f, 0.95f };                  // (the focus rim on the first)
 		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.97f, 0.97f, 0.97f }, kHot{ 1, 0.83f, 0.49f };
 		constexpr Color kButton{ 0.13f, 0.16f, 0.22f }, kButtonHover{ 0.24f, 0.31f, 0.44f }, kEditFill{ 0.09f, 0.11f, 0.2f }, kEditRim{ 0.62f, 0.72f, 0.9f };
@@ -238,9 +242,11 @@ namespace oc4::render
 		}
 		const auto& items = m_view->items;
 		const float sw = o.screenWidth(), sh = o.screenHeight();
-		// As the game's: its width, at the right under the top bar (in the middle when narrow).
-		const float w = std::min(kWidth, sw - 40), inner = w - 2 * kPadX;
-		const bool right = sw >= 2.5f * w && !m_view->centered;
+		// As the game's: its width, at the right under the top bar (in the middle when narrow). The
+		// game menu too, narrower.
+		const bool menu = m_view->menu;
+		const float w = std::min(menu ? kMenuWidth : kWidth, sw - 40), inner = w - 2 * kPadX;
+		const bool right = sw >= 2.5f * w;
 		const float x0 = right ? sw - 18 - w : (sw - w) / 2; // (Wine at 1600 x 900: its rim 1182-1582 from 77; 1280 wide, the game menu's at 1262)
 		const std::wstring header = widen(m_view->header);
 		std::vector<std::wstring> texts(items.size());
@@ -263,8 +269,8 @@ namespace oc4::render
 				break;
 			case Kind::Radio:
 			case Kind::Check: heights[i] = std::max(26.0f, o.richHeight(texts[i], inner - 30, m_textSize, false) + 8); break;
-			case Kind::Separator: heights[i] = 12; break;
-			case Kind::Image: heights[i] = 72; break;
+			case Kind::Separator: heights[i] = menu ? kMenuSeparator : 12; break;
+			case Kind::Image: heights[i] = items[i].height > 0 ? items[i].height + 4 : 72; break; // (at the size asked, 4 down)
 			case Kind::Edit: heights[i] = 34; break;
 			}
 			content += heights[i];
@@ -354,7 +360,14 @@ namespace oc4::render
 						o.image(ic->key, ic->bgra, ic->width, ic->height, 1, tx, iy0, tx + kIcon, iy0 + kIcon);
 						tx += kIcon + 5;
 					}
-					const float tw = x0 + w - kPadX - kStoneInset - tx, th = o.richHeight(texts[i], tw, m_textSize, false);
+					float tw = x0 + w - kPadX - kStoneInset - tx;
+					if (item.centred) // (DLL_FONT_CENTER_JUSTIFY: the game menu's)
+					{
+						const float natural = std::min(o.richWidth(texts[i], m_textSize, false), tw);
+						tx += std::round((tw - natural) / 2);
+						tw = natural + 1;
+					}
+					const float th = o.richHeight(texts[i], tw, m_textSize, false);
 					const bool coloured = m_button->coloured;
 					if (coloured)
 						o.setShadow(m_button->shadow[st], m_button->shadowAlpha[st]);
@@ -394,7 +407,10 @@ namespace oc4::render
 				o.richBlock(texts[i], r.x0 + 26, r.y0 + 4, r.x1 - r.x0 - 30, m_textSize, false, hot ? kHot : kText);
 				break;
 			}
-			case Kind::Separator: o.line(r.x0, r.y0 + 6, r.x1, r.y0 + 6, kText, 0.3f); break;
+			case Kind::Separator:
+				if (!menu)
+					o.line(r.x0, r.y0 + 6, r.x1, r.y0 + 6, kText, 0.3f);
+				break;
 			case Kind::Edit:
 			{
 				// A box to type into, as the game's: dark, a light rim; the one with the focus shows where the text goes.
@@ -408,9 +424,12 @@ namespace oc4::render
 			case Kind::Image:
 				if (const ButtonArt::Icon* ic = m_art.icon(item.icon))
 				{
-					// (64 high, as wide as its proportions have it: the game menu's title is 4:1)
-					const float cx = (r.x0 + r.x1) / 2, hw = std::min(32.0f * float(ic->width) / float(std::max(ic->height, 1u)), (r.x1 - r.x0) / 2);
-					o.image(ic->key, ic->bgra, ic->width, ic->height, 1, cx - hw, r.y0 + 4, cx + hw, r.y0 + 68);
+					// (at the size the game asks, as the original: the game menu's title 192 x 48; else 64
+					// high, as wide as its proportions have it)
+					const float cx = (r.x0 + r.x1) / 2;
+					const float ih = item.height > 0 ? item.height : 64;
+					const float hw = std::min(item.width > 0 ? item.width / 2 : ih / 2 * float(ic->width) / float(std::max(ic->height, 1u)), (r.x1 - r.x0) / 2);
+					o.image(ic->key, ic->bgra, ic->width, ic->height, 1, std::round(cx - hw), r.y0 + 4, std::round(cx - hw) + 2 * hw, r.y0 + 4 + ih);
 				}
 				break;
 			}
