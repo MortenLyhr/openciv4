@@ -1456,32 +1456,33 @@ struct VSBorder_in
 vertex VSBorder_out VSBorder(VSBorder_in in [[stage_in]], constant Frame& _24 [[buffer(0)]], constant Terrain& _133 [[buffer(1)]])
 {
     VSBorder_out out = {};
-    float3 _269 = float3(in.i_pos.xy, fast::max(in.i_pos.z, _133.waterZ) + (0.01200000010430812835693359375 * _133.plotSize));
-    float3 _273 = _269 + float3(_133.worldOffset);
-    float3 _252 = _273;
-    float3 _414;
+    float3 _291 = float3(in.i_pos.xy, fast::max(in.i_pos.z, _133.waterZ) + (0.01200000010430812835693359375 * _133.plotSize));
+    float3 _295 = _291 + float3(_133.worldOffset);
+    float3 _273 = _295;
+    float3 _453;
     do
     {
         if (_24.globe.z <= 0.0)
         {
-            _414 = _273;
+            _453 = _295;
             break;
         }
-        float2 _302 = _273.xy - _24.globe.xy;
+        float2 _341 = _295.xy - _24.globe.xy;
         if (_24.globe.w > 0.0)
         {
-            _302.x -= (_24.globe.w * rint(_302.x / _24.globe.w));
+            _341.x -= (_24.globe.w * rint(_341.x / _24.globe.w));
         }
-        float _341 = length(_302);
-        float _346 = fast::min(_341 / _24.globe.z, 3.141590118408203125);
-        float _359 = _24.globe.z + _252.z;
-        _414 = float3(_24.globe.xy + ((select(float2(0.0), _302 / float2(_341), bool2(_341 > 9.9999997473787516355514526367188e-05)) * _359) * sin(_346)), (_359 * cos(_346)) - _24.globe.z);
+        float _380 = length(_341);
+        float _385 = fast::min(_380 / _24.globe.z, 3.141590118408203125);
+        float _398 = _24.globe.z + _273.z;
+        _453 = float3(_24.globe.xy + ((select(float2(0.0), _341 / float2(_380), bool2(_380 > 9.9999997473787516355514526367188e-05)) * _398) * sin(_385)), (_398 * cos(_385)) - _24.globe.z);
         break;
     } while(false);
-    out.gl_Position = float4(_414, 1.0) * _24.viewProj;
-    out._entryPointOutput_world = _269;
+    float3 _302 = float3(_24.eyePos) - _453;
+    out.gl_Position = float4(select(_453, _453 + (fast::normalize(_302) * 8.0), bool3(dot(_302, _302) > 100.0)), 1.0) * _24.viewProj;
+    out._entryPointOutput_world = _291;
     out._entryPointOutput_nrm = in.i_nrm;
-    out._entryPointOutput_drawn = _414;
+    out._entryPointOutput_drawn = _453;
     out._entryPointOutput_under = float(int(in.i_pos.z < _133.waterZ));
     return out;
 }

@@ -339,12 +339,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 PSIn VSBorder(VSIn i)
 {
 	PSIn o;
-	// (a little above the ground, so that it is never behind it nor behind the pieces laid on it,
-	// drawn before it: rivers 0.8, roads 0.6, a farm's crops from 0.5 up a world unit, a plot 180;
-	// under what stands on it, drawn after it: resources lie from 4 up)
+	// (a little above the ground and towards the eye, so that it is never behind it nor behind the
+	// pieces laid on it, drawn before it: rivers 0.8, roads 0.6, a farm's crops from 0.5 up, a plot
+	// 180 world units; the model shader moves those 6 towards the eye. What is drawn after it
+	// covers it whatever its depth: it writes none.)
 	float3 pos = float3(i.pos.xy, max(i.pos.z, waterZ) + 0.012 * plotSize);
 	o.drawn = globeBend(pos + worldOffset);
-	o.pos = mul(float4(o.drawn, 1), viewProj);
+	float3 toEye = eyePos - o.drawn;
+	o.pos = mul(float4(dot(toEye, toEye) > 100 ? o.drawn + normalize(toEye) * 8 : o.drawn, 1), viewProj);
 	o.world = pos;
 	o.nrm = i.nrm;
 	o.under = i.pos.z < waterZ ? 1 : 0;
