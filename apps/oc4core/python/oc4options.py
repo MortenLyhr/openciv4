@@ -21,6 +21,17 @@ W, H = 800, 600
 # ---------------------------------------------------------------- the profile
 
 _VOLUME_STOPS = 20
+# The speaker setups the original offers (Miles': its names, the first four by text key, as the
+# original's getSpeakerConfigFromList gives them). On macOS the sound goes out as the system has
+# it set; Mono makes both sides the same.
+_SPEAKERS = ('TXT_KEY_OPTION_SOUND_MONO', 'TXT_KEY_OPTION_SOUND_STEREO', 'TXT_KEY_OPTION_SOUND_SYSTEM_CONFIG', 'TXT_KEY_OPTION_SOUND_HEADPHONES',
+	'Dolby Surround', 'SRS Circle Surround', '4.0 Discrete', '5.1 Discrete', '6.1 Discrete', '7.1 Discrete', '8.1 Discrete', 'DirectSound 3D',
+	'EAX 2.0', 'EAX Advanced HD 3.0', 'EAX Advanced HD 4.0')
+_SPEAKERS_DEFAULT = 'TXT_KEY_OPTION_SOUND_SYSTEM_CONFIG'
+# The voice chat's controls: the original's is GameSpy's multiplayer voice, which OpenCiv4 has not;
+# they show as the original's, the system's own devices in them, but cannot be used.
+_VOICE_CONTROLS = ('VoiceChatCheckbox', 'CaptureDeviceDropdownBox', 'PlaybackDeviceDropdownBox', 'CaptureVolumeSlider', 'PlaybackVolumeSlider')
+_VOICE_TIP = u'OpenCiv4 does not implement voice chat.'
 _VOLUMES = ('Master', 'Music', 'SoundEffects', 'Speech', 'Ambience', 'Interface')
 _UI_SCALES = (0, 100, 125, 150, 200) # the resolution's choices: the interface's scale, 0 the window's own
 
@@ -46,7 +57,7 @@ _profile = {
 	'player': {},
 	'clock': False, 'hours24': False,
 	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
-	'speakers': '', 'musicPath': '', 'voice': False,
+	'speakers': '', 'musicPath': '', 'voice': False, 'captureVolume': 67, 'playbackVolume': 67,
 	'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True,
 }
 
@@ -89,7 +100,7 @@ def _load():
 					_profile[parts[0]][int(parts[1])] = value == '1'
 				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
 					_profile[parts[0]] = value == '1'
-				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
+				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 					_profile[parts[0]] = int(value)
 				elif parts[0] in ('name', 'speakers', 'musicPath'):
 					_profile[parts[0]] = value
@@ -117,7 +128,7 @@ def _save():
 		lines.append('%s=%s' % (key, _profile[key]))
 	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
-	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
+	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 		lines.append('%s=%d' % (key, _profile[key]))
 	for v in _VOLUMES:
 		lines.append('volume.%s=%d' % (v, _profile['volume'][v]))
@@ -284,8 +295,44 @@ def _applyVolumes():
 		gains.append(g)
 	try:
 		oc4host.set_volumes(gains)
+		oc4host.set_mono(_profile['speakers'] == _SPEAKERS[0])
+		oc4host.set_music_folder(_profile['musicPath'])
 	except Exception:
 		pass
+
+
+_deviceCache = {}
+
+
+def _devices(recording):
+	"""The system's microphones or outputs, by name (asked once a showing of the screen)."""
+	if recording not in _deviceCache:
+		try:
+			_deviceCache[recording] = [n.decode('utf-8', 'replace') if isinstance(n, str) else n for n in oc4host.audio_devices(recording)]
+		except Exception:
+			_deviceCache[recording] = []
+	return _deviceCache[recording]
+
+
+def _deviceName(recording, i):
+	names = _devices(recording)
+	return names[int(i)] if 0 <= int(i) < len(names) else u''
+
+
+def folderChosen(path):
+	"""The folder the player chose in the system's dialog (Browse...): in the path box with Custom
+	Music Folder ticked (the game's own updateMusicPath), and kept: their music plays from there."""
+	if not path:
+		return
+	try:
+		import CvScreensInterface
+		CvScreensInterface.updateMusicPath((path.decode('utf-8', 'replace') if isinstance(path, str) else path,))
+	except Exception:
+		import traceback
+		traceback.print_exc()
+	_profile['musicPath'] = path
+	_save()
+	_applyVolumes()
 
 
 class _UserProfile(object):
@@ -383,23 +430,37 @@ class _UserProfile(object):
 	def getVolumeStops(self): return _VOLUME_STOPS
 	def recalculateAudioSettings(self): _applyVolumes()
 	def getMusicPath(self): return _profile['musicPath']
-	def setMusicPath(self, s): _profile['musicPath'] = str(s)
-	def musicPathDialogBox(self): pass
-	def getSpeakerConfig(self): return _profile['speakers']
-	def setSpeakerConfig(self, s): _profile['speakers'] = str(s)
-	def getSpeakerConfigFromList(self, i): return ''
-	def useVoice(self): return _profile['voice']
-	def setUseVoice(self, b): _profile['voice'] = bool(b)
-	def getNumCaptureDevices(self): return 0
-	def getNumPlaybackDevices(self): return 0
+	def setMusicPath(self, s): _profile['musicPath'] = str(s); _save(); _applyVolumes()
+	def musicPathDialogBox(self):
+		# (the system's folder dialog; the folder chosen comes back to folderChosen)
+		try:
+			import os
+			oc4host.choose_folder(_profile['musicPath'] or os.path.expanduser('~/Music'))
+		except Exception:
+			pass
+	def getSpeakerConfig(self): return _profile['speakers'] or _SPEAKERS_DEFAULT
+	def setSpeakerConfig(self, s):
+		if str(s) in _SPEAKERS:
+			_profile['speakers'] = str(s)
+			_save()
+			_applyVolumes()
+	def getSpeakerConfigFromList(self, i): return _SPEAKERS[int(i)] if 0 <= int(i) < len(_SPEAKERS) else ''
+	def useVoice(self): return False
+	def setUseVoice(self, b): pass
+	def getNumCaptureDevices(self): return len(_devices(True))
+	def getNumPlaybackDevices(self): return len(_devices(False))
 	def getCaptureDeviceIndex(self): return 0
 	def getPlaybackDeviceIndex(self): return 0
-	def getCaptureDeviceDesc(self, i): return ''
-	def getPlaybackDeviceDesc(self, i): return ''
-	def getCaptureVolume(self): return 0
-	def getPlaybackVolume(self): return 0
-	def getMaxCaptureVolume(self): return 0
-	def getMaxPlaybackVolume(self): return 0
+	def getCaptureDeviceDesc(self, i): return _deviceName(True, i)
+	def getPlaybackDeviceDesc(self, i): return _deviceName(False, i)
+	def setCaptureDevice(self, i): pass
+	def setPlaybackDevice(self, i): pass
+	def getCaptureVolume(self): return _profile['captureVolume']
+	def getPlaybackVolume(self): return _profile['playbackVolume']
+	def setCaptureVolume(self, i): _profile['captureVolume'] = max(0, min(100, int(i)))
+	def setPlaybackVolume(self, i): _profile['playbackVolume'] = max(0, min(100, int(i)))
+	def getMaxCaptureVolume(self): return 100
+	def getMaxPlaybackVolume(self): return 100
 
 	# the clock
 	def isClockOn(self): return _profile['clock']
@@ -461,6 +522,7 @@ class CyGTabCtrl(object):
 
 	def __init__(self, szName='', bStatic=False, bCloseButton=False):
 		self._title = _text(szName)
+		_deviceCache.clear() # (the system's sound devices asked again, as the screen is made)
 		self._nodes = {}   # id: node
 		self._byName = {}  # name: the last node so named (some names are used again in other forms)
 		self._tabs = []    # (form node, label)
@@ -670,7 +732,7 @@ def _screen():
 # 28 and the gap 3; a box's children are as wide as they need, and what is left goes to those that
 # expand (LAYOUT_SIZE_HEXPANDING) or, in a column, to its spacers (the Language row at the panel's
 # foot); a row with LAYOUT_HCENTER is centred (Restore Defaults and Exit).
-_ROW = {'label': 28, 'checkbox': 28, 'radio': 28, 'dropdown': 28, 'button': 31, 'edit': 26, 'hslider': 18, 'hsep': 10,
+_ROW = {'label': 28, 'checkbox': 28, 'radio': 28, 'dropdown': 28, 'button': 31, 'edit': 26, 'hslider': 28, 'hsep': 10,
 	'spacer': 8, 'image': 4, 'vsep': 0}
 _GAP = 3
 _PAD = 8
@@ -697,7 +759,7 @@ def _pad(n):
 
 
 def _hgrow(n):
-	return 'LAYOUT_SIZE_HEXPANDING' in n.flags or 'LAYOUT_SIZE_HPREFERREDEXPANDING' in n.flags
+	return 'LAYOUT_SIZE_HEXPANDING' in n.flags or 'LAYOUT_SIZE_HPREFERREDEXPANDING' in n.flags or 'LAYOUT_SIZE_HFIXEDEXPANDING' in n.flags
 
 
 def _vgrow(n):
@@ -717,6 +779,8 @@ def _natural(n):
 		return max([_width(i) for i in n.items] or [40]) + 36
 	if k in ('spacer', 'vsep'):
 		return 12
+	if k == 'hslider':
+		return 210 # (the original's voice volume sliders)
 	if k in ('vbox', 'scroll', 'panel'):
 		widths = [_natural(c) for c in n.children]
 		if None in widths:
@@ -735,7 +799,7 @@ def _height(n, w):
 	if k in _ROW:
 		return _ROW[k]
 	if k == 'vslider':
-		return 4 * (n.maximum - n.minimum + 1) + 4
+		return 92 # (the original's volume sliders' height)
 	if k == 'hbox':
 		start, widths = _shares(n, w)
 		return max([_height(c, cw) for c, cw in zip(n.children, widths)] or [0])
@@ -763,6 +827,18 @@ def _shares(n, w):
 			return 0, natural
 		return (extra / 2 if 'LAYOUT_HCENTER' in n.flags else 0), natural
 	fixed = dict((c.id, 12) for c in n.children if c.kind in ('vsep', 'spacer'))
+	if 'LAYOUT_SIZE_HPREFERREDEXPANDING' in n.flags:
+		# (a row at its preferred size: who knows their width keep it, the rest share what is left;
+		# the Audio tab's voice column, the speakers and music the rest)
+		for c, nat in zip(n.children, natural):
+			if nat is not None and c.kind not in ('vsep', 'spacer'):
+				fixed[c.id] = nat
+	if any(_hgrow(c) for c in n.children) or 'LAYOUT_SIZE_HFIXEDEXPANDING' in n.flags:
+		# (beside one that expands, a check box or a button is as wide as it needs: the Custom Music
+		# Folder row, its path box the rest)
+		for c, nat in zip(n.children, natural):
+			if c.kind in ('checkbox', 'button') and nat is not None:
+				fixed[c.id] = nat
 	if len(n.children) > 1:
 		for c in n.children:
 			if c.kind == 'label' and 'CF_LABEL_DEFAULTSIZE' in c.flags:
@@ -833,24 +909,17 @@ def _place(screen, n, x, y, w, h):
 		for i, item in enumerate(n.items):
 			screen.addPullDownString(name, item, i, i, i == int(n.value))
 	elif k in ('hslider', 'vslider'):
-		# (its stops, each a little button: the slider set to the one clicked)
-		stops = n.maximum - n.minimum + 1
-		for s in range(stops):
-			value = n.minimum + s
-			if k == 'hslider':
-				size = max(3, min(10, (w - 4) / max(1, stops) - 1))
-				bx, by, bw, bh = x + s * (size + 1), y + 2, size, 14
-				on = value <= int(n.value)
-			else:
-				bx, by, bw, bh = x + 8, y + 2 + s * 4, 40, 3
-				on = value >= int(n.value)
-			bname = 'OptSlider%d' % (n.id * 1000 + s)
-			screen.addCheckBoxGFC(bname, '', '', bx, by, bw, bh, general, -1, -1, '')
-			b = screen._s.get(bname)
-			if b is not None:
-				b.state = on
+		# (the theme's slider: its fill on the side its control flag names, CF_SLIDER_FILL_UP / _DOWN)
+		screen.addSlider(name, x, y, w, h, int(n.value), n.minimum, n.maximum, general, -1, -1, k == 'vslider')
+		screen.setSliderFill(name, 'down' if 'CF_SLIDER_FILL_DOWN' in n.flags else 'up' if 'CF_SLIDER_FILL_UP' in n.flags else '')
 	elif k == 'hsep':
 		screen.addPanel(name, u'', u'', True, False, x, y + 4, w, 2, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+	if n.name in _VOICE_CONTROLS:
+		# (voice chat: shown as the original's, not to be used)
+		for part in (name, name + 'L'):
+			w_ = screen._s.get(part)
+			if w_ is not None:
+				w_.enabled, w_.help = False, _VOICE_TIP
 
 
 def resized():
@@ -865,6 +934,13 @@ def relayout():
 		return
 	_state['dirty'] = False
 	ctrl = _state['ctrl']
+	if ctrl is not None:
+		# (what was typed into the edit boxes stays: they are made again)
+		for n in ctrl._nodes.values():
+			if n.kind == 'edit':
+				w_ = _screen()._s.get('OptW%d' % n.id)
+				if w_ is not None:
+					n.text = w_.text
 	oc4screens.reset(OPTIONS)
 	if ctrl is None or not ctrl._shown or not ctrl._tabs:
 		oc4screens.hide(OPTIONS)
@@ -943,13 +1019,6 @@ def handleInput(args):
 		ctrl._tab = ident
 		_schedule()
 		return 1
-	if function == 'OptSlider' and notify == 0:
-		n = ctrl._nodes.get(ident / 1000)
-		if n is not None:
-			n.value = n.minimum + ident % 1000
-			_call(n, (int(n.value), n.callback[2] if n.callback else n.name))
-			_schedule()
-		return 1
 	if function != 'OptW':
 		return 0
 	n = ctrl._nodes.get(ident)
@@ -965,6 +1034,10 @@ def handleInput(args):
 	elif n.kind == 'button' and notify == 0:
 		_call(n, n.callback[2] if n.callback else n.name)
 		_schedule()
+	elif n.kind in ('hslider', 'vslider') and notify == 18:
+		# (NOTIFY_SLIDER_NEWSTOP: the slider pressed or dragged to another stop; it shows it already)
+		n.value = int(data)
+		_call(n, (int(data), n.callback[2] if n.callback else n.name))
 	elif n.kind == 'dropdown' and notify == 11:
 		n.value = int(data)
 		_call(n, (int(data), n.callback[2] if n.callback else n.name))
