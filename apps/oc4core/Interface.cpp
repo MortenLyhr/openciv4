@@ -633,6 +633,8 @@ namespace oc4::host
 				round.alive[side] = r.getNumAlive(BattleUnitTypes(side));
 			}
 		}
+		for (int side = 0; side < BATTLE_UNIT_COUNT; ++side)
+			b.firstStrikes[side] = def.getFirstStrikes(BattleUnitTypes(side));
 		// (its length in the DLL's updates: the combat timer it set, as the mission time says at
 		// Utility::getSecsPerTurn's 1 second a turn)
 		b.slices = std::max(1, int(std::lround(def.getMissionTime() / 1.0f)));
@@ -641,8 +643,8 @@ namespace oc4::host
 		b.serial = ++g_battleSerial;
 		g_battles.push_back(std::move(b));
 		if (std::getenv("OC4_PLAY_LOG"))
-			std::printf("  battle %llu: %zu rounds, %d slices\n", static_cast<unsigned long long>(g_battleSerial), g_battles.back().rounds.size(),
-				g_battles.back().slices);
+			std::printf("  battle %llu: %zu rounds (%d ranged), %d slices, first strikes %d/%d\n", static_cast<unsigned long long>(g_battleSerial),
+				g_battles.back().rounds.size(), def.getNumRangedRounds(), g_battles.back().slices, g_battles.back().firstStrikes[0], g_battles.back().firstStrikes[1]);
 	}
 
 	std::vector<Entities::Battle> Entities::battles()

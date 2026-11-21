@@ -425,6 +425,7 @@ namespace oc4::host
 				int killed[2]{}, alive[2]{};
 			};
 			std::vector<Round> rounds;
+			int firstStrikes[2]{}; // attacker, defender: the first strikes it had (CvBattleDefinition; ranged units only)
 			int slices = 0; // the game updates it lasts (CvUnit::planBattle's turns)
 			int collateral = 0; // the other units on the defender's plot the attacker's collateral damage hit
 			// A unit that cannot defend gives itself up (MISSION_SURRENDER: a worker or a settler alone,

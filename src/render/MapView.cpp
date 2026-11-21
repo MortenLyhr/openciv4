@@ -2803,16 +2803,19 @@ float4 PSTerrain(PSIn i) : SV_Target
 					else if (const auto w = workSince.find(key); w == workSince.end() || w->second.first != u.work)
 						workSince[key] = { u.work, time };
 					inst.soundAt = { float(u.x) + 0.5f, float(u.y) + 0.5f, 0 };
-					// Fighting, both sides step up towards each other and meet near the plots' border, as
-					// in the original (Wine, close up: face to face across it); one giving itself up stays.
-					if (u.battle >= 0 && size_t(u.battle) < map.battles.size())
+					// Fighting, as the original shows it (Wine, close up): the defenders stand where they
+					// are; the attackers run up to them, each figure to the one across (to close to fight
+					// hand to hand, a little short of its plot), or, when every round is ranged (both
+					// shoot), half way; to one giving itself up, half way.
+					if (u.battle >= 0 && size_t(u.battle) < map.battles.size() && u.attacking)
 					{
 						const BattleView& b = map.battles[size_t(u.battle)];
 						Vec3 d{ float(b.defenderX - b.attackerX) * S(), float(b.defenderY - b.attackerY) * S(), 0 };
 						if (map.wrapX && std::abs(d.x) > worldW() / 2)
 							d.x -= std::copysign(worldW(), d.x);
-						if (const float len = length(d); len > 0 && (u.attacking || !b.surrender))
-							inst.step = d * ((u.attacking ? 0.45f : -0.3f) * S() / len);
+						const bool shooting = !b.rounds.empty() && std::all_of(b.rounds.begin(), b.rounds.end(), [](const BattleRoundView& r) { return r.ranged; });
+						if (const float len = length(d); len > 0)
+							inst.step = d * (b.surrender || shooting ? 0.45f : 1 - (1 - kBattleCloseIn) * S() / len);
 					}
 					if (!art.shadow.empty())
 						if ((inst.shadow = model(art.shadow, {})))
@@ -2925,6 +2928,21 @@ float4 PSTerrain(PSIn i) : SV_Target
 			float at = 0, step = 0;
 			bool dying = false;
 		};
+		// The battle's first rounds that are first strikes, one side's alone (CvUnit::planBattle: as
+		// many as the strikes one has more, or the other's figures killed in them by that many);
+		// the ranged rounds after them (both sides ranged) are both sides'.
+		static int firstStrikeRounds(const BattleView& b)
+		{
+			const int more = std::abs(b.firstStrikes[0] - b.firstStrikes[1]);
+			if (more == 0)
+				return 0;
+			const int struck = b.firstStrikes[0] > b.firstStrikes[1] ? 1 : 0;
+			int killed = 0, ranged = 0;
+			for (const BattleRoundView& r : b.rounds)
+				if (r.ranged)
+					killed += r.killed[struck], ++ranged;
+			return std::min(std::max(more, killed / more), ranged);
+		}
 		BattlePose battlePose(const Instance& inst) const
 		{
 			BattlePose p;
@@ -2961,7 +2979,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 					p.clip = &*lm.surrender, p.at = std::min(t, lm.surrender->duration());
 				return p;
 			}
-			p.step = std::clamp(t / 0.6f, 0.0f, 1.0f) * std::clamp((end - t) / 0.6f, 0.0f, 1.0f);
+			// (the attackers run up while it is set up; they stay to its end, when the survivors stand
+			// in their places again, as the original's do)
+			p.step = std::clamp(t / kBattleRunUp, 0.0f, 1.0f);
 			const LoadedModel& lm = *inst.model;
 			const int side = inst.attacking ? 0 : 1;
 			const float roundsAt = float(kBattleSetupSlices) * slice, roundLength = float(kBattleRoundSlices) * slice;
@@ -3006,11 +3026,18 @@ float4 PSTerrain(PSIn i) : SV_Target
 					p.gone = true;
 					return p;
 				}
+			// Over: those alive stand in their places again at once (the original's do).
+			if (t >= end)
+				return BattlePose{};
 			// A round on: it strikes (the figures a little one after another), or now and then,
-			// in a melee round, it is hit and staggers.
+			// in a melee round, it is hit and staggers. The ranged rounds of first strikes are the
+			// striker's alone: the other stands and takes them (the original: a crossbowman's or a
+			// longbowman's volleys, the axemen not answering).
 			if (t >= roundsAt)
 				if (const int r = int((t - roundsAt) / roundLength); r < int(b.rounds.size()))
 				{
+					if (r < firstStrikeRounds(b) && b.firstStrikes[side] < b.firstStrikes[1 - side])
+						return p;
 					const bool ranged = b.rounds[size_t(r)].ranged || inst.ranged;
 					const anim::Sequence* s = pick(lm.strike, r % 3, ranged);
 					if (!ranged && unitFloat(hash(inst.figureIndex * 7 + side, r, int(b.serial & 0xFFFF))) < 0.35f)
