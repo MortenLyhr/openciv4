@@ -75,8 +75,15 @@ def start(folder):
 
 
 def profileLines(folder):
+	"""profile.ini's lines and the loaded profile's (Profiles/<UserProfile>.ini, fix/options-other)."""
 	with open(os.path.join(folder, 'profile.ini')) as f:
-		return set(f.read().split())
+		lines = set(f.read().split())
+	name = [l.split('=', 1)[1] for l in lines if l.startswith('UserProfile=')]
+	own = os.path.join(folder, 'Profiles', (name[0] if name else 'openciv4') + '.ini')
+	if os.path.isfile(own):
+		with open(own) as f:
+			lines |= set(f.read().split())
+	return lines
 
 
 def main():
@@ -109,13 +116,14 @@ def main():
 		host.control(1)
 		host.control(0)
 		host.toggles = [False, False, False, True] # (the host's own start, say a new game)
-		options._UserProfile().readFromFile('')
+		options._UserProfile().readFromFile('openciv4')
 		check(host.toggles == [False, True, True, False], "readFromFile gives the host the profile's toggles (%s)" % host.toggles)
 
 		# The other options are kept beside them.
 		check({'scores=0', 'edgeScroll=1'} <= profileLines(folder), "the rest of the profile is kept")
 
-		# A profile written before this change (no toggle keys): the defaults.
+		# A profile written before this change (no toggle keys, no profiles folder): the defaults.
+		shutil.rmtree(os.path.join(folder, 'Profiles'), ignore_errors=True)
 		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
 			f.write('name=openciv4\nclock=1\n')
 		host, options = start(folder)

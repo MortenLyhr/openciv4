@@ -479,6 +479,8 @@ namespace oc4::host
 		// While one is on the game is updated once a battle slice, as its animation goes:
 		// true while it is not yet time for the next update (false: go, counted).
 		static bool battleWait();
+		// OpenCiv4's option Quick enemy moves (the main loop's): the others' walks in half the time.
+		static void setQuickShownMoves(bool on);
 
 	private:
 		const Interface& m_selection;

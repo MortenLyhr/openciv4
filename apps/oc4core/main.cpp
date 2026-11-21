@@ -1689,6 +1689,7 @@ namespace
 				{
 					window.setBusy(true);
 					const auto slice = utility.quickEnemyMoves() ? kQuickShownMoveSlice : kShownMoveSlice;
+					host::Entities::setQuickShownMoves(utility.quickEnemyMoves());
 					worker.start([&session, &game, &nextShownMoveUpdate, slice] {
 						const auto until = Clock::now() + std::chrono::milliseconds(100);
 						do
