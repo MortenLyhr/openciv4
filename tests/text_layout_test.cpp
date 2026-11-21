@@ -1,5 +1,6 @@
 // The text layout against DirectWrite's own (the layout the overlay drew with before): widths,
-// heights and the lines' baselines of the game's kinds of text.
+// and, from its GDI-compatible layout (whole pixels, as Windows gives them), heights and the
+// lines' baselines of the game's kinds of text.
 
 #include "render/TextLayout.h"
 
@@ -39,18 +40,29 @@ namespace
 		ComPtr<IDWriteTextFormat> format;
 		factory->CreateTextFormat(c.family.c_str(), nullptr, c.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
 			DWRITE_FONT_STRETCH_NORMAL, c.size, L"", &format);
-		ComPtr<IDWriteTextLayout> layout;
-		factory->CreateTextLayout(c.text.c_str(), UINT32(c.text.size()), format.Get(), c.maxWidth, 4096, &layout);
-		if (c.length)
-		{
-			const DWRITE_TEXT_RANGE range{ UINT32(c.start), UINT32(c.length) };
-			layout->SetFontSize(c.otherSize, range);
-			layout->SetFontWeight(c.otherBold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, range);
-			layout->SetFontStyle(c.otherItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL, range);
-		}
-		DWRITE_TEXT_METRICS metrics{};
-		layout->GetMetrics(&metrics);
-		Reference r{ metrics.widthIncludingTrailingWhitespace, metrics.height };
+		// (the widths from DirectWrite's own layout; the lines' heights and baselines from its
+		// GDI-compatible one, in whole pixels as Windows' text metrics give them to the original's
+		// interface: Sylfaen 16 px is 17 + 5 = 22 a line, as measured in the original)
+		const auto make = [&](bool gdi) {
+			ComPtr<IDWriteTextLayout> layout;
+			if (gdi)
+				factory->CreateGdiCompatibleTextLayout(c.text.c_str(), UINT32(c.text.size()), format.Get(), c.maxWidth, 4096, 1.0f, nullptr, FALSE, &layout);
+			else
+				factory->CreateTextLayout(c.text.c_str(), UINT32(c.text.size()), format.Get(), c.maxWidth, 4096, &layout);
+			if (c.length)
+			{
+				const DWRITE_TEXT_RANGE range{ UINT32(c.start), UINT32(c.length) };
+				layout->SetFontSize(c.otherSize, range);
+				layout->SetFontWeight(c.otherBold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, range);
+				layout->SetFontStyle(c.otherItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL, range);
+			}
+			return layout;
+		};
+		const ComPtr<IDWriteTextLayout> natural = make(false), layout = make(true);
+		DWRITE_TEXT_METRICS metrics{}, lined{};
+		natural->GetMetrics(&metrics);
+		layout->GetMetrics(&lined);
+		Reference r{ metrics.widthIncludingTrailingWhitespace, lined.height };
 		UINT32 count = 0;
 		layout->GetLineMetrics(nullptr, 0, &count);
 		std::vector<DWRITE_LINE_METRICS> lines(count);
