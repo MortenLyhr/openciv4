@@ -791,13 +791,16 @@ namespace
 		// them); Esc leaves the interface mode, the city screen or the screen on top.
 		// The action a key is the hotkey of that can be done now (the highest priority of them), -1
 		// none; only the screens' (the advisors, the Civilopedia) when asked.
-		const auto hotkeyAction = [&](const render::MapWindow::KeyPress& k, int code, bool screensOnly) {
+		const auto hotkeyAction = [&](const render::MapWindow::KeyPress& k, int code, bool screensOnly, bool screenHolds = false) {
 			int best = -1, bestPriority = 0;
 			utility.setModifierKeys(k.shift, k.ctrl, k.alt);
 			for (int i = 0; code >= 0 && i < GC.getNumActionInfos(); ++i)
 			{
 				const CvActionInfo& a = GC.getActionInfo(i);
 				if (screensOnly && !screenControl(a.getControlType()))
+					continue;
+				// (under a screen that holds the input: not the units' orders, nor selecting, cycling or ending the turn)
+				if (screenHolds && a.getControlType() <= CONTROL_AUTOMOVES)
 					continue;
 				const bool first = a.getHotKeyVal() == code && a.isShiftDown() == k.shift && a.isCtrlDown() == k.ctrl && a.isAltDown() == k.alt;
 				const bool second = a.getHotKeyValAlt() == code && a.isShiftDownAlt() == k.shift && a.isCtrlDownAlt() == k.ctrl && a.isAltDownAlt() == k.alt;
@@ -839,6 +842,15 @@ namespace
 					ui.addPopup(new CvPopupInfo(BUTTONPOPUP_MAIN_MENU), game.getActivePlayer(), true, false);
 				return;
 			}
+			// (a screen that holds the input, as the original's: Enter closes it; the map's and units' keys do nothing)
+			const bool screenHolds = screens.holdsInput();
+			if (screenHolds && k.key == render::key::Return && !k.shift && !k.ctrl && !k.alt)
+			{
+				screens.escape();
+				if (log)
+					std::printf("  key %u: closes the screen up\n", k.key);
+				return;
+			}
 			const int code = gameKey(k.key);
 			// The scripts see it first (BUG's shortcuts: Alt+M a reminder, ...); one they take goes no further.
 			if (code >= 0)
@@ -854,7 +866,7 @@ namespace
 			}
 			// The numpad's digits move the selected units a plot that way, as the original's do (its
 			// engine's own keys, no action's hotkey; the gamepad's stick flicked sends them, PadMap.h).
-			if (!k.shift && !k.ctrl && !k.alt && k.key > render::key::Numpad0 && k.key <= render::key::Numpad9 && k.key != render::key::Numpad0 + 5)
+			if (!screenHolds && !k.shift && !k.ctrl && !k.alt && k.key > render::key::Numpad0 && k.key <= render::key::Numpad9 && k.key != render::key::Numpad0 + 5)
 				if (CvUnit* unit = ui.getHeadSelectedUnit())
 				{
 					const int d = int(k.key - render::key::Numpad0) - 1;
@@ -865,7 +877,7 @@ namespace
 					}
 					return;
 				}
-			const int best = hotkeyAction(k, code, false);
+			const int best = hotkeyAction(k, code, false, screenHolds);
 			if (log)
 				std::printf("  key %u%s%s%s: action %d %s\n", k.key, k.shift ? "+shift" : "", k.ctrl ? "+ctrl" : "", k.alt ? "+alt" : "", best,
 					best >= 0 ? host::gameText(GC.getActionInfo(best).getDescription()).c_str() : "(none)");
@@ -1204,6 +1216,9 @@ namespace
 				changed = true;
 			}
 			auto clicks = window.takeClicks();
+			// (a screen of its own up keeps the map's clicks: one beside it goes nowhere, as the original's)
+			if (!clicks.empty() && screens.holdsInput())
+				clicks.clear();
 			// (a scripted game answers what it does not expect with the popup's first button)
 			if (!script.empty() && script.front() != '#' && script.front() != '\'' && script.front() != '%' && ui.shownPopup() && Clock::now() - typed > std::chrono::milliseconds(1500))
 				script.insert(0, "#0");
