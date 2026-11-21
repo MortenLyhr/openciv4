@@ -858,7 +858,14 @@ namespace
 						return;
 					}
 					const fs::path folder = documentsFolder() / L"My Games" / L"Beyond the Sword" / L"Saves" / L"single" / L"auto";
-					save(folder, folder / host::autoSaveName(initial, game.getGameTurnYear()));
+					// (the year through the scripts' CyGame: the game core does not export getGameTurnYear)
+					int year;
+					{
+						namespace py = pybind11;
+						py::gil_scoped_acquire gil;
+						year = py::module_::import("CvPythonExtensions").attr("CyGame")().attr("getGameTurnYear")().cast<int>();
+					}
+					save(folder, folder / host::autoSaveName(initial, year));
 					for (const fs::path& old : host::autoSavesBeyond(folder, how.kept))
 						fs::remove(old);
 				}
