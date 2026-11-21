@@ -1517,10 +1517,10 @@ namespace oc4::render
 						const bool white = it.texture.starts_with("opaque:");
 						if (const ButtonArt::Icon* cloth = art.flag(white ? it.texture.substr(7) : it.texture, it.color, it.flagSecondary, white))
 						{
-							const std::span<const uint8_t> bytes(cloth->bgra);
-							m.decal = renderer->createTexture(cloth->width, cloth->height, 1, 1, TextureFormat::BGRA8, std::span(&bytes, 1));
+							m.decal = renderer->createMipmapped(cloth->width, cloth->height, cloth->bgra);
 						}
 						m.view = std::make_unique<ModelView>(*renderer, resolver, it.flagNif, it.flagKfm, 0.0f, 0.0f, 1.0f, true, std::string(), m.decal.get());
+						m.view->frameAsFlag();
 					}
 					m.used = true;
 					continue;

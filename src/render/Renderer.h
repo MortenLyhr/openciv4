@@ -239,9 +239,11 @@ float distanceFog(float3 p)
 		// sees them: viewProj is its view * projection (DirectXMath's row vectors, p * M), at eye;
 		// no ground, no fog. endView draws its blended items and goes back to the frame's own
 		// target and camera.
-		// (clearAlpha 0: on nothing, what is under the picture shows through)
+		// (clearAlpha 0: on nothing, what is under the picture shows through; alphaTwice: its
+		// blended items cover it as the original's widgets' pictures do, their alpha counted twice,
+		// colour times alpha cubed over what is under it times 1 - alpha squared: a flag's fringe)
 		void beginView(OffscreenTarget& target, uint32_t width, uint32_t height, std::span<const float, 16> viewProj, Vec3 eye, const ViewLight& light,
-			Vec3 clearColor, float clearAlpha = 1.0f);
+			Vec3 clearColor, float clearAlpha = 1.0f, bool alphaTwice = false);
 		void endView();
 		// In a view: what was drawn so far (its blended items too) becomes the backdrop of what
 		// comes next, which nothing of it hides (a leader in front of the scene behind him).
@@ -269,6 +271,9 @@ float distanceFog(float3 p)
 		// Textures: subresources layer by layer, each layer's mips from the largest, rows tightly packed.
 		std::shared_ptr<GpuImage> createTexture(uint32_t width, uint32_t height, uint32_t layers, uint32_t mips, TextureFormat format,
 			std::span<const std::span<const uint8_t>> subresources);
+		// A BGRA picture made here (a flag's composed cloth) with its mips, each the mean of four
+		// texels of the one above, as a DDS file has them.
+		std::shared_ptr<GpuImage> createMipmapped(uint32_t width, uint32_t height, std::span<const uint8_t> bgra);
 		void updateTexture(GpuImage& image, uint32_t layer, uint32_t mip, uint32_t x, uint32_t y, uint32_t width, uint32_t height, const void* pixels);
 		std::shared_ptr<GpuBuffer> createBuffer(SDL_GPUBufferUsageFlags usage, const void* data, uint32_t size);
 
@@ -381,6 +386,7 @@ float distanceFog(float3 p)
 		bool m_fixedLit = false;      // setFixedLights: m_fixedLights hold the lights
 		float m_fixedLights[8 * 4 * 2 + 4]{};
 		bool m_viewOnNothing = false; // ... a view on nothing: what is not blended covers it (alpha 1)
+		bool m_viewAlphaTwice = false; // ... its blended items' alpha counted twice (beginView)
 		bool m_unitLight = false;     // setUnitLight
 		Vec3 m_viewEye;
 

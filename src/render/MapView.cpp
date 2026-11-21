@@ -1505,8 +1505,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				findWater(*file, lm, *loc);
 				if (flag)
 				{
-					const std::span<const uint8_t> bytes(flag->bgra);
-					lm.flagDecal = renderer.createTexture(flag->width, flag->height, 1, 1, TextureFormat::BGRA8, std::span(&bytes, 1));
+					lm.flagDecal = renderer.createMipmapped(flag->width, flag->height, flag->bgra);
 				}
 				lm.gpu = renderer.upload(lm.model, assets, *loc, lm.flagDecal.get());
 				for (const auto& missing : lm.gpu->stats().missing)

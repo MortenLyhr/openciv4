@@ -73,7 +73,7 @@ cbuffer Object : register(b1, UNIFORMS)
 	float4 world[3];    // rigid items: 3x4 rows, p' = (dot(row0,p), dot(row1,p), dot(row2,p))
 	float4 baseUv[2];   // 2x3 rows: uv' = (dot(row0.xyz, (u,v,1)), dot(row1.xyz, (u,v,1)))
 	float4 decalUv[2];
-	uint flags;         // bit0 base map, bit1 alpha test, bits2-3 vertex color mode, bit4 lit, bit5 decal, bit6 team colour base, bit7 skinned, bit8 on the ground, bit11 a leader's shading, bit12 flag, bit14 the units' light
+	uint flags;         // bit0 base map, bit1 alpha test, bits2-3 vertex color mode, bit4 lit, bit5 decal, bit6 team colour base, bit7 skinned, bit8 on the ground, bit11 a leader's shading, bit12 flag, bit13 alpha twice, bit14 the units' light
 	uint alphaFunc;
 	float alphaRef;
 	uint treesCut;      // a forest piece (its vertices' red: the tree, 1-based): trees 1..32 by bit not drawn
@@ -331,6 +331,8 @@ float4 PSMain(PSIn i, bool front : SV_IsFrontFace) : SV_Target
 	c.rgb *= fogAt(i.world.xy) * distanceFog(i.world);
 	if (flags & 1024)
 		c.a = 1; // (opaque on a picture on nothing: its texture's alpha is no coverage)
+	if (flags & 8192)
+		c = float4(c.rgb * c.a, c.a * c.a); // (blended by its alpha squared: colour times alpha cubed)
 	return c;
 }
 )hlsl";
@@ -920,6 +922,33 @@ float4 PSOverlay(Out p) : SV_Target
 		SDL_ReleaseGPUTransferBuffer(m_device, tb);
 	}
 
+	std::shared_ptr<GpuImage> Renderer::createMipmapped(uint32_t width, uint32_t height, std::span<const uint8_t> bgra)
+	{
+		if (width == 0 || height == 0 || bgra.size() < size_t(width) * height * 4)
+			return nullptr;
+		std::vector<std::vector<uint8_t>> levels{ std::vector<uint8_t>(bgra.begin(), bgra.begin() + ptrdiff_t(width) * height * 4) };
+		for (uint32_t w = width, h = height; w > 1 || h > 1;)
+		{
+			const uint32_t nw = std::max(w / 2, 1u), nh = std::max(h / 2, 1u);
+			const std::vector<uint8_t>& above = levels.back();
+			std::vector<uint8_t> next(size_t(nw) * nh * 4);
+			for (uint32_t y = 0; y < nh; ++y)
+				for (uint32_t x = 0; x < nw; ++x)
+					for (uint32_t c = 0; c < 4; ++c)
+					{
+						const uint32_t x0 = std::min(x * 2, w - 1), x1 = std::min(x * 2 + 1, w - 1), y0 = std::min(y * 2, h - 1), y1 = std::min(y * 2 + 1, h - 1);
+						const auto at = [&](uint32_t px, uint32_t py) { return unsigned(above[(size_t(py) * w + px) * 4 + c]); };
+						next[(size_t(y) * nw + x) * 4 + c] = uint8_t((at(x0, y0) + at(x1, y0) + at(x0, y1) + at(x1, y1) + 2) / 4);
+					}
+			levels.push_back(std::move(next));
+			w = nw, h = nh;
+		}
+		std::vector<std::span<const uint8_t>> spans;
+		for (const auto& l : levels)
+			spans.emplace_back(l);
+		return createTexture(width, height, 1, uint32_t(levels.size()), TextureFormat::BGRA8, spans);
+	}
+
 	std::shared_ptr<GpuImage> Renderer::createTexture(uint32_t width, uint32_t height, uint32_t layers, uint32_t mips, TextureFormat format,
 		std::span<const std::span<const uint8_t>> subresources)
 	{
@@ -1138,9 +1167,10 @@ float4 PSOverlay(Out p) : SV_Target
 		oc.emissive = clothFlag ? XMFLOAT4{ 1, 1, 1, 1 } : XMFLOAT4{ m.emissive.r, m.emissive.g, m.emissive.b, 1 };
 		oc.teamColor = { teamColor.x, teamColor.y, teamColor.z, 1 };
 		writeRows(mesh.node >= 0 && size_t(mesh.node) < world.size() ? world[size_t(mesh.node)] : Affine{}, oc.world);
+		const bool alphaTwice = m_inView && m_viewAlphaTwice && m.alphaBlend && m.srcBlend == scene::Blend::SrcAlpha && m.dstBlend == scene::Blend::InvSrcAlpha;
 		oc.flags = (mesh.texture ? 1u : 0u) | (m.alphaTest ? 2u : 0u) | (clothFlag ? 0u : (m.vertexColorMode & 3u) << 2) | (m.lightingMode && !clothFlag ? 16u : 0u) |
 			(mesh.decal ? 32u : 0u) | (m.baseIsTeamColor ? 64u : 0u) | (mesh.skinned ? 128u : 0u) | (onGround ? 256u : 0u) |
-			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) | (unitLight ? 16384u : 0u) | (clothFlag ? 4096u : 0u) |
+			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) | (unitLight ? 16384u : 0u) | (clothFlag ? 4096u : 0u) | (alphaTwice ? 8192u : 0u) |
 			(m_fixedLit && !mesh.leader[0] ? 32768u : 0u);
 		oc.alphaFunc = static_cast<uint32_t>(m.alphaFunc);
 		oc.alphaRef = m.alphaRef;
@@ -1352,7 +1382,7 @@ float4 PSOverlay(Out p) : SV_Target
 	}
 
 	void Renderer::beginView(OffscreenTarget& t, uint32_t width, uint32_t height, std::span<const float, 16> viewProj, Vec3 eye, const ViewLight& light,
-		Vec3 clearColor, float clearAlpha)
+		Vec3 clearColor, float clearAlpha, bool alphaTwice)
 	{
 		width = std::max(width, 1u);
 		height = std::max(height, 1u);
@@ -1389,6 +1419,7 @@ float4 PSOverlay(Out p) : SV_Target
 		m_deferredMaterials.clear();
 		m_particleDraws.clear();
 		m_viewOnNothing = clearAlpha < 1;
+		m_viewAlphaTwice = alphaTwice;
 		m_target = { t.color->texture, t.depth->texture, width, height };
 		m_clearColor = m_clearDepth = true;
 		m_clear[0] = clearColor.x * clearAlpha, m_clear[1] = clearColor.y * clearAlpha, m_clear[2] = clearColor.z * clearAlpha, m_clear[3] = clearAlpha;
