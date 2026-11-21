@@ -295,13 +295,21 @@ namespace oc4::host
 	{
 		if (bSound && (bClear || m_selection.getLength() == 0)) // (once for a group, inserted unit by unit)
 			unitSound(pUnit, false);
+		bool changed = bClear && m_selection.getLength() > 0;
 		if (bClear)
 			m_selection.clear();
 		if (!pUnit)
+		{
+			if (changed)
+				leaveInterfaceMode();
 			return;
+		}
 		const auto insert = [&](CvUnit* u) {
 			if (!selected(u))
+			{
 				m_selection.insertAtEnd(u->getIDInfo());
+				changed = true;
+			}
 			else if (bToggle)
 				removeFromSelectionList(u);
 		};
@@ -316,6 +324,8 @@ namespace oc4::host
 			insert(pUnit);
 		m_lastSelected = pUnit;
 		selectionChanged();
+		if (changed)
+			leaveInterfaceMode();
 	}
 
 	// The game decides: a unit of another group brings its whole group, alt and ctrl the units on the plot that can still move.
@@ -333,6 +343,8 @@ namespace oc4::host
 
 	void Interface::selectAll(CvPlot* pPlot)
 	{
+		if (m_selection.getLength() > 0)
+			leaveInterfaceMode();
 		m_selection.clear();
 		for (int i = 0; pPlot && i < pPlot->getNumUnits(); ++i)
 			if (CvUnit* u = pPlot->getUnitByIndex(i); u && u->getOwner() == GC.getGame().getActivePlayer())
@@ -346,6 +358,7 @@ namespace oc4::host
 			{
 				m_selection.deleteNode(n);
 				selectionChanged();
+				leaveInterfaceMode();
 				return true;
 			}
 		return false;
@@ -696,6 +709,7 @@ namespace oc4::host
 		m_cities.clear();
 		if (pNewValue)
 		{
+			leaveInterfaceMode(); // (as the original's: a city selected ends Go To)
 			m_cities.insertAtEnd(pNewValue->getIDInfo());
 			m_cityScreen = true;
 			lookAtX = pNewValue->getX();
