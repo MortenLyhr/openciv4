@@ -733,7 +733,7 @@ if _walls:
 			m_utility.gameInterface().makeInterfaceDirty();
 			m_utility.gameInterface().techSplash = true;
 			// (the profile's field of view, CivilizationIV.ini's FIELD_OF_VIEW, over GlobalDefines.xml's)
-			py::module_::import("oc4options").attr("applyFieldOfView")(); // (its own errors its own)
+			py::module_::import("oc4options").attr("gameStarted")(); // (its own errors its own)
 			m_active = true;
 			m_laidOut = m_seenSize = { width, height };
 		}

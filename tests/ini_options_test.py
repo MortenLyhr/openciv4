@@ -25,7 +25,9 @@ def start(folder):
 	context = sys.modules['CvPythonExtensions'].CyGlobalContext
 	context.getDefineFLOAT = lambda self, name: defines.get(name, 0.0)
 	context.setDefineFLOAT = lambda self, name, value: defines.__setitem__(name, value)
-	options._applyIniOptions()
+	options._applyIniOptions() # (as at the program's start, the host's stand-in in place now)
+	check(host.ini is not None and defines['FIELD_OF_VIEW'] == 42.0, "before a game: the host has them, the defines untouched")
+	options.gameStarted()
 	return host, options, defines
 
 
