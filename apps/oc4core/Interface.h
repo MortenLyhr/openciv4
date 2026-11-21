@@ -406,6 +406,11 @@ namespace oc4::host
 		// The mission a unit's entity is told it does (fortify, sleep, ..., idle): how the
 		// original engine knows which animation the unit plays.
 		void NotifyEntity(CvUnitEntity* pEntity, MissionTypes eMission) override;
+		// The siege tower an attacker on a city with walls shows while it fights (CvUnit::setCombatUnit);
+		// planBattle gives a battle with one longer.
+		void SetSiegeTower(CvUnitEntity* pEntity, bool show) override;
+		bool GetSiegeTower(CvUnitEntity* pEntity) override;
+		static bool siegeTower(const CvUnit& unit); // (any thread)
 
 		// Whether a unit rests (fortified, asleep, on sentry, healing): told so last and
 		// still waiting; one never told (in a loaded game) when it is waiting.

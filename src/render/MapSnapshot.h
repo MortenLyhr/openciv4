@@ -156,6 +156,10 @@ namespace oc4::render
 		int direction = 4; // DirectionTypes the unit faces (south)
 		std::vector<MoveStep> moveSteps; // the accepted move order's plots, in order
 		std::vector<int> models; // one per figure of the formation, into MapSnapshot::models
+		// More figures, into MapSnapshot::models (none: -1): the great general leading it (its era's
+		// warlord: beside the formation, it strikes with it and falls with its last), and, an
+		// attacker the game core gave a siege tower (walls, a city attack bonus), the tower before it.
+		int leader = -1, siegeTower = -1;
 		int count = 1;           // units on the plot
 		float health = 1;
 		std::string button; // the shown unit's button art (the unit layer's icons)

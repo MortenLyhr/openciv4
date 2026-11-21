@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <map>
 #include <mutex>
+#include <set>
 
 #include <pybind11/pybind11.h>
 namespace py = pybind11;
@@ -481,6 +482,35 @@ namespace oc4::host
 	}
 
 	CvPlot* Interface::getMouseOverPlot() { return mouseX >= 0 ? GC.getMap().plot(mouseX, mouseY) : nullptr; }
+
+	namespace
+	{
+		std::mutex g_siegeMutex;
+		std::set<std::pair<int, int>> g_siegeTowers; // owner, unit id
+	}
+
+	void Entities::SetSiegeTower(CvUnitEntity* pEntity, bool show)
+	{
+		if (!pEntity)
+			return;
+		const CvUnit& unit = *reinterpret_cast<const CvUnit*>(pEntity);
+		std::lock_guard lock(g_siegeMutex);
+		if (show)
+			g_siegeTowers.insert({ unit.getOwner(), unit.getID() });
+		else
+			g_siegeTowers.erase({ unit.getOwner(), unit.getID() });
+	}
+
+	bool Entities::GetSiegeTower(CvUnitEntity* pEntity)
+	{
+		return pEntity && siegeTower(*reinterpret_cast<const CvUnit*>(pEntity));
+	}
+
+	bool Entities::siegeTower(const CvUnit& unit)
+	{
+		std::lock_guard lock(g_siegeMutex);
+		return g_siegeTowers.contains({ unit.getOwner(), unit.getID() });
+	}
 
 	void Entities::NotifyEntity(CvUnitEntity* pEntity, MissionTypes eMission)
 	{

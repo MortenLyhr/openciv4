@@ -500,6 +500,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 			int battle = -1;
 			bool attacking = false;
 			int figureIndex = 0;
+			int role = 0; // 0 a figure of the formation, 1 its great general, 2 its siege tower
 			Vec3 step;
 			Vec3 soundAt; // where its sounds come from (plot units)
 			int work = -1;       // at work: UnitView::work
@@ -2745,16 +2746,27 @@ float4 PSTerrain(PSIn i) : SV_Target
 				const int columns = int(std::ceil(std::sqrt(double(n))));
 				const int rows = int((n + size_t(columns) - 1) / size_t(std::max(columns, 1)));
 				const float spacing = 0.12f * S();
-				for (size_t i = 0; i < n; ++i)
+				// (the formation's figures, then its great general and its siege tower)
+				std::vector<std::pair<int, int>> figures; // model, role
+				for (const int m : u.models)
+					figures.push_back({ m, 0 });
+				if (u.leader >= 0)
+					figures.push_back({ u.leader, 1 });
+				if (u.siegeTower >= 0)
+					figures.push_back({ u.siegeTower, 2 });
+				for (size_t i = 0; i < figures.size(); ++i)
 				{
-					if (u.models[i] < 0 || size_t(u.models[i]) >= map.models.size())
+					const auto [modelIndex, role] = figures[i];
+					if (modelIndex < 0 || size_t(modelIndex) >= map.models.size())
 						continue;
-					const ModelArt& art = map.models[size_t(u.models[i])];
+					const ModelArt& art = map.models[size_t(modelIndex)];
 					LoadedModel* lm = model(art.nif, art.kfm);
 					if (!lm)
 						continue;
-					const float ox = (float(int(i) % columns) - float(columns - 1) / 2) * spacing;
-					const float oy = (float(int(i) / columns) - float(rows - 1) / 2) * spacing;
+					// (the general beside the formation, on its right; the tower ahead of it, to the left)
+					const float ox = role == 1 ? (float(columns) / 2 + 0.6f) * spacing : role == 2 ? -0.25f * S()
+																								: (float(int(i) % columns) - float(columns - 1) / 2) * spacing;
+					const float oy = role ? 0.0f : (float(int(i) / columns) - float(rows - 1) / 2) * spacing;
 					const float c = std::cos(yaw), s = std::sin(yaw);
 					Instance inst;
 					inst.model = lm;
@@ -2773,7 +2785,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 					inst.unit = key;
 					inst.resting = u.resting;
 					inst.ranged = art.ranged;
-					inst.battle = u.battle, inst.attacking = u.attacking, inst.figureIndex = int(i);
+					// (the general fights as the first figure: it falls with the last)
+					inst.battle = u.battle, inst.attacking = u.attacking, inst.figureIndex = role ? 0 : int(i), inst.role = role;
 					inst.work = u.work;
 					inst.foundAt = u.founded >= 0 ? time - u.founded : -1;
 					// (as hurt as the unit: its model's states share the damage, the last the worst)
@@ -2807,7 +2820,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					// are; the attackers run up to them, each figure to the one across (to close to fight
 					// hand to hand, a little short of its plot), or, when every round is ranged (both
 					// shoot), half way; to one giving itself up, half way.
-					if (u.battle >= 0 && size_t(u.battle) < map.battles.size() && u.attacking)
+					if (u.battle >= 0 && size_t(u.battle) < map.battles.size() && u.attacking && role != 1)
 					{
 						const BattleView& b = map.battles[size_t(u.battle)];
 						Vec3 d{ float(b.defenderX - b.attackerX) * S(), float(b.defenderY - b.attackerY) * S(), 0 };
@@ -2815,7 +2828,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 							d.x -= std::copysign(worldW(), d.x);
 						const bool shooting = !b.rounds.empty() && std::all_of(b.rounds.begin(), b.rounds.end(), [](const BattleRoundView& r) { return r.ranged; });
 						if (const float len = length(d); len > 0)
-							inst.step = d * (b.surrender || shooting ? 0.45f : 1 - (1 - kBattleCloseIn) * S() / len);
+							inst.step = d * (role == 2 ? 0.5f : b.surrender || shooting ? 0.45f : 1 - (1 - kBattleCloseIn) * S() / len);
 					}
 					if (!art.shadow.empty())
 						if ((inst.shadow = model(art.shadow, {})))
@@ -2982,6 +2995,12 @@ float4 PSTerrain(PSIn i) : SV_Target
 			// (the attackers run up while it is set up; they stay to its end, when the survivors stand
 			// in their places again, as the original's do)
 			p.step = std::clamp(t / kBattleRunUp, 0.0f, 1.0f);
+			// (the siege tower: rolled up with them, it stands there to the end)
+			if (inst.role == 2)
+			{
+				p.gone = t >= end;
+				return p;
+			}
 			const LoadedModel& lm = *inst.model;
 			const int side = inst.attacking ? 0 : 1;
 			const float roundsAt = float(kBattleSetupSlices) * slice, roundLength = float(kBattleRoundSlices) * slice;
@@ -3496,7 +3515,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 				float yaw = inst.yaw;
 				// Fighting: the attacker steps up to the defender; the dead are gone.
 				const BattlePose battle = inst.figure ? battlePose(inst) : BattlePose{};
-				if (battle.gone)
+				if (battle.gone || (inst.role == 2 && !battle.fighting))
 					continue;
 				// (a settler founding a city: until its founding is done; without one, gone)
 				if (inst.foundAt >= 0 && (!inst.model->found || time - inst.foundAt > inst.model->found->duration()))
@@ -3558,7 +3577,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 						battle.clip->apply(battle.at, pose);
 						battleSounds(inst, battle);
 					}
-					else if (battle.fighting && inst.attacking && battle.step > 0 && battle.step < 1 && lm.run)
+					else if (battle.fighting && inst.attacking && inst.role == 0 && battle.step > 0 && battle.step < 1 && lm.run)
 						lm.run->apply(time, pose); // (stepping up, or back)
 					else if (motion && lm.run)
 					{

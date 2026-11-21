@@ -965,6 +965,20 @@ namespace oc4::host
 								info->getShadowScale()));
 							s.models[size_t(u.models.back())].ranged = info->getActAsRanged();
 						}
+					// (the great general's figure: its era's warlord, as CvUnitInfo::getArtInfo picks the
+					// early, middle or late art; the tags are not exported, BtS names them)
+					if (shown->getLeaderUnitType() != NO_UNIT)
+					{
+						const int eras = GC.getNumEraInfos();
+						const char* tag = era > eras / 2 ? "ART_DEF_UNIT_WARLORD_MODERN" : era > eras / 4 ? "ART_DEF_UNIT_WARLORD_MEDIEVAL" : "ART_DEF_UNIT_WARLORD_ANCIENT";
+						if (const CvArtInfoUnit* info = ARTFILEMGR.getUnitArtInfo(tag))
+							u.leader = modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
+								info->getShadowScale());
+					}
+					if (u.battle >= 0 && u.attacking && Entities::siegeTower(*shown))
+						if (const CvArtInfoUnit* info = ARTFILEMGR.getUnitArtInfo("ART_DEF_UNIT_SIEGE_TOWER"))
+							u.siegeTower = modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
+								info->getShadowScale());
 				}
 			}
 
