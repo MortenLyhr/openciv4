@@ -212,6 +212,11 @@ Your cities on the map open as in the original: a double click on the city or it
 its screen, one click on the bar selects the city (what it builds in the bottom panel), and one click
 on its plot is any plot's (the units there). "Open a city with a single click" on the options'
 OpenCiv4 tab opens the screen with one click instead (off by default; `cityOneClick` in profile.ini).
+A double click is as forgiving as the original's: up to 500 ms between the presses (their own times,
+not a frame's), a few points apart, and its second click counts on what the first was on; a click on
+your own city (its plot, bar or a unit's figure in it) leaves the camera where it is, as the
+original's, so the city stays under the mouse. The rule is `src/render/DoubleClick.h`, tested by
+`tests/double_click_test.cpp`.
 
 The player options (Options → Game: Wait at End of Turn, Quick Combat, …) are kept in the player's
 profile, as the original keeps them in its own (`Profiles\<name>.pfl`): a choice is written to
