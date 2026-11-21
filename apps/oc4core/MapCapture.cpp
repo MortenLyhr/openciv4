@@ -22,6 +22,8 @@
 
 #include <windows.h>
 
+#include <pybind11/pybind11.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -597,20 +599,18 @@ namespace oc4::host
 	// A farm as CIV4PlotLSystem.xml lays it out: its farmhouse (Leaf_Farm_4x4's goal) and the
 	// crops grown out from its 4x4 node; rice and wheat only the buildings, in a corner. -1: none
 	// (not a farm, or nothing of it in the file: the improvement's own model is drawn).
-	int MapCapture::plotLayout(const CvPlot& plot, int bonus)
+	int MapCapture::plotLayout(const CvPlot& plot, int bonus, int shownImprovement, bool worked, int shownOwner)
 	{
 		// The improvement the player sees there (CvPlot::getVisibleImprovementState), as the
 		// original lays out: on a worked plot without one, IMPROVEMENT_LAND_WORKED (a small
 		// farmhouse) or IMPROVEMENT_WATER_WORKED (nets).
-		ImprovementTypes improvement = NO_IMPROVEMENT;
-		bool worked = false;
-		const_cast<CvPlot&>(plot).getVisibleImprovementState(improvement, worked);
+		const ImprovementTypes improvement = static_cast<ImprovementTypes>(shownImprovement);
 		if (improvement == NO_IMPROVEMENT || m_plotNodes.empty())
 			return -1;
 		const std::string improvementName = text(GC.getImprovementInfo(improvement).getType());
 		// (an unowned plot: as the player looking at it, as the original draws it; Wine's test
 		// map has the industrial quarry and pasture outside any border for an industrial Rome)
-		const PlayerTypes owner = plot.getOwner() != NO_PLAYER ? plot.getOwner() : GC.getGame().getActivePlayer();
+		const PlayerTypes owner = shownOwner != NO_PLAYER ? static_cast<PlayerTypes>(shownOwner) : GC.getGame().getActivePlayer();
 		const int era = owner != NO_PLAYER ? int(player(owner).getCurrentEra()) : int(GC.getGame().getCurrentEra());
 		const int artStyle = owner != NO_PLAYER ? int(player(owner).getArtStyleType()) : -1;
 		const bool irrigated = plot.isIrrigationAvailable();
@@ -1058,6 +1058,79 @@ namespace oc4::host
 		return index;
 	}
 
+	bool MapCapture::improvementTradesBonus(int improvement, int bonus)
+	{
+		const int improvements = GC.getNumImprovementInfos(), bonuses = GC.getNumBonusInfos();
+		if (improvement < 0 || bonus < 0 || improvement >= improvements || bonus >= bonuses)
+			return false;
+		if (m_bonusTrade.size() != size_t(improvements) * size_t(bonuses))
+		{
+			// (CvImprovementInfo::isImprovementBonusTrade is the DLL's Python API, not its exported C++)
+			namespace py = pybind11;
+			m_bonusTrade.assign(size_t(improvements) * size_t(bonuses), 0);
+			try
+			{
+				const py::object gc = py::module_::import("CvPythonExtensions").attr("CyGlobalContext")();
+				for (int i = 0; i < improvements; ++i)
+				{
+					const py::object info = gc.attr("getImprovementInfo")(i);
+					for (int b = 0; b < bonuses; ++b)
+						m_bonusTrade[size_t(i) * size_t(bonuses) + size_t(b)] = int8_t(info.attr("isImprovementBonusTrade")(b).cast<bool>());
+				}
+			}
+			catch (const py::error_already_set& e) { std::fprintf(stderr, "[oc4core] improvement trades: %s\n", e.what()); }
+		}
+		return m_bonusTrade[size_t(improvement) * size_t(bonuses) + size_t(bonus)] != 0;
+	}
+
+	// A plot's yields as the player sees them over it: CvPlot::calculateYield(eYield, bDisplay),
+	// the original's plot symbols. Its owner, improvement and road as the active team last saw them
+	// (under the fog, what was there then), the resource's share by what the owner's team knows (a
+	// foreign mine on iron counts the iron's hammer before the player can see the iron; on an
+	// unowned plot by what the player's team knows), a city's only once seen. Where all that is
+	// the plot as it is, they are its own yields (CvPlot::getYield); the rest asked through Python
+	// (calculateYield is the DLL's Python API, not its exported C++), again only when what they
+	// come from changes. The WorldBuilder, and the debug mode, show the plot's own.
+	void MapCapture::shownYields(const CvPlot& plot, int index, bool everything, int activeTeam, uint8_t (&yields)[3])
+	{
+		const TeamTypes active = static_cast<TeamTypes>(activeTeam);
+		for (int y = 0; y < 3; ++y)
+			yields[y] = uint8_t(std::clamp(plot.getYield(static_cast<YieldTypes>(y)), 0, 255));
+		if (everything || active == NO_TEAM)
+			return;
+		const PlayerTypes owner = plot.getRevealedOwner(active, false);
+		const ImprovementTypes improvement = plot.getRevealedImprovementType(active, false);
+		const RouteTypes route = plot.getRevealedRouteType(active, false);
+		const CvCity* city = plot.getPlotCity();
+		const bool cityUnseen = city && !city->isRevealed(active, false);
+		const bool differs = owner != plot.getOwner() || improvement != plot.getImprovementType() || route != plot.getRouteType() || cityUnseen ||
+			(owner == NO_PLAYER && (plot.getBonusType() != NO_BONUS || improvement != NO_IMPROVEMENT || route != NO_ROUTE));
+		if (!differs)
+		{
+			m_shownYields.erase(index);
+			return;
+		}
+		const TeamTypes knowing = owner != NO_PLAYER ? player(owner).getTeam() : active;
+		const std::array<int, 8> from{ int(owner), int(improvement), int(route), int(plot.getBonusType(knowing)),
+			int(yields[0]) | int(yields[1]) << 8 | int(yields[2]) << 16, int(cityUnseen), int(GC.getGame().getActivePlayer()), GC.getGame().getGameTurn() };
+		if (const auto it = m_shownYields.find(index); it != m_shownYields.end() && it->second.from == from)
+		{
+			std::copy(it->second.yields.begin(), it->second.yields.end(), yields);
+			return;
+		}
+		namespace py = pybind11;
+		ShownYields& shown = m_shownYields[index];
+		shown.from = from;
+		try
+		{
+			const py::object p = py::module_::import("CvPythonExtensions").attr("CyMap")().attr("plot")(plot.getX(), plot.getY());
+			for (int y = 0; y < 3; ++y)
+				yields[y] = uint8_t(std::clamp(p.attr("calculateYield")(y, true).cast<int>(), 0, 255));
+		}
+		catch (const py::error_already_set& e) { std::fprintf(stderr, "[oc4core] plot yields: %s\n", e.what()); }
+		std::copy(yields, yields + 3, shown.yields.begin());
+	}
+
 	const render::MapSnapshot& MapCapture::capture(const Interface* selection)
 	{
 		if (!m_haveArt)
@@ -1123,6 +1196,8 @@ namespace oc4::host
 		}
 
 		const TeamTypes active = game.getActiveTeam();
+		// (the WorldBuilder shows the map as it is, not as the active team knows it)
+		const bool everything = gDLL->GetWorldBuilderMode() || game.isDebugMode();
 		const auto actions = Entities::actions();
 		// The Great Wall's edges: its owner's plots on the landmass, against land not its own.
 		s.greatWall.clear();
@@ -1178,30 +1253,33 @@ namespace oc4::host
 			v.terrain = int16_t(plot->getTerrainType());
 			v.feature = int16_t(plot->getFeatureType());
 			v.featureVariety = uint8_t(std::max(plot->getFeatureVariety(), 0));
-			v.owner = int16_t(plot->getOwner());
-			// (the one the player sees: on a worked plot without one, the original's worked look)
+			// The plot as the active team knows it, as the original draws it (CvPlot's
+			// getVisibleImprovementState and getVisibleBonusState, the engine's): its owner, improvement
+			// and road as last seen (under the fog, what was there then); a resource only with the
+			// tech that reveals it (iron without Iron Working is not there, in anyone's land), though
+			// an improvement on it shows (a mine on flat land). The WorldBuilder (and the debug
+			// mode) shows the plot as it is: every resource, improvement, road and border.
 			{
 				ImprovementTypes shown = NO_IMPROVEMENT;
 				bool worked = false;
 				plot->getVisibleImprovementState(shown, worked);
+				if (everything)
+				{
+					// (on a worked plot without one, the worked look, as the original's)
+					if (plot->getImprovementType() != NO_IMPROVEMENT || !worked)
+						shown = plot->getImprovementType();
+				}
 				v.improvement = int16_t(shown);
-			}
-			// (a resource the active team cannot see yet, by its techs, is not there for it)
-			v.bonus = int16_t(plot->getBonusType(active));
-			v.route = int16_t(plot->getRouteType());
-			v.layout = int16_t(plotLayout(*plot, v.bonus));
-			{
-				BonusTypes shownBonus = NO_BONUS;
-				bool improved = false, worked = false;
-				plot->getVisibleBonusState(shownBonus, improved, worked);
-				v.bonusState = uint8_t(!improved ? 1 : worked ? 3 : 2);
-			}
-			{
 				// (the improvement's KFM: On, a worked plot's (the mine's cart and smoke, ...); NotWorked)
-				ImprovementTypes shownImprovement = NO_IMPROVEMENT;
-				bool worked = false;
-				plot->getVisibleImprovementState(shownImprovement, worked);
-				v.improvementState = uint8_t(shownImprovement == NO_IMPROVEMENT ? 0 : worked ? 3 : 2);
+				v.improvementState = uint8_t(shown == NO_IMPROVEMENT ? 0 : worked ? 3 : 2);
+				v.owner = int16_t(everything || active == NO_TEAM ? plot->getOwner() : plot->getRevealedOwner(active, false));
+				v.bonus = int16_t(everything || active == NO_TEAM ? plot->getBonusType() : plot->getBonusType(active));
+				v.route = int16_t(everything || active == NO_TEAM ? plot->getRouteType() : plot->getRevealedRouteType(active, false));
+				// (a resource drawn improved when the improvement on it trades it: the mine on iron;
+				// worked when the plot is: CvPlot::getVisibleBonusState's)
+				const bool improved = v.bonus >= 0 && shown != NO_IMPROVEMENT && improvementTradesBonus(shown, v.bonus);
+				v.bonusState = uint8_t(!improved ? 1 : worked ? 3 : 2);
+				v.layout = int16_t(plotLayout(*plot, v.bonus, shown, worked, v.owner));
 			}
 			v.water = plot->isWater();
 			v.hills = plot->isHills();
@@ -1211,8 +1289,7 @@ namespace oc4::host
 			v.revealed = active == NO_TEAM || plot->isRevealed(active, false);
 			v.visible = active == NO_TEAM || plot->isVisible(active, false);
 			if (v.revealed)
-				for (int y = 0; y < 3; ++y)
-					v.yields[y] = uint8_t(std::clamp(plot->getYield(static_cast<YieldTypes>(y)), 0, 255));
+				shownYields(*plot, i, everything, active, v.yields);
 
 			if (const int count = plot->getNumUnits(); count > 0)
 			{

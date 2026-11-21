@@ -9,6 +9,8 @@
 #include "render/MapWindow.h"
 #include "Interface.h"
 
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <string>
@@ -60,7 +62,21 @@ namespace oc4::host
 			float shadowScale = 1);
 		void loadCityLSystem();
 		void loadPlotLSystem();
-		int plotLayout(const class CvPlot& plot, int bonus);
+		// improvement, worked: the ones shown there; owner: the plot's as the player knows it
+		int plotLayout(const class CvPlot& plot, int bonus, int improvement, bool worked, int owner);
+		// Whether an improvement gives its plot's resource to the trade network (it is drawn with the
+		// resource then, CvImprovementInfo::isImprovementBonusTrade, read once through Python).
+		bool improvementTradesBonus(int improvement, int bonus);
+		std::vector<int8_t> m_bonusTrade; // improvement x bonus; empty: not read yet
+		// A plot's yields as the player sees them (CvPlot::calculateYield's display form, through
+		// Python), by plot index: asked again when what they come from changes.
+		struct ShownYields
+		{
+			std::array<int, 8> from{};
+			std::array<uint8_t, 3> yields{};
+		};
+		std::unordered_map<int, ShownYields> m_shownYields;
+		void shownYields(const class CvPlot& plot, int index, bool everything, int activeTeam, uint8_t (&yields)[3]);
 		void loadFlagScale();
 		void loadAttachables(render::MapSnapshot& s);
 	public:
