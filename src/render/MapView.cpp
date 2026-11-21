@@ -37,6 +37,9 @@ namespace oc4::render
 		constexpr int kBorderRes = 32;       // culture border texels per plot side
 		constexpr float kBorderReach = 0.75f; // plots: the border texture's distances go this far
 		constexpr float kBorderCorner = 0.11f; // plots: the ground within this of a texel decides its owner (rounds the borders' corners)
+		constexpr float kBorderCornerSea = 0.18f; // plots: the same over water (rounder: the sea's corners curve over about a quarter of a plot)
+		constexpr float kNotchDepth = 0.125f;  // plots: how far an outer corner's notch steps in (noriverborder.dds: 16 of 128 texels)
+		constexpr float kNotchLength = 0.22f;  // plots: how far from the corner it runs (28 of 128 texels)
 
 		// DirectionTypes bits, as in the game's connection masks.
 		constexpr int kNorthEast = 1 << 1, kSouthEast = 1 << 3, kSouthWest = 1 << 5, kNorthWest = 1 << 7;
@@ -1875,9 +1878,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			updateCells(data);
 		}
 
-		// Where the rivers are drawn, water and bed (their pieces' "RiverBase" grids by the
-		// texture's alpha), kBorderRes texels a plot side: the culture borders keep to the river
-		// banks, outside the bed the rivers draw over them.
+		// Where the rivers' water is (their pieces' "RiverBase" grids by the texture's colour: the
+		// blue, not the sandy bed beside it), kBorderRes texels a plot side: the culture borders
+		// run along the water's edge, as the original's do, its bed on the owner's side washed.
 		void buildRiverMask()
 		{
 			const int R = kBorderRes, TW = map.width * R, TH = map.height * R;
@@ -1925,7 +1928,7 @@ float4 PSWater(WaterOut i) : SV_Target
 								float v = l0 * w.uvs[t][1] + l1 * w.uvs[t + 1][1] + l2 * w.uvs[t + 2][1];
 								u -= std::floor(u), v -= std::floor(v);
 								const uint32_t ax = std::min(uint32_t(u * float(w.width)), w.width - 1), ay = std::min(uint32_t(v * float(w.height)), w.height - 1);
-								if ((*w.alpha)[size_t(ay) * w.width + ax])
+								if ((*w.alpha)[size_t(ay) * w.width + ax] == 2)
 								{
 									riverMask[size_t(wy) * size_t(TW) + size_t(wx)] = 1;
 									break;
@@ -1959,7 +1962,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		// with the corners cut round, as the original's. Along a river between plots of different
 		// owners it is the river's bank on the owner's side, as the river bends: the plots on
 		// either side reach for the ground from their centres, round the water, and the water
-		// and its bed are nobody's. Worked out in the plots along the borders only.
+		// is nobody's. Worked out in the plots along the borders only.
 		void updateBorders()
 		{
 			const int W = map.width, H = map.height, R = kBorderRes, TW = W * R, TH = H * R;
@@ -2091,7 +2094,11 @@ float4 PSWater(WaterOut i) : SV_Target
 								continue;
 						}
 						const uint32_t n = uint32_t(ny * TW + nx);
-						const uint32_t cost = (k < 4 ? 5 : 7) * (riverMask[n] ? 12 : 1);
+						// (not diagonally between two texels of water: the water is thin, a texel
+						// or two, and the ground would slip through it there)
+						if (k >= 4 && (riverMask[size_t(ty * TW + nx)] || riverMask[size_t(ny * TW + tx)]))
+							continue;
+						const uint32_t cost = (k < 4 ? 5 : 7) * (riverMask[n] ? 40 : 1);
 						if (d + cost < dist[n])
 						{
 							dist[n] = d + cost;
@@ -2133,6 +2140,56 @@ float4 PSWater(WaterOut i) : SV_Target
 					owner[i] = 0;
 			}
 
+			// The outer corners' notch, as the original's land border tiles (noriverborder.dds): at
+			// a corner of an owner's ground that sticks out, the edge that comes into the corner
+			// (going round the ground anticlockwise, north up: the north edge at the north-west
+			// corner, the west edge at the south-west one, and so on) steps kNotchDepth in for the
+			// last kNotchLength before it. Not over water (the sea's tiles are the curved ones,
+			// norivercurvedborder.dds) nor where a river runs along either edge of the corner.
+			const auto notchCorners = [&] {
+				const int deep = std::max(1, int(std::lround(kNotchDepth * float(R)))), length = std::max(1, int(std::lround(kNotchLength * float(R))));
+				const auto ownerAt = [&](int px, int py) {
+					const int n = plotIndex(px, py);
+					return n < 0 ? int16_t(-2) : owners[size_t(n)];
+				};
+				// (corner: its two sides, the side whose edge steps in, and that edge's run from the corner)
+				struct Corner
+				{
+					int ax, ay, bx, by; // the neighbours across the corner's two edges (a: the stepping one)
+					int x0, y0, dx, dy; // the notch: from texel (x0, y0) of the plot, length along (dx, dy), deep inwards
+				};
+				static constexpr Corner kCorners[4] = {
+					{ 0, 1, -1, 0, 0, 1, 1, 0 },   // north-west: the north edge, eastwards from the west side
+					{ -1, 0, 0, -1, 0, 0, 0, 1 },  // south-west: the west edge, northwards from the south side
+					{ 0, -1, 1, 0, 1, 0, -1, 0 },  // south-east: the south edge, westwards from the east side
+					{ 1, 0, 0, 1, 1, 1, 0, -1 },   // north-east: the east edge, southwards from the north side
+				};
+				for (int py = 0; py < H; ++py)
+					for (int px = 0; px < W; ++px)
+					{
+						const int16_t own = owners[size_t(px + py * W)];
+						const PlotView* plot = map.plot(px, py);
+						if (own < 0 || !plot || plot->water)
+							continue;
+						for (const Corner& c : kCorners)
+						{
+							const int16_t a = ownerAt(px + c.ax, py + c.ay), b = ownerAt(px + c.bx, py + c.by);
+							if (a == own || b == own || a == -2 || ownerAt(px + c.ax + c.bx, py + c.ay + c.by) == own)
+								continue;
+							if (riverBetween(px, py, c.ax, c.ay) || riverBetween(px, py, c.bx, c.by))
+								continue;
+							const uint8_t to = uint8_t(std::min(a + 1, 255));
+							// (texel coordinates: the corner's texel, then along the edge and inwards)
+							const int cx = px * R + (c.x0 ? R - 1 : 0), cy = py * R + (c.y0 ? R - 1 : 0);
+							const int inX = -c.ax, inY = -c.ay; // inwards, away from the stepping edge
+							for (int l = 0; l < length; ++l)
+								for (int d = 0; d < deep; ++d)
+									if (const int t = at(cx + c.dx * l + inX * d, cy + c.dy * l + inY * d); t >= 0 && owner[size_t(t)] == own + 1)
+										owner[size_t(t)] = to;
+						}
+					}
+			};
+
 			const float reach = kBorderReach * float(R);
 			std::vector<float> edge(owner.size(), reach);
 			// The borders' corners rounded: in the plots along a border each texel is the owner's
@@ -2152,19 +2209,35 @@ float4 PSWater(WaterOut i) : SV_Target
 						if (ox * ox + oy * oy <= radius * radius)
 							fine.push_back({ int8_t(std::floor(ox + 0.5f)), int8_t(std::floor(oy + 0.5f)) });
 					}
-				for (int j = -int(radius); j <= int(radius); ++j)
-					for (int i = -int(radius); i <= int(radius); ++i)
-						if (float(i * i + j * j) <= radius * radius)
-							disc.push_back({ int8_t(i), int8_t(j) });
+				// (over water a wider disc: the sea's tiles, norivercurvedborder.dds, round their
+				// corners more, by about a quarter of a plot)
+				const auto discOf = [](float r) {
+					std::vector<std::pair<int8_t, int8_t>> d;
+					for (int j = -int(r); j <= int(r); ++j)
+						for (int i = -int(r); i <= int(r); ++i)
+							if (float(i * i + j * j) <= r * r)
+								d.push_back({ int8_t(i), int8_t(j) });
+					return d;
+				};
+				const float seaRadius = kBorderCornerSea * float(R);
+				disc = discOf(radius);
+				const auto seaDisc = discOf(seaRadius);
 				// (the texels with another's ground or a river near: eight points round them tell)
-				const int outer = int(std::ceil(radius)), mid = int(std::lround(radius * 0.7071f));
-				const int probes[8][2] = { { outer, 0 }, { -outer, 0 }, { 0, outer }, { 0, -outer }, { mid, mid }, { -mid, mid }, { mid, -mid }, { -mid, -mid } };
+				const auto probesOf = [](float r) {
+					const int outer = int(std::ceil(r)), mid = int(std::lround(r * 0.7071f));
+					return std::array<std::array<int, 2>, 8>{ { { outer, 0 }, { -outer, 0 }, { 0, outer }, { 0, -outer }, { mid, mid }, { -mid, mid }, { mid, -mid }, { -mid, -mid } } };
+				};
+				const auto probes = probesOf(radius), seaProbes = probesOf(seaRadius);
+				const auto seaPlot = [&](int tx, int ty) {
+					const PlotView* q = map.plot(tx / R, ty / R);
+					return q && q->water;
+				};
 				std::vector<uint32_t> mixed;
 				std::vector<uint8_t> byRiver;
 				each(along, true, [&](int tx, int ty) {
 					const size_t i = size_t(ty) * TW + tx;
 					bool differs = false, river = riverMask[i] != 0;
-					for (const auto& p : probes)
+					for (const auto& p : seaPlot(tx, ty) ? seaProbes : probes)
 						for (int half = 1; half <= 2; ++half)
 							if (const int n = at(tx + p[0] * half / 2, ty + p[1] * half / 2); n >= 0)
 								differs = differs || owner[size_t(n)] != owner[i], river = river || riverMask[size_t(n)] != 0;
@@ -2180,7 +2253,7 @@ float4 PSWater(WaterOut i) : SV_Target
 						continue;
 					std::pair<uint8_t, int> counts[8];
 					int kinds = 0;
-					for (const auto& [dx, dy] : disc)
+					for (const auto& [dx, dy] : seaPlot(tx, ty) ? seaDisc : disc)
 					{
 						const int n = at(tx + dx, ty + dy);
 						if (n < 0)
@@ -2205,6 +2278,20 @@ float4 PSWater(WaterOut i) : SV_Target
 				}
 				for (size_t m = 0; m < mixed.size(); ++m)
 					owner[mixed[m]] = rounded[m];
+				// (the corners' notches after the rounding, which would take them away; then the
+				// texels with another's ground near again, for their distances to the edge)
+				notchCorners();
+				mixed.clear();
+				each(along, true, [&](int tx, int ty) {
+					const size_t i = size_t(ty) * TW + tx;
+					for (const auto& p : probes)
+						for (int half = 1; half <= 2; ++half)
+							if (const int n = at(tx + p[0] * half / 2, ty + p[1] * half / 2); n >= 0 && owner[size_t(n)] != owner[i])
+							{
+								mixed.push_back(uint32_t(i));
+								return;
+							}
+				});
 				// (how far from the middle of a disc of radius 1 a straight edge cuts the share q off it)
 				static const std::array<float, 65> kChord = [] {
 					std::array<float, 65> table{};
