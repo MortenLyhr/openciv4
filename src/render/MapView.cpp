@@ -2694,26 +2694,26 @@ float4 PSTerrain(PSIn i) : SV_Target
 				Vec3 center{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				if (cityPlots.contains(u.x + u.y * map.width))
 					center.y -= 0.3f * S();
-				// A unit seen on another plot before walks there. Its move order supplies every
-				// legal intermediate plot; snapshots alone only reveal the final one.
+				// A unit seen on another plot before walks there, plot by plot through those the game
+				// moved it through (a whole Go To this turn is one game update: the snapshots alone
+				// see only its end). As the original's: the plots one order walked, in a second
+				// (moveSeconds) at an even pace; a step the game did not tell, a short one.
 				const uint64_t key = uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id);
 				if (const auto it = unitPositions.find(key); it != unitPositions.end() && u.id >= 0)
 				{
 					auto& route = motions[key];
 					Vec3 from = route.empty() ? it->second : route.back().to;
 					float start = route.empty() ? time : route.back().start + route.back().duration;
-					auto append = [&](Vec3 to) {
+					std::vector<Vec3> legs;
+					auto add = [&](Vec3 to) {
 						Vec3 d = to - from;
 						if (map.wrapX && std::abs(d.x) > worldW() / 2)
 							d.x -= std::copysign(worldW(), d.x);
-						to = from + d;
 						const float plots = length(d) / S();
 						if (plots > 0.05f && plots < 3.5f)
 						{
-							const float duration = 0.25f + 0.3f * plots;
-							route.push_back({ from, to, start, duration });
-							from = to;
-							start += duration;
+							legs.push_back(d);
+							from = from + d;
 						}
 					};
 					for (const UnitView::MoveStep& step : u.moveSteps)
@@ -2721,11 +2721,20 @@ float4 PSTerrain(PSIn i) : SV_Target
 						Vec3 to{ (float(step.x) + 0.5f) * S(), (float(step.y) + 0.5f) * S(), 0 };
 						if (cityPlots.contains(step.x + step.y * map.width))
 							to.y -= 0.3f * S();
-						append(to);
+						add(to);
 					}
-					// A mod or an unseen move may not have queued waypoints. Preserve the old
-					// short straight interpolation for that case and for any missing final step.
-					append(center);
+					add(center);
+					float total = 0;
+					for (const Vec3& d : legs)
+						total += length(d);
+					Vec3 at = route.empty() ? it->second : route.back().to;
+					for (const Vec3& d : legs)
+					{
+						const float duration = u.moveSeconds > 0 ? u.moveSeconds * length(d) / total : 0.25f + 0.3f * length(d) / S();
+						route.push_back({ at, at + d, start, duration });
+						at = at + d;
+						start += duration;
+					}
 					if (route.empty())
 						motions.erase(key);
 				}
