@@ -385,6 +385,9 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
 	add_test(NAME player_options COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_options_test.py
 		${CMAKE_CURRENT_SOURCE_DIR}/apps/oc4core/python)
+	# CivilizationIV.ini's settings on the OpenCiv4 tab, kept in the profile.
+	add_test(NAME ini_options COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tests/ini_options_test.py
+		${CMAKE_CURRENT_SOURCE_DIR}/apps/oc4core/python)
 endif()
 
 add_executable(xml_decode_test tests/xml_decode_test.cpp)

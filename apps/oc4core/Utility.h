@@ -59,6 +59,17 @@ namespace oc4::host
 				onAutoSave(bInitial);
 		}
 		std::function<void(bool initial)> onAutoSave;
+		// How it saves (CivilizationIV.ini's AutoSaveInterval and MaxAutoSaves, the options'
+		// OpenCiv4 tab): every this many turns (0: none), this many kept; or openciv4's own way
+		// (each game its files, every 25th turn kept for good, in My Games\openciv4\Saves\auto).
+		struct AutoSaveSettings
+		{
+			int interval = 4, kept = 5;
+			bool openciv4 = false;
+		};
+		AutoSaveSettings autoSave;
+		// At most this many frames a second (the ini's SetMaxFrameRate; 0: as many as the display shows).
+		std::atomic<int> maxFrameRate = 0;
 
 		// The map's display the game's controls switch (Ctrl+R, the unit icons, Ctrl+T): the
 		// window shows them so.
