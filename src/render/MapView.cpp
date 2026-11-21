@@ -923,8 +923,19 @@ float4 PSWater(WaterOut i) : SV_Target
 				ring.model = scene::buildModel(*ring.file);
 				// (drawn where it is drawn, before the units, as its alpha property's "no sorter" has
 				// it: it tests no depth, and the figures standing on it cover it, as in the original)
+				// It tests depth and writes it where it shows (alpha test), a little above the
+				// ground: the rivers' and roads' pieces, laid lower and drawn with the blended things
+				// after it, cannot cover it then, as in the original, and what stands in front of it
+				// (a hut, blended too) still covers it.
 				for (auto& item : ring.model.items)
+				{
 					item.material.blendUnsorted = true;
+					item.material.zTest = true;
+					item.material.zWrite = true;
+					item.material.alphaTest = true;
+					item.material.alphaFunc = scene::Compare::Greater;
+					item.material.alphaRef = 8;
+				}
 				ring.gpu = renderer.upload(ring.model, assets, *loc);
 				std::vector<anim::Clip> clips;
 				std::optional<nif::KfmFile> kfm;
@@ -986,7 +997,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				const anim::Pose pose = ring.player.evaluate(ring.model);
 				const auto local = ring.model.worldTransforms(pose.locals);
 				// (a little narrower than a plot: its circle is 154 across)
-				const Affine place = placement({ at.x, at.y, 0 }, 0, S() / 154.0f * 0.95f);
+				const Affine place = placement({ at.x, at.y, 1.5f }, 0, S() / 154.0f * 0.95f);
 				std::vector<Affine> world(local.size());
 				for (size_t k = 0; k < local.size(); ++k)
 					world[k] = place * local[k];
