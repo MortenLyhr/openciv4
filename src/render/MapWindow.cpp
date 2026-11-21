@@ -1130,6 +1130,8 @@ namespace oc4::render
 			ui.hover(x, y);
 			if (ui.barHeld())
 				ui.holdBar(x, y);
+			else if (popup.gripHeld())
+				popup.dragGrip(y);
 			else if (minimapDrag)
 				jumpFromMinimap(std::clamp(x, int(minimapRect[0]), int(minimapRect[2])), std::clamp(y, int(minimapRect[1]), int(minimapRect[3])));
 			else if (panning)
@@ -1165,7 +1167,17 @@ namespace oc4::render
 			// On a popup: its buttons (the map around it still pans).
 			if (down && popup.contains(x, y))
 			{
-				downOnPopup = true;
+				// (its list's grip follows the mouse while held)
+				if (left && popup.pressGrip(x, y))
+					SDL_CaptureMouse(true);
+				else
+					downOnPopup = true;
+				return;
+			}
+			if (!down && popup.gripHeld())
+			{
+				SDL_CaptureMouse(false);
+				popup.releaseGrip();
 				return;
 			}
 			// On the main interface's minimap: the camera goes there (and follows while held), as the
