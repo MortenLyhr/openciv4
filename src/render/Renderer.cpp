@@ -1171,7 +1171,7 @@ float4 PSOverlay(Out p) : SV_Target
 			}
 			if (onGround && groundDistance < 0)
 				groundDistance = length(centerOf(mesh) - eye);
-			m_deferred.push_back({ onGround ? groundDistance : length(centerOf(mesh) - eye), &mesh, deferredWorld, m_deferredMaterials.size(), teamColor, onGround });
+			m_deferred.push_back({ material.blendLast ? -1.0f : onGround ? groundDistance : length(centerOf(mesh) - eye), &mesh, deferredWorld, m_deferredMaterials.size(), teamColor, onGround });
 			m_deferredMaterials.push_back(material);
 		}
 	}
