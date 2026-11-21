@@ -584,9 +584,10 @@ namespace oc4::render
 	}
 
 	void UiLayer::draw(Overlay& o, const std::function<void(float, float, float, float, bool)>& minimap, double clock,
-		const std::function<bool(const Item&)>& leaderhead)
+		const std::function<bool(const Item&)>& leaderhead, const std::function<void()>& underScreens)
 	{
 		const float sw = o.screenWidth(), sh = o.screenHeight();
+		bool screensReached = false;
 		const Item* map = nullptr;
 		for (const Item& it : m_items)
 			if (it.kind == Kind::Minimap)
@@ -594,6 +595,12 @@ namespace oc4::render
 		for (size_t i = 0; i < m_items.size(); ++i)
 		{
 			Item& it = m_items[i];
+			if (!screensReached && !it.mainInterface)
+			{
+				screensReached = true;
+				if (underScreens)
+					underScreens();
+			}
 			const bool hot = int(i) == m_hover && it.enabled;
 			const float x0 = it.x0, y0 = it.y0, x1 = it.x1, y1 = it.y1, w = x1 - x0, h = y1 - y0;
 			const float alpha = it.alpha * (it.enabled ? 1.0f : 0.45f);
@@ -783,7 +790,9 @@ namespace oc4::render
 			case Kind::Text:
 				// (a text, CyGInterfaceScreen.setText, is in the theme's normal font, size 3, whatever
 				// font it names; a label in the one it names)
-				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), fontBold(it.font), it.interactive && hot ? kHot : kText);
+				// (only a text lights up under the mouse; a label keeps its colour, its help aside)
+				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), fontBold(it.font),
+					it.kind == Kind::Text && it.interactive && hot ? kHot : kText);
 				break;
 			case Kind::EndTurnText:
 				if (!it.text.empty())
@@ -1085,6 +1094,8 @@ namespace oc4::render
 			if (it.clipped)
 				o.unclip();
 		}
+		if (!screensReached && underScreens)
+			underScreens(); // (no screen: over the main interface, under its help)
 		// The help for what is under the mouse, in the help area (growing up from it unless it
 		// expands down).
 		// (what the keyboard chose: the mouse's highlight alone is too faint to follow)
@@ -1094,7 +1105,59 @@ namespace oc4::render
 			const float x0 = std::min(it.x0, it.x1), x1 = std::max(it.x0, it.x1);
 			o.frame(x0 - 2, it.y0 - 2, x1 + 2, it.y1 + 2, kHot, 1, 3, 2);
 		}
-		if (!m_help.empty())
+		// (a tooltip the screens placed themselves, the World Builder's: where they put it)
+		if (!m_help.empty() && !m_helpFit && m_hover >= 0 && size_t(m_hover) < m_items.size() && !m_items[size_t(m_hover)].mainInterface)
+		{
+			// A screen's widget (not the main interface's, which has its help area): the help in the
+			// theme's tooltip beside it, as the original: its top at the widget's, its right edge at
+			// the widget's left (on its right when there is no room), wrapped at 220 and as wide as
+			// its widest line (measured in Wine, BUG's Finance Advisor at 1600x900).
+			const Item& it = m_items[size_t(m_hover)];
+			constexpr float kWrap = 220, kPad = 10;
+			const float size = m_sizes[2];
+			if (m_besideFor != m_help)
+			{
+				m_besideFor = m_help;
+				// (its lines wrapped word by word at kWrap; the widest of them)
+				float widest = 0;
+				size_t start = 0;
+				while (start <= m_help.size())
+				{
+					const size_t end = std::min(m_help.find(L'\n', start), m_help.size());
+					std::wstring line;
+					size_t word = start;
+					while (word < end)
+					{
+						const size_t space = std::min(m_help.find(L' ', word), end);
+						const std::wstring next = (line.empty() ? L"" : line + L" ") + m_help.substr(word, space - word);
+						if (!line.empty() && o.richWidth(next, size, false) > kWrap)
+						{
+							widest = std::max(widest, o.richWidth(line, size, false));
+							line = m_help.substr(word, space - word);
+						}
+						else
+							line = next;
+						word = space + 1;
+					}
+					widest = std::max(widest, o.richWidth(line, size, false));
+					start = end + 1;
+				}
+				m_besideWidth = std::clamp(std::ceil(widest) + 1, 20.0f, kWrap);
+			}
+			const float w = m_besideWidth + 2 * kPad, h = o.richHeight(m_help, m_besideWidth, size, false) + 10;
+			const float left = std::min(it.x0, it.x1), right = std::max(it.x0, it.x1);
+			const float x = left - w >= 0 ? left - w : std::min(right, std::max(sw - w, 0.0f));
+			const float y = std::clamp(it.y0, 0.0f, std::max(sh - h, 0.0f));
+			if (!m_tooltip.empty())
+				Theme::draw(o, m_tooltip, x, y, x + w, y + h);
+			else
+			{
+				o.rect(x, y, x + w, y + h, kPanel, 0.93f, 5);
+				o.frame(x, y, x + w, y + h, kEdge, 0.6f, 5, 1);
+			}
+			o.richBlock(m_help, x + kPad, y + 5, m_besideWidth, size, false, kText);
+		}
+		else if (!m_help.empty())
 			drawHelp(o, m_help);
 	}
 }

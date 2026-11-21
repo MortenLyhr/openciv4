@@ -84,7 +84,8 @@ namespace oc4::render
 		// military advisor's); leaderhead(item) a leader's head
 		// (false: it has none, its button shows).
 		void draw(Overlay& overlay, const std::function<void(float, float, float, float, bool)>& minimap, double clock,
-			const std::function<bool(const MapWindow::UiItem&)>& leaderhead = {});
+			const std::function<bool(const MapWindow::UiItem&)>& leaderhead = {},
+			const std::function<void()>& underScreens = {}); // (drawn over the main interface, under the screens)
 
 	private:
 		using Item = MapWindow::UiItem;
@@ -161,5 +162,7 @@ namespace oc4::render
 		bool m_helpRight = true, m_helpDown = false, m_helpFramed = false, m_helpFit = false;
 		// A help in the help area: its box, then its text.
 		void drawHelp(Overlay& o, const std::wstring& text);
+		std::wstring m_besideFor; // (the help m_besideWidth was measured for)
+		float m_besideWidth = 0;
 	};
 }
