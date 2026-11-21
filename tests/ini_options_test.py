@@ -18,7 +18,16 @@ check = po.check
 
 
 def start(folder):
-	host, options = po.start(folder)
+	# (oc4screens' hook for typing into an edit box, in player_options_test's stand-in)
+	real = po.Anything
+	class Screens(real):
+		pass
+	po.Anything = Screens
+	Screens.editTyped = []
+	try:
+		host, options = po.start(folder)
+	finally:
+		po.Anything = real
 	host.ini = None
 	host.set_ini_options = lambda *args: setattr(host, 'ini', args)
 	defines = {'FIELD_OF_VIEW': 42.0}

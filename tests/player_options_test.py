@@ -91,7 +91,6 @@ def start(folder):
 	sys.modules['CvPythonExtensions'] = cpe(host)
 	screens = Anything('oc4screens')
 	screens.beforeDisplay = []
-	screens.editTyped = []
 	screens._text = lambda s: u"%s" % (s,)
 	sys.modules['oc4screens'] = screens
 	# (the game's callbacks module: CvOptionsScreenCallbackInterface.handleGameOptionsClicked)
