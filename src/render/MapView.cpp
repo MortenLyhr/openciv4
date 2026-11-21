@@ -2222,6 +2222,9 @@ float4 PSWater(WaterOut i) : SV_Target
 				const float seaRadius = kBorderCornerSea * float(R);
 				disc = discOf(radius);
 				const auto seaDisc = discOf(seaRadius);
+				// (and beside a river's water a small one: the water's edge is a texel's steps,
+				// which it smooths without cutting the bends)
+				const auto riverDisc = discOf(1.5f);
 				// (the texels with another's ground or a river near: eight points round them tell)
 				const auto probesOf = [](float r) {
 					const int outer = int(std::ceil(r)), mid = int(std::lround(r * 0.7071f));
@@ -2249,11 +2252,11 @@ float4 PSWater(WaterOut i) : SV_Target
 				{
 					const int tx = int(mixed[m] % uint32_t(TW)), ty = int(mixed[m] / uint32_t(TW));
 					rounded[m] = owner[mixed[m]];
-					if (byRiver[m])
+					if (byRiver[m] && riverMask[mixed[m]])
 						continue;
 					std::pair<uint8_t, int> counts[8];
 					int kinds = 0;
-					for (const auto& [dx, dy] : seaPlot(tx, ty) ? seaDisc : disc)
+					for (const auto& [dx, dy] : byRiver[m] ? riverDisc : seaPlot(tx, ty) ? seaDisc : disc)
 					{
 						const int n = at(tx + dx, ty + dy);
 						if (n < 0)
