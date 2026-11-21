@@ -638,7 +638,7 @@ namespace oc4::host
 				a.mission = 5; // (it is shot at on its way: it strikes nothing)
 				Action i = a;
 				i.unit = interceptor->getIDInfo();
-				i.mission = interceptor->getDomainType() == DOMAIN_AIR ? 2 : 4;
+				i.mission = interceptor->getDomainType() == DOMAIN_AIR ? 6 : 4;
 				i.effect.clear();
 				if (std::getenv("OC4_PLAY_LOG"))
 					std::printf("  intercepted by unit %d (%s)\n", i.unit.iID, i.mission == 4 ? "from the ground" : "in the air");

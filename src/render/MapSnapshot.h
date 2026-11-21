@@ -182,6 +182,7 @@ namespace oc4::render
 		// An action it shows (a mission's animation): how it acts (1 pillaging: its melee
 		// strikes; 2 a ranged or an air strike, bombarding: its ranged strike; 3 captured: it
 		// heals; 5 a plane intercepted on its way: it flies there and back, hit, and strikes nothing;
+		// 6 a plane intercepting another: it flies out to meet it and back, dropping nothing;
 		// 4 intercepting a plane from the ground: its anti-air strike, at the plane over the
 		// plot it aims at), seconds since it began, as captured, how long it lasts, the plot it aims at
 		// and the effect there (a CIV4EffectInfos type; none: empty).

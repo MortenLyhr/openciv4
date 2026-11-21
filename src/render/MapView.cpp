@@ -3104,6 +3104,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 			// (a plane strikes over its plot, once, after it flew there; it flies back as it does)
 			if (inst.air && inst.actionX >= 0)
 			{
+				// (intercepting another plane: it only flies out to meet it)
+				if (inst.action == 6)
+					return { nullptr, 0.0f };
 				// (intercepted: hit as it comes over, it strikes nothing)
 				if (inst.action == 5)
 				{
