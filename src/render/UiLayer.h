@@ -62,7 +62,8 @@ namespace oc4::render
 
 		// framed: the help area has art of its own (the city screen's), in the theme's tooltip;
 		// else the main interface's see-through box (PANEL_STYLE_HUD_HELP).
-		void setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed = false);
+		// fit: as wide as its text, up to width (a tooltip at the widget, the World Builder's).
+		void setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed = false, bool fit = false);
 		// The size of a widget's font (FontTypes) as the screens draw it.
 		float textSize(int font) const { return fontSize(font); }
 		// The plot's help where the screens show theirs, in the same box (the game's look).
@@ -123,7 +124,7 @@ namespace oc4::render
 		bool m_pressedRight = false;
 		std::wstring m_help;
 		float m_helpX = 0, m_helpY = 0, m_helpWidth = 350;
-		bool m_helpRight = true, m_helpDown = false, m_helpFramed = false;
+		bool m_helpRight = true, m_helpDown = false, m_helpFramed = false, m_helpFit = false;
 		// A help in the help area: its box, then its text.
 		void drawHelp(Overlay& o, const std::wstring& text);
 	};
