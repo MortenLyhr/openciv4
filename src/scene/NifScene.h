@@ -100,9 +100,6 @@ namespace oc4::scene
 		bool zTest = true;
 		bool zWrite = true;
 		Cull cull = Cull::Back;
-		// Blended, and drawn after the frame's other blended things (those are sorted by
-		// distance): the plot circles, over the rivers' water.
-		bool blendLast = false;
 
 		// NiVertexColorProperty: 0 ignore, 1 emissive, 2 ambient+diffuse
 		uint32_t vertexColorMode = 0;
