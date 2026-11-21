@@ -267,21 +267,28 @@ def _applyIniOptions():
 			_profile['autoSavesKept'], _profile['openciv4AutoSaves'], _profile['maxFrameRate'])
 	except Exception:
 		pass
-	applyFieldOfView()
+	if _gameStarted[0]:
+		_applyFieldOfView()
 
 
-def applyFieldOfView():
-	"""FIELD_OF_VIEW: a non-zero one replaces GlobalDefines.xml's, as the ini's does (the host
-	calls this as a game starts; BUG's slider on the map may change it again later)."""
+_gameStarted = [False] # (before, the game core has no defines to read)
+
+
+def gameStarted():
+	"""The host: a game has started (GlobalDefines.xml read); the profile's field of view now."""
+	_gameStarted[0] = True
+	_applyFieldOfView()
+
+
+def _applyFieldOfView():
+	"""FIELD_OF_VIEW: a non-zero one replaces GlobalDefines.xml's, as the ini's does (BUG's slider
+	on the map may change it again later)."""
 	try:
 		gc = _cpe.CyGlobalContext()
 		fov = _profile['fieldOfView']
 		if fov > 0:
 			if _xmlFieldOfView[0] is None:
-				xml = gc.getDefineFLOAT('FIELD_OF_VIEW')
-				if xml <= 0:
-					return # (GlobalDefines.xml not read yet: the game's start sets it)
-				_xmlFieldOfView[0] = xml
+				_xmlFieldOfView[0] = gc.getDefineFLOAT('FIELD_OF_VIEW')
 			gc.setDefineFLOAT('FIELD_OF_VIEW', float(fov))
 		elif _xmlFieldOfView[0] is not None:
 			gc.setDefineFLOAT('FIELD_OF_VIEW', float(_xmlFieldOfView[0]))
