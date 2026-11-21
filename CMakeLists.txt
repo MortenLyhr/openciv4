@@ -373,6 +373,11 @@ target_include_directories(edge_scroll_test PRIVATE src)
 add_test(NAME edge_scroll COMMAND edge_scroll_test)
 set_target_properties(edge_scroll_test PROPERTIES FOLDER "tests")
 
+add_executable(double_click_test tests/double_click_test.cpp)
+target_include_directories(double_click_test PRIVATE src)
+add_test(NAME double_click COMMAND double_click_test)
+set_target_properties(double_click_test PROPERTIES FOLDER "tests")
+
 add_executable(auto_end_turn_test tests/auto_end_turn_test.cpp)
 target_include_directories(auto_end_turn_test PRIVATE apps/oc4core)
 target_link_libraries(auto_end_turn_test PRIVATE oc4_options)
