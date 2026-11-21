@@ -43,6 +43,8 @@ ENTRIES = [
     ("overlay.hlsl", "PSOverlay", "frag", 2),
     ("terrain.hlsl", "VSTerrain", "vert", 2),
     ("terrain.hlsl", "PSTerrain", "frag", 2),
+    ("terrain.hlsl", "VSBorder", "vert", 2),
+    ("terrain.hlsl", "PSBorder", "frag", 2),
     ("water.hlsl", "VSWater", "vert", 2),
     ("water.hlsl", "PSWater", "frag", 2),
 ]

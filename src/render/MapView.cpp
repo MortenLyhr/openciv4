@@ -86,6 +86,7 @@ struct PSIn
 	float3 world : TEXCOORD0;
 	float3 nrm : NORMAL;
 	float3 drawn : TEXCOORD1; // where it is drawn (the copy, bent round the globe): the distance fog's
+	float under : TEXCOORD2;  // the culture borders' pass: 1 where the ground is under the water's level
 };
 
 PSIn VSTerrain(VSIn i)
@@ -95,6 +96,7 @@ PSIn VSTerrain(VSIn i)
 	o.pos = mul(float4(o.drawn, 1), viewProj);
 	o.world = i.pos;
 	o.nrm = i.nrm;
+	o.under = 0;
 	return o;
 }
 
@@ -175,6 +177,70 @@ static const float3 kGroundLight = float3(0.012, 0.024, 0.07);
 static const float kSlopeLight = 0.6;
 
 static const int2 kCorner[4] = { int2(0, 1), int2(1, 1), int2(1, 0), int2(0, 0) }; // top left, top right, bottom right, bottom left
+
+// The culture borders: the owner's colour along the edge of its ground, a line with a wash
+// towards the inside, as the original's border tiles (art/terrain/routes/rivers/
+// noriverborder*.dds): from the distance to another owner's ground, signed for the owner of the
+// texel the pixel is in and blended between texels. As colour and alpha to lay over the ground.
+float4 cultureBorder(float2 p, float2 pw)
+{
+	const float res = 32;      // kBorderRes
+	const float reach = 0.75;  // kBorderReach
+	int2 tsize = mapSize * int(res);
+	float2 t = p * res - 0.5;
+	int2 t0 = int2(floor(t));
+	float2 ft = t - t0;
+	// (the pixel is the ground of the owner, of the four texels round it, whose distance
+	// blended between them is inside its edge: the edge runs smoothly between the texels)
+	uint2 b[4];
+	[unroll] for (int k = 0; k < 4; ++k)
+		b[k] = borderAt(t0 + int2(k & 1, k >> 1), tsize).rg;
+	uint owner = 0;
+	float dist = 0; // plots
+	[unroll] for (int c = 0; c < 4; ++c)
+	{
+		float v[4];
+		[unroll] for (int k = 0; k < 4; ++k)
+		{
+			float d = b[k].y / 255.0 * reach;
+			v[k] = b[k].x == b[c].x ? d : -d;
+		}
+		float inside = lerp(lerp(v[0], v[1], ft.x), lerp(v[2], v[3], ft.x), ft.y);
+		if (inside > dist)
+		{
+			dist = inside;
+			owner = b[c].x;
+		}
+	}
+	if (owner == 0)
+		return 0;
+	float3 oc = playerColors[min(owner - 1, 255)].rgb;
+	float aa = max(max(pw.x, pw.y), 1e-5);
+	// (the tiles' alpha: 0.48 beside the line, falling evenly to nothing 0.48 of a plot in, on
+	// land and water alike; no noise in it, the mottle seen on land is the ground through it)
+	float wash = saturate(0.49 - dist);
+	float stroke = (1 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, dist)) * 0.95;
+	// (the wash, and the line over it, as one layer)
+	float a = 1 - (1 - wash) * (1 - stroke);
+	return float4((oc * wash * (1 - stroke) + oc * 0.85 * stroke) / max(a, 1e-5), a);
+}
+
+// What the active team knows of the ground at p, blended between plot centres: 0 where it has
+// not been, 0.55 where it does not see now, 1 where it does.
+float fogAt(float2 p)
+{
+	float2 c = p - 0.5;
+	int2 cell = int2(floor(c));
+	float2 w = smoothstep(0, 1, c - cell);
+	float2 known[4];
+	[unroll] for (int k = 0; k < 4; ++k)
+	{
+		uint a = plotAt(cell + kCorner[k]).a;
+		known[k] = float2((a & 4) ? 1 : 0, (a & 8) ? 1 : 0);
+	}
+	float2 k = lerp(lerp(known[3], known[2], w.x), lerp(known[0], known[1], w.x), w.y);
+	return k.x * lerp(0.55, 1, k.y);
+}
 
 float4 PSTerrain(PSIn i) : SV_Target
 {
@@ -295,51 +361,6 @@ float4 PSTerrain(PSIn i) : SV_Target
 	color = saturate(color + kGroundLight + (ndl - saturate(-kGroundSun.z)) * kSlopeLight);
 
 	float2 pw = fwidth(p);
-	if (showBorders)
-	{
-		// The owner's colour along the edge of its ground, a line with a glow towards the
-		// inside, as the game's borders: from the distance to another owner's ground, signed
-		// for the owner of the texel the pixel is in and blended between texels.
-		const float res = 32;      // kBorderRes
-		const float reach = 0.75;  // kBorderReach
-		int2 tsize = mapSize * int(res);
-		float2 t = p * res - 0.5;
-		int2 t0 = int2(floor(t));
-		float2 ft = t - t0;
-		// (the pixel is the ground of the owner, of the four texels round it, whose distance
-		// blended between them is inside its edge: the edge runs smoothly between the texels)
-		uint2 b[4];
-		[unroll] for (int k = 0; k < 4; ++k)
-			b[k] = borderAt(t0 + int2(k & 1, k >> 1), tsize).rg;
-		uint owner = 0;
-		float dist = 0; // plots
-		[unroll] for (int c = 0; c < 4; ++c)
-		{
-			float v[4];
-			[unroll] for (int k = 0; k < 4; ++k)
-			{
-				float d = b[k].y / 255.0 * reach;
-				v[k] = b[k].x == b[c].x ? d : -d;
-			}
-			float inside = lerp(lerp(v[0], v[1], ft.x), lerp(v[2], v[3], ft.x), ft.y);
-			if (inside > dist)
-			{
-				dist = inside;
-				owner = b[c].x;
-			}
-		}
-		if (owner != 0)
-		{
-			float3 oc = playerColors[min(owner - 1, 255)].rgb;
-			float aa = max(max(pw.x, pw.y), 1e-5);
-			// (the original's border tiles, art/terrain/routes/rivers/noriverborder*.dds: alpha 0.48
-			// beside the line, falling evenly to nothing 0.48 of a plot in, on land and water alike)
-			float wash = saturate(0.49 - dist);
-			float stroke = 1 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, dist);
-			color = lerp(color, oc, wash);
-			color = lerp(color, oc * 0.85, stroke * 0.95);
-		}
-	}
 	if (showFog)
 	{
 		// What the active team knows, blended between plot centres: black where it has not
@@ -349,6 +370,41 @@ float4 PSTerrain(PSIn i) : SV_Target
 		color *= k.x * lerp(0.55, 1, k.y);
 	}
 	return float4(color * distanceFog(i.drawn), 1);
+}
+
+// The culture borders as their own layer, as the original's (CultureBorderShader.fx): not lit,
+// darkened by the fog of war. In two passes (showBorders): 1, the ground above the water's level,
+// right after the terrain, so that what stands on it blends over the border as over the ground
+// (the original: the soft dirt under resources and improvements tinted, the rocks on it not);
+// 2, at the water's level where the ground is under it, after the water, over it at full
+// strength (the water does not dim them).
+PSIn VSBorder(VSIn i)
+{
+	PSIn o;
+	// (a little above the ground and towards the eye, so that it is never behind it nor behind the
+	// pieces laid on it, drawn before it: rivers 0.8, roads 0.6, a farm's crops from 0.5 up, a plot
+	// 180 world units; the model shader moves those 6 towards the eye. What is drawn after it
+	// covers it whatever its depth: it writes none.)
+	float3 pos = float3(i.pos.xy, max(i.pos.z, waterZ) + 0.012 * plotSize);
+	o.drawn = globeBend(pos + worldOffset);
+	float3 toEye = eyePos - o.drawn;
+	o.pos = mul(float4(dot(toEye, toEye) > 100 ? o.drawn + normalize(toEye) * 8 : o.drawn, 1), viewProj);
+	o.world = pos;
+	o.nrm = i.nrm;
+	o.under = i.pos.z < waterZ ? 1 : 0;
+	return o;
+}
+
+float4 PSBorder(PSIn i) : SV_Target
+{
+	// (each pass its part: they meet where the ground crosses the water's level)
+	clip(showBorders == 2 ? i.under - 0.5 : 0.5 - i.under);
+	float2 p = i.world.xy / plotSize;
+	float4 b = cultureBorder(p, fwidth(p));
+	clip(b.a - 1.0 / 255);
+	if (showFog)
+		b.rgb *= fogAt(p);
+	return float4(b.rgb * distanceFog(i.drawn), b.a);
 }
 )hlsl";
 
@@ -671,6 +727,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			SDL_ReleaseGPUShader(renderer.device(), waterVS);
 			SDL_ReleaseGPUShader(renderer.device(), waterPS);
 			SDL_ReleaseGPUSampler(renderer.device(), waterSampler);
+			SDL_ReleaseGPUGraphicsPipeline(renderer.device(), borderPipeline);
+			SDL_ReleaseGPUShader(renderer.device(), borderVS);
+			SDL_ReleaseGPUShader(renderer.device(), borderPS);
 		}
 
 		struct Instance
@@ -690,6 +749,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			Vec3 anchor, offset;
 			float yaw = 0, scale = 1;
 			bool onGround = false; // heights over the terrain (roads)
+			bool laid = false;     // a piece laid on the terrain (rivers, roads, a farm's crops): drawn before the culture borders
 			int plot = -1;         // the plot it belongs to (fog of war)
 			uint64_t unit = 0;     // a unit's figure: owner and id
 			const anim::Sequence* sequence = nullptr; // animated: what it plays (none: its idle)
@@ -773,6 +833,9 @@ float4 PSWater(WaterOut i) : SV_Target
 		SDL_GPUShader* terrainVS = nullptr;
 		SDL_GPUShader* terrainPS = nullptr;
 		SDL_GPUGraphicsPipeline* terrainPipeline = nullptr;
+		SDL_GPUGraphicsPipeline* borderPipeline = nullptr;
+		SDL_GPUShader* borderVS = nullptr;
+		SDL_GPUShader* borderPS = nullptr;
 		SDL_GPUSampler* sampler = nullptr;
 		SDL_GPUSampler* detailWrap = nullptr;
 
@@ -1007,6 +1070,16 @@ float4 PSWater(WaterOut i) : SV_Target
 			sd.max_anisotropy = 1;
 			if (!(waterSampler = SDL_CreateGPUSampler(dev, &sd)))
 				throw std::runtime_error(std::string("water sampler: ") + SDL_GetError());
+
+			// The culture borders: the ground's mesh again, after the water, blended over what is
+			// drawn (as the water: not writing depth).
+			borderVS = renderer.compile(source, "terrain.hlsl", "VSBorder", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 2);
+			borderPS = renderer.compile(source, "terrain.hlsl", "PSBorder", SDL_GPU_SHADERSTAGE_FRAGMENT, 6, 0, 2);
+			ci.vertex_shader = borderVS;
+			ci.fragment_shader = borderPS;
+			ci.vertex_input_state = { &vbd, 1, attributes, 2 };
+			if (!(borderPipeline = SDL_CreateGPUGraphicsPipeline(dev, &ci)))
+				throw std::runtime_error(std::string("border pipeline: ") + SDL_GetError());
 		}
 
 		// ------------------------------------------------------------ art
@@ -2599,6 +2672,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				inst.center = { at.x, at.y, ground(at.x, at.y) };
 				inst.radius = part->bounds.radius() * art.scale + 0.2f * S();
 				inst.onGround = true;
+				inst.laid = true; // (the original: a farm's crops tinted by the border, as the ground)
 				decor.push_back(std::move(inst));
 				lift += 0.1f;
 			}
@@ -2620,6 +2694,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			inst.center = { at.x, at.y, ground(at.x, at.y) };
 			inst.radius = lm->bounds.radius() + 0.2f * S();
 			inst.onGround = true;
+			inst.laid = true;
 			decor.push_back(std::move(inst));
 		}
 
@@ -3397,10 +3472,8 @@ float4 PSWater(WaterOut i) : SV_Target
 			return std::round((renderer.camera().target.x - x) / w) * w;
 		}
 
-		void drawTerrain(const Frustum& frustum, const MapView::Options& options)
+		TerrainConstants terrainConstants(const MapView::Options& options) const
 		{
-			if (!vb || !atlasTex || !plotTex || !detailTex || !decalTex || !cellTex || !borderTex)
-				return;
 			TerrainConstants tc{};
 			tc.mapW = map.width;
 			tc.mapH = map.height;
@@ -3422,7 +3495,13 @@ float4 PSWater(WaterOut i) : SV_Target
 				tc.playerColors[i][2] = c.b;
 				tc.playerColors[i][3] = 1;
 			}
+			return tc;
+		}
 
+		// The ground's mesh, in every copy of the map in view (wrapping), with a pipeline whose
+		// fragment shader takes the terrain's six textures.
+		void drawGround(const Frustum& frustum, SDL_GPUGraphicsPipeline* pipeline, TerrainConstants& tc)
+		{
 			std::vector<float> copies{ 0 };
 			if (map.wrapX)
 				copies = { -worldW(), 0, worldW() };
@@ -3432,7 +3511,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			};
 			renderer.reserveSamplers(6);
 			SDL_GPURenderPass* pass = renderer.pass();
-			renderer.bindPipeline(terrainPipeline);
+			renderer.bindPipeline(pipeline);
 			const SDL_GPUTextureSamplerBinding textures[6] = { { plotTex->texture, sampler }, { atlasTex->texture, sampler },
 				{ decalTex->texture, detailWrap }, { detailTex->texture, detailWrap }, { cellTex->texture, sampler }, { borderTex->texture, sampler } };
 			SDL_BindGPUFragmentSamplers(pass, 0, textures, 6);
@@ -3448,6 +3527,25 @@ float4 PSWater(WaterOut i) : SV_Target
 				SDL_PushGPUFragmentUniformData(renderer.commands(), 1, &tc, sizeof(tc));
 				SDL_DrawGPUIndexedPrimitives(pass, indexCount, 1, 0, 0, 0);
 			}
+		}
+
+		void drawTerrain(const Frustum& frustum, const MapView::Options& options)
+		{
+			if (!vb || !atlasTex || !plotTex || !detailTex || !decalTex || !cellTex || !borderTex)
+				return;
+			TerrainConstants tc = terrainConstants(options);
+			drawGround(frustum, terrainPipeline, tc);
+		}
+
+		// The culture borders (Options::borders): over the ground above the water's level (pass
+		// 1, before what stands on it) or under it (pass 2, after the water).
+		void drawBorders(const Frustum& frustum, const MapView::Options& options, uint32_t part)
+		{
+			if (!options.borders || !vb || !atlasTex || !plotTex || !detailTex || !decalTex || !cellTex || !borderTex)
+				return;
+			TerrainConstants tc = terrainConstants(options);
+			tc.showBorders = part;
+			drawGround(frustum, borderPipeline, tc);
 		}
 
 		void drawWater(const Frustum& frustum, const MapView::Options& options)
@@ -4077,13 +4175,16 @@ float4 PSWater(WaterOut i) : SV_Target
 			}
 		}
 
-		void drawInstances(const std::vector<Instance>& list, const Frustum& frustum, bool needsSight = false)
+		// laid: -1 every instance, 1 only those laid on the terrain (Instance::laid), 0 the others.
+		void drawInstances(const std::vector<Instance>& list, const Frustum& frustum, bool needsSight = false, int laid = -1)
 		{
 			std::vector<Affine> world;
 			std::vector<scene::Material> materials;
 			const float zoom = figureZoom();
 			for (const Instance& inst : list)
 			{
+				if (laid >= 0 && inst.laid != (laid == 1))
+					continue;
 				if (fogged(inst, needsSight))
 					continue;
 				const Motion* motion = nullptr;
@@ -4397,14 +4498,24 @@ float4 PSWater(WaterOut i) : SV_Target
 		m->drawTerrain(frustum, options);
 		m->renderer.setFog(options.fog ? m->plotTex.get() : nullptr, m->S(), uint32_t(m->map.width), uint32_t(m->map.height), m->map.wrapX,
 			m->map.wrapY);
+		// The culture borders over the ground and what is laid on it (the original: their line over
+		// a river's water along its bank), under what stands on it (the soft dirt under resources
+		// and improvements blends over the border as over the ground).
+		if (options.improvements)
+		{
+			m->drawInstances(m->decor, frustum, false, 1);
+			m->renderer.drawGroundBlended();
+		}
+		m->drawBorders(frustum, options, 1);
 		if (options.features)
 			m->drawInstances(m->features, frustum);
 		if (options.improvements)
-			m->drawInstances(m->decor, frustum);
+			m->drawInstances(m->decor, frustum, false, 0);
 		// The sea's water over what is under it: the rivers' water laid on the ground (a delta's,
 		// out at sea, seen through the sea's) and what stands in the water.
 		m->renderer.drawGroundBlended();
 		m->drawWater(frustum, options);
+		m->drawBorders(frustum, options, 2);
 		if (options.cities)
 			m->drawInstances(m->cities, frustum);
 		m->figureHits.clear();
