@@ -482,7 +482,7 @@ namespace oc4::render
 				beforeCity = glide ? glide->to : currentView();
 			cityView = true;
 			View to{ { (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 }, std::max(view->map().cameraCityDistance, 5 * plot()),
-				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0, kCityCentre };
+				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0, 0, kCityCentre };
 			glideTo(to);
 		}
 
