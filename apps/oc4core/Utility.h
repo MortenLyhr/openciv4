@@ -262,6 +262,10 @@ namespace oc4::host
 		void setWasdPan(bool on) { m_wasdPan = on; }
 		void forceWasdPan() { m_forcedWasdPan = true; }
 		void chooseWasdPan(bool on) { m_forcedWasdPan = false; m_wasdPan = on; }
+		// One click on one's city (or its name bar) opens its screen (the profile's; off, as the
+		// original's: a double click opens it, one on the bar selects the city).
+		bool cityOneClick() const { return m_cityOneClick; }
+		void setCityOneClick(bool on) { m_cityOneClick = on; }
 		// End idle turns by themselves (AutoEndTurn.h; the profile's, or --auto-end-turn's for the
 		// session until the player chooses: Ctrl+Shift+E or the options' check box).
 		bool autoEndTurn() const { return m_forcedAutoEndTurn || m_autoEndTurn; }
@@ -463,6 +467,7 @@ namespace oc4::host
 		int m_uiScale = 0, m_forcedUiScale = -1;
 		std::atomic<int> m_movieQuality = 0, m_antiAliasing = 0;
 		bool m_wasdPan = false, m_forcedWasdPan = false;
+		bool m_cityOneClick = false;
 		bool m_autoEndTurn = false, m_forcedAutoEndTurn = false;
 		bool m_quickEnemyMoves = false;
 		render::EdgeScrollOption m_edgeScroll;
