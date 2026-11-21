@@ -1456,7 +1456,7 @@ struct VSBorder_in
 vertex VSBorder_out VSBorder(VSBorder_in in [[stage_in]], constant Frame& _24 [[buffer(0)]], constant Terrain& _133 [[buffer(1)]])
 {
     VSBorder_out out = {};
-    float3 _269 = float3(in.i_pos.xy, fast::max(in.i_pos.z, _133.waterZ) + (0.00200000009499490261077880859375 * _133.plotSize));
+    float3 _269 = float3(in.i_pos.xy, fast::max(in.i_pos.z, _133.waterZ) + (0.01200000010430812835693359375 * _133.plotSize));
     float3 _273 = _269 + float3(_133.worldOffset);
     float3 _252 = _273;
     float3 _414;
