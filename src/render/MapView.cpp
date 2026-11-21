@@ -700,7 +700,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			Vec3 anchor, offset;
 			float yaw = 0, scale = 1;
 			bool onGround = false; // heights over the terrain (roads)
-			bool laid = false;     // a piece laid on the terrain (addOnGround: rivers, roads): drawn before the culture borders
+			bool laid = false;     // a piece laid on the terrain (rivers, roads, a farm's crops): drawn before the culture borders
 			int plot = -1;         // the plot it belongs to (fog of war)
 			uint64_t unit = 0;     // a unit's figure: owner and id
 			const anim::Sequence* sequence = nullptr; // animated: what it plays (none: its idle)
@@ -2566,6 +2566,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				inst.center = { at.x, at.y, ground(at.x, at.y) };
 				inst.radius = part->bounds.radius() * art.scale + 0.2f * S();
 				inst.onGround = true;
+				inst.laid = true; // (the original: a farm's crops tinted by the border, as the ground)
 				decor.push_back(std::move(inst));
 				lift += 0.1f;
 			}
