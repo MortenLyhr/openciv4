@@ -4013,6 +4013,8 @@ float4 PSWater(WaterOut i) : SV_Target
 				const float dx = wrapOffset(center.x);
 				if (!frustum.sphere(center + Vec3{ dx, 0, 0 }, inst.radius * (inst.figure ? zoom : 1)))
 					continue;
+				// A unit's figure (and what it carries) in the units' own light, as the original's.
+				renderer.setUnitLight(inst.figure);
 				const LoadedModel& lm = *inst.model;
 				Affine place = inst.place;
 				if (inst.figure)
@@ -4167,6 +4169,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				drawModel(lm, world, visible, inst.materials, inst.team, inst.onGround, inst.place.translation.z);
 				drawEffects(inst, world, visible);
 			}
+			renderer.setUnitLight(false);
 		}
 	};
 
