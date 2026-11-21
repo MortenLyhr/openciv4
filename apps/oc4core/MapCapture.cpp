@@ -247,7 +247,7 @@ namespace oc4::host
 		{
 			CvRiverModelInfo& info = GC.getRiverModelInfo(r);
 			render::RiverArt art{ text(info.getModelFile()), directionMask(info.getConnectString()), render::RiverArt::Delta::None,
-				numbers(info.getRotateString()) };
+				numbers(info.getRotateString()), text(info.getBorderFile()) };
 			const std::string delta = text(info.getDeltaString());
 			if (delta == "DELTA_STRAIGHT")
 				art.delta = render::RiverArt::Delta::Straight;
