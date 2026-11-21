@@ -2832,10 +2832,13 @@ class CyEngine(object):
 		oc4host.engine_mark(_int(iX), _int(iY), float(color.r), float(color.g), float(color.b), float(color.a), _int(eLayer, 0), False,
 			_int(ePlotStyle, -1))
 
+	# (the Alt forms: a colour by its name, at the alpha given, which stands in for the colour's own,
+	# as the original's: BUG's dot map draws a city not yet given a colour in COLOR_CLEAR, white of
+	# alpha 0, at alpha 1, and the Wine game shows it white, full (backlog #68))
 	def addColoredPlotAlt(self, iX, iY, ePlotStyle, eLayer, szColor, fAlpha):
 		c = _namedColor(szColor)
 		if c is not None:
-			oc4host.engine_mark(_int(iX), _int(iY), c[0], c[1], c[2], c[3] * float(fAlpha), _int(eLayer, 0), False, _int(ePlotStyle, -1))
+			oc4host.engine_mark(_int(iX), _int(iY), c[0], c[1], c[2], float(fAlpha), _int(eLayer, 0), False, _int(ePlotStyle, -1))
 
 	def clearColoredPlots(self, eLayer): oc4host.engine_clear(_int(eLayer, -1), False)
 
@@ -2845,7 +2848,7 @@ class CyEngine(object):
 	def fillAreaBorderPlotAlt(self, iX, iY, eLayer, szColor, fAlpha):
 		c = _namedColor(szColor)
 		if c is not None:
-			oc4host.engine_mark(_int(iX), _int(iY), c[0], c[1], c[2], c[3] * float(fAlpha), _int(eLayer, 0), True)
+			oc4host.engine_mark(_int(iX), _int(iY), c[0], c[1], c[2], float(fAlpha), _int(eLayer, 0), True)
 
 	def clearAreaBorderPlots(self, eLayer): oc4host.engine_clear(_int(eLayer, -1), True)
 

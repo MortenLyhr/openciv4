@@ -111,6 +111,7 @@ extern char** environ;
 #include <functional>
 #include <optional>
 #include <set>
+#include <tuple>
 #include <unordered_map>
 #include <string>
 
@@ -1434,6 +1435,32 @@ namespace
 				}
 				ui.mouseLeft = down[0], ui.mouseRight = down[1];
 			}
+			// An interface mode that outlines the plot under the mouse (its InterfaceModeInfo's
+			// bHighlightPlot: Python's pick plot, ping, sign, the air missions), in the game core's
+			// colour for it (CvGame::getNewHighlightPlot, getPlotHighlightColor: green; dark grey where
+			// the units can't go; none where it isn't known or the script can't pick it), as the
+			// WorldBuilder's brush (Wine: BUG's dot map editor, a green plot under the mouse, backlog #68).
+			// Asked again only when the mode or the plot changes (pick plot asks the scripts).
+			static std::tuple<int, int, int> highlighted{ -2, -2, -2 };
+			if (ui.worldBuilder())
+				highlighted = { -2, -2, -2 }; // (the WorldBuilder's brush is drawn in that layer meanwhile)
+			else
+			{
+				const InterfaceModeTypes mode = ui.getInterfaceMode();
+				CvPlot* h = ui.mouseOverMap && !opt.ownInterface && mode != NO_INTERFACEMODE && mode != INTERFACEMODE_SELECTION
+					? game.getNewHighlightPlot() : nullptr;
+				if (const std::tuple<int, int, int> now{ h ? h->getX() : -1, h ? h->getY() : -1, int(mode) }; now != highlighted)
+				{
+					highlighted = now;
+					utility.engine().clear(AREA_BORDER_LAYER_HIGHLIGHT_PLOT, true);
+					if (const ColorTypes color = h ? game.getPlotHighlightColor(h) : NO_COLOR; color != NO_COLOR)
+					{
+						const NiColorA c = GC.getColorInfo(color).getColor();
+						utility.engine().mark({ h->getX(), h->getY(), c.r, c.g, c.b, 0.9f, AREA_BORDER_LAYER_HIGHLIGHT_PLOT, true, false });
+					}
+					changed = true;
+				}
+			}
 			window.setWorldBuilder(ui.worldBuilder());
 			if (ui.worldBuilder())
 			{
@@ -1523,7 +1550,19 @@ namespace
 					click.right = ui.getInterfaceMode() == INTERFACEMODE_SELECTION && head && !own;
 				}
 				// The interface mode wants a plot: its mission there (a right click leaves it).
-				if (const InterfaceModeTypes mode = ui.getInterfaceMode(); mode != INTERFACEMODE_SELECTION)
+				// Python's pick plot is the script's: it reads the mouse itself (BUG's dot map editor
+				// places a city with the left button, takes one away with the right), so a left click
+				// leaves it on and the selected units get no order, as the original's (Wine, backlog #68).
+				if (const InterfaceModeTypes mode = ui.getInterfaceMode(); mode == INTERFACEMODE_PYTHON_PICK_PLOT)
+				{
+					if (log)
+						std::printf("  %s at %d,%d: %s\n", GC.getInterfaceModeInfo(mode).getType(), plot->getX(), plot->getY(),
+							click.right ? "cancelled" : "the script's");
+					if (click.right)
+						ui.setInterfaceMode(INTERFACEMODE_SELECTION);
+					continue;
+				}
+				else if (mode != INTERFACEMODE_SELECTION)
 				{
 					CvSelectionGroup* group = ui.getSelectionList();
 					if (log)
