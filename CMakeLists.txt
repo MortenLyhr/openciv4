@@ -379,6 +379,12 @@ target_link_libraries(auto_end_turn_test PRIVATE oc4_options)
 add_test(NAME auto_end_turn COMMAND auto_end_turn_test)
 set_target_properties(auto_end_turn_test PROPERTIES FOLDER "tests")
 
+add_executable(auto_saves_test tests/auto_saves_test.cpp)
+target_include_directories(auto_saves_test PRIVATE apps/oc4core)
+target_link_libraries(auto_saves_test PRIVATE oc4_options)
+add_test(NAME auto_saves COMMAND auto_saves_test)
+set_target_properties(auto_saves_test PROPERTIES FOLDER "tests")
+
 # The player options kept in the player's profile, and the options screen's OpenCiv4 tab
 # (oc4options.py, with a stand-in host).
 find_package(Python3 COMPONENTS Interpreter QUIET)
