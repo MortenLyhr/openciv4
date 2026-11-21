@@ -78,6 +78,7 @@ namespace oc4::render
 		m_items.clear();
 		m_answered = false;
 		m_scroll = 0;
+		m_gripHeld = false;
 		m_hover = -1;
 		m_helpItem = -2;
 		m_hoverOk = false;
@@ -163,6 +164,21 @@ namespace oc4::render
 		m_scroll = std::clamp(m_scroll - float(delta) / 120 * 3 * 36, 0.0f, m_scrollMax);
 		hover(x, y);
 		return true;
+	}
+
+	bool PopupPanel::pressGrip(int x, int y)
+	{
+		m_gripHeld = active() && m_scrollMax > 0 && m_grip.contains(float(x), float(y));
+		m_gripGrab = float(y) - m_grip.y0;
+		return m_gripHeld;
+	}
+
+	void PopupPanel::dragGrip(int y)
+	{
+		const float room = (m_list.y1 - m_list.y0) - (m_grip.y1 - m_grip.y0);
+		if (!m_gripHeld || room <= 0)
+			return;
+		m_scroll = std::clamp((float(y) - m_gripGrab - m_list.y0) / room, 0.0f, 1.0f) * m_scrollMax;
 	}
 
 	bool PopupPanel::key(unsigned virtualKey)
@@ -440,12 +456,14 @@ namespace oc4::render
 			o.frame(r.x0 - 2, r.y0 + 1, r.x1 + 2, r.y1 - 1, kKeyChoice, 1, 3, 2);
 		}
 		o.unclip();
+		m_grip = {};
 		if (m_scrollMax > 0)
 		{
-			// Where the list is.
+			// Where the list is (its grip can be taken a few pixels either side).
 			const float track = m_list.y1 - m_list.y0, thumb = std::max(24.0f, track * listHeight / content);
 			const float ty = m_list.y0 + (track - thumb) * (m_scroll / m_scrollMax);
-			o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, 0.6f, 2);
+			o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, m_gripHeld ? 0.9f : 0.6f, 2);
+			m_grip = { x0 + w - kPadX - 8, ty, x0 + w - kPadX + 5, ty + thumb };
 		}
 		m_ok = {};
 		if (m_view->okButton)

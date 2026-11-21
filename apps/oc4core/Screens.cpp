@@ -1548,6 +1548,19 @@ if _walls:
 					printPythonError(e);
 				}
 			}
+			else if (size_t(click.item) < m_items.size() && (click.barTo >= 0 || click.barStep != 0))
+			{
+				// A scroll bar held: what it scrolls follows its grip, or steps a line or a page.
+				const Item& it = m_items[size_t(click.item)];
+				try
+				{
+					py::module_::import("oc4screens").attr("scrollBar")(it.screen, it.name, it.part, click.barTo, click.barStep);
+				}
+				catch (py::error_already_set& e)
+				{
+					printPythonError(e);
+				}
+			}
 			else if (size_t(click.item) < m_items.size())
 			{
 				if (click.x >= 0)

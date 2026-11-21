@@ -372,6 +372,11 @@ namespace oc4::render
 			int item = -1; // -1: on the screens but on none of their widgets
 			bool right = false, shift = false, ctrl = false, alt = false;
 			int x = -1, y = -1; // where the mouse was (a slider's: where it is set to)
+			// A scroll bar held: its grip dragged to barTo (how far along what it scrolls, as a part
+			// of all that it holds; -1 not dragged), or a step of a line (barStep +-1, its arrows) or
+			// a page (+-2, its shaft).
+			float barTo = -1;
+			int barStep = 0;
 		};
 		std::vector<UiClick> takeUiClicks();
 		// A folder chosen by the player in the system's folder dialog (from `start`), once
