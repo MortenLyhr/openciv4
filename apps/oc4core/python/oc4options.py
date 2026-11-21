@@ -108,7 +108,7 @@ _DEFAULTS_ON = (0, 1, 2)
 # the minimap's toggles). profile.ini keeps the rest, the same whichever profile is loaded:
 # UserProfile=<name> and OpenCiv4's own options (the keys in _GLOBAL; the ini's settings too). A
 # profile.ini from before (every option in it) is the profile "openciv4"'s first file.
-_GLOBAL = ('UserProfile', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker')
+_GLOBAL = ('UserProfile', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _INI_FLAGS + tuple(k for k, v in _INI_NUMBERS)
 _DEFAULT_NAME = 'openciv4'
 _BAD = '\\/:*?"<>|'
 
@@ -648,9 +648,6 @@ def _applyVolumes():
 		pass
 
 
-_names = [] # (the profiles listed, loadProfileFileNames)
-_clock = {'justOn': False}
-
 _deviceCache = {}
 
 
@@ -685,6 +682,10 @@ def folderChosen(path):
 	_applyVolumes()
 
 
+_names = [] # (the profiles listed, loadProfileFileNames)
+_clock = {'justOn': False}
+
+
 class _UserProfile(object):
 	"""CyUserProfile: the player's options (one profile, the host's file)."""
 
@@ -693,7 +694,6 @@ class _UserProfile(object):
 			raise AttributeError(name)
 		return lambda *args, **kwargs: 0
 
-	# the profile itself
 	# the profiles (Profiles/<name>.ini): the Other tab's list, Create New Profile, Delete Profile
 	def getProfileName(self): return _profile['name']
 	def setProfileName(self, s): _profile['name'] = str(s)
@@ -957,7 +957,7 @@ class CyGTabCtrl(object):
 		n = _Node(self._next, kind, str(name))
 		# (the original's options OpenCiv4 does not do: greyed, with a tool tip saying so)
 		if n.name in _notDone():
-			n.enabled, n.tip = False, _NOT_DONE_TIP
+			n.disabled, n.tip = True, _NOT_DONE_TIP
 		self._next += 1
 		self._nodes[n.id] = n
 		self._byName[n.name] = n
@@ -983,8 +983,8 @@ class CyGTabCtrl(object):
 
 	def _attachOpenCiv4Tab(self):
 		"""OpenCiv4's options, none of the original's: W A S D panning, ending idle turns, edge
-		scrolling, quicker shown moves of the others (kept in the profile as wasdPan, autoEndTurn, edgeScroll,
-		quickEnemyMoves)."""
+		scrolling, opening a city with one click, keeping the camera on an attacker (kept in the profile as
+		wasdPan, autoEndTurn, edgeScroll, cityOneClick, keepAttacker)."""
 		self.attachTabItem(OC4_FORM, u'OpenCiv4')
 		self.attachVBox(OC4_FORM, 'Oc4VBox')
 		parent = 'Oc4Panel'
@@ -1361,7 +1361,7 @@ def _place(screen, n, x, y, w, h):
 			cy += ch + _GAP
 		return
 	# (a control OpenCiv4 does not do: greyed, takes no clicks, its tool tip says why)
-	grey, ungrey = (_GREY, u'</color>') if not n.enabled else (u'', u'')
+	grey, ungrey = (_GREY, u'</color>') if n.disabled else (u'', u'')
 	if k == 'label':
 		screen.setLabel(name, 'Background', _FONT + grey + n.text + ungrey + u'</font>', 1 << 0, x, y + 4, 0, font, general, -1, -1)
 		if n.tip:
@@ -1399,7 +1399,7 @@ def _place(screen, n, x, y, w, h):
 			screen.addPullDownString(name, item, i, i, i == int(n.value))
 		if n.tip:
 			_tip(screen, name, n.tip)
-		if not n.enabled:
+		if n.disabled:
 			screen.enable(name, False)
 	elif k in ('hslider', 'vslider'):
 		# (the theme's slider: its fill on the side its control flag names, CF_SLIDER_FILL_UP / _DOWN)
@@ -1413,9 +1413,6 @@ def _place(screen, n, x, y, w, h):
 			w_ = screen._s.get(part)
 			if w_ is not None:
 				w_.enabled, w_.help = False, _VOICE_TIP
-
-
-_GREY = u'<color=128,128,128>'
 
 
 def _tip(screen, name, text):
