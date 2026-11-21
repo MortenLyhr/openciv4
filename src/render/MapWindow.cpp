@@ -953,7 +953,7 @@ namespace oc4::render
 			}
 			else
 				padScroll = 0;
-			if (pan.x != 0 || pan.y != 0)
+			if ((pan.x != 0 || pan.y != 0) && !cityView) // (the city screen's camera holds)
 			{
 				const Vec3 forward{ -std::cos(camera.yaw), -std::sin(camera.yaw), 0 }, side{ -std::sin(camera.yaw), std::cos(camera.yaw), 0 };
 				camera.target = camera.target + (forward * -pan.y + side * pan.x) * (camera.distance * 0.9f * dt);
@@ -1221,6 +1221,10 @@ namespace oc4::render
 				path = {};
 				return;
 			}
+			// On the city screen the camera holds, as the original's: a left drag there is a click
+			// where it was pressed (its plot is worked or let go, as the original's).
+			if (!down && cityView && downLeft)
+				x = downX, y = downY;
 			if (!down && playing && !popup.active() && std::abs(x - downX) + std::abs(y - downY) < 5 && !onMinimap(x, y))
 			{
 				// A click, not a drag: the plot under it is the host's.
@@ -1240,7 +1244,8 @@ namespace oc4::render
 				}
 				else if (left)
 				{
-					const auto g = groundAt(x, y, camera.target.z);
+					// (the city screen's camera holds: no pan there, as the original's)
+					const auto g = cityView ? std::optional<Vec3>{} : groundAt(x, y, camera.target.z);
 					panning = g.has_value();
 					if (g)
 						anchor = *g;
@@ -1248,7 +1253,7 @@ namespace oc4::render
 				else if (playing && !mods.ctrl)
 					pathing = true;
 				else
-					orbiting = true;
+					orbiting = !cityView;
 			}
 			else
 			{
@@ -1271,6 +1276,8 @@ namespace oc4::render
 		// (the camera glides there, as the game's does: easeZoom each frame)
 		void zoomBy(float notches)
 		{
+			if (cityView)
+				return; // (the city screen's camera holds: the wheel does not zoom there, as the original's)
 			const float from = zoomTo > 0 ? zoomTo : camera.distance;
 			zoomTo = std::clamp(from * std::pow(0.85f, notches), closestZoom(), farthestZoom());
 		}
@@ -1294,7 +1301,9 @@ namespace oc4::render
 
 		void handleHeldKeys(float dt)
 		{
-			if (!window || SDL_GetKeyboardFocus() != window)
+			// (the city screen's camera holds: no arrows, edge or turn there, as the original's; the
+			// arrows are the game's keys there, Left and Right the previous and next city)
+			if (!window || SDL_GetKeyboardFocus() != window || cityView)
 				return;
 			const auto held = keyHeld;
 			const float speed = camera.distance * 0.9f * dt;
