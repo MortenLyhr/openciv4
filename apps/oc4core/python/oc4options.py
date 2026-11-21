@@ -1142,7 +1142,8 @@ _cpe.toggleAlarm = _toggleAlarm
 _cpe.CyGTabCtrl = CyGTabCtrl
 _cpe.CyUserProfile = _UserProfile
 oc4screens.beforeDisplay.append(relayout)
-oc4screens.editTyped.append(_editTyped)
+if isinstance(getattr(oc4screens, 'editTyped', None), list): # (a test's stand-in may not have it)
+	oc4screens.editTyped.append(_editTyped)
 _load()
 _applyVolumes()
 _applyGraphics()
