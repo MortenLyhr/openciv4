@@ -4,6 +4,7 @@
 #include "render/UiScale.h"
 #include "render/WasdPan.h"
 #include "render/EdgeScroll.h"
+#include "render/DoubleClick.h"
 #include "render/PadMap.h"
 
 #include "render/Leaderhead.h"
@@ -236,6 +237,8 @@ namespace oc4::render
 		int downX = 0, downY = 0;
 		bool downLeft = false;
 		int buttonClicks = 1; // the mouse button's clicks in a row (2: a double click)
+		DoubleClick doubleClick; // (counts the left button's presses: DoubleClick.h)
+		std::optional<MapWindow::PlotClick> firstClick; // the map click a double click's second click is on
 		std::function<std::string(int, int)> plotHelp;
 		ButtonArt art;
 		Theme theme;
@@ -1361,6 +1364,8 @@ namespace oc4::render
 				downY = y;
 				downLeft = left;
 				pathCancelled = false;
+				if (!left || buttonClicks < 2)
+					firstClick.reset(); // (no double click: what the last click was on is forgotten)
 			}
 			// On a popup: its buttons (the map around it still pans).
 			if (down && popup.contains(x, y))
@@ -1452,11 +1457,23 @@ namespace oc4::render
 				// (a city's bar is over the figures: a click on it is on its city)
 				const bool onBar = view->cityBarAt(float(x), float(y)).has_value();
 				const auto figure = onBar ? std::nullopt : figureUnder(x, y);
-				if (const auto p = figure ? *figure : hoveredPlot(); p.first >= 0)
+				const auto first = std::exchange(firstClick, std::nullopt);
+				if (downLeft && buttonClicks >= 2 && first)
+				{
+					// The second click of a double click: on what the first was on (the city, its bar,
+					// a figure), whatever moved under the mouse in between (the camera, figures, the bar).
+					MapWindow::PlotClick c = *first;
+					c.shift = mods.shift, c.ctrl = mods.ctrl, c.alt = mods.alt;
+					c.twice = true;
+					clicks.push_back(c);
+				}
+				else if (const auto p = figure ? *figure : hoveredPlot(); p.first >= 0)
 				{
 					clicks.push_back({ p.first, p.second, !downLeft, mods.shift, mods.ctrl, mods.alt, figure.has_value() });
 					clicks.back().twice = buttonClicks >= 2;
 					clicks.back().onCityBar = onBar;
+					if (downLeft && buttonClicks < 2)
+						firstClick = clicks.back();
 				}
 			}
 			if (down)
@@ -2628,7 +2645,16 @@ namespace oc4::render
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)
 				{
-					buttonClicks = e.button.clicks;
+					// (the double click is counted by the presses' own times: DoubleClick.h; a
+					// button let go keeps its press's count)
+					if (e.button.button == SDL_BUTTON_RIGHT)
+					{
+						if (down)
+							doubleClick.reset();
+						buttonClicks = 1;
+					}
+					else if (down)
+						buttonClicks = doubleClick.press(e.button.timestamp, e.button.x, e.button.y);
 					if (down)
 						++inputs; // (a click is the player's too: inputCount)
 					onButton(down && e.button.button == SDL_BUTTON_LEFT, down, x, y);

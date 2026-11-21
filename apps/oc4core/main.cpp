@@ -1450,10 +1450,12 @@ namespace
 				// One's city, as the original's: a double click on it or its name bar opens its screen
 				// (the units there are in the plot list then), one click on the bar selects the city
 				// (what it builds in the bottom panel); one click on its plot is any plot's (its
-				// units). On one of the figures in it, as anywhere, its unit. OpenCiv4's option opens
-				// the screen with one click on either.
-				if (!click.right && !click.onFigure && !opt.ownInterface && screens.active())
-					if (CvCity* city = plot->getPlotCity(); city && city->getOwner() == me)
+				// units). One click on one of the figures in it is, as anywhere, its unit's; a double
+				// click there opens the city too (Wine, backlog #46). OpenCiv4's option opens the
+				// screen with one click on the city or its bar.
+				CvCity* ownCity = plot->getPlotCity() && plot->getPlotCity()->getOwner() == me ? plot->getPlotCity() : nullptr;
+				if (!click.right && (!click.onFigure || click.twice) && !opt.ownInterface && screens.active())
+					if (CvCity* city = ownCity)
 					{
 						if (click.twice || utility.cityOneClick())
 						{
@@ -1478,9 +1480,11 @@ namespace
 						ui.selectGroup(own, click.shift, click.ctrl, click.alt);
 					else
 						ui.clearSelectionList();
-					// (as the original's: the camera goes to the plot clicked, a unit there or not;
-					// a scripted game told where to look keeps looking there)
-					if (opt.lookX < 0 || opt.viewSeconds <= 0)
+					// (as the original's: the camera goes to the plot clicked, a unit there or not, but
+					// not to one's own city, its plot or a figure in it (Wine, backlog #46: so a double
+					// click's second click lands where the first did); a scripted game told where to
+					// look keeps looking there)
+					if (!ownCity && (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA")))
 						window.centerOn(plot->getX(), plot->getY());
 				}
 				else if (ui.getHeadSelectedUnit())
