@@ -91,6 +91,7 @@ namespace oc4::host
 			float r = 1, g = 1, b = 1, a = 1;
 			int layer = 0;
 			bool border = false, core = true;
+			int style = -1; // (coloured plots: PlotStyles, the picture of plottexture.dds drawn)
 		};
 		struct Sign
 		{
@@ -98,9 +99,9 @@ namespace oc4::host
 			std::wstring caption;
 			bool core = true;
 		};
-		void addColoredPlot(int plotX, int plotY, const NiColorA& color, PlotStyles, PlotLandscapeLayers layer) override
+		void addColoredPlot(int plotX, int plotY, const NiColorA& color, PlotStyles style, PlotLandscapeLayers layer) override
 		{
-			mark({ plotX, plotY, color.r, color.g, color.b, color.a, int(layer), false });
+			mark({ plotX, plotY, color.r, color.g, color.b, color.a, int(layer), false, true, int(style) });
 		}
 		void clearColoredPlots(PlotLandscapeLayers layer) override { clear(int(layer), false); }
 		void fillAreaBorderPlot(int plotX, int plotY, const NiColorA& color, AreaBorderLayers layer) override

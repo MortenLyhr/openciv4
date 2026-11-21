@@ -1487,9 +1487,11 @@ namespace
 				for (const auto& m : marks)
 				{
 					const auto [x, y] = m.core ? host::windowPlot({ m.x, m.y }) : std::pair{ m.x, m.y };
-					// (the WorldBuilder's plot and brush in the original's area border style)
-					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER);
-					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border, false, hatched });
+					// (the WorldBuilder's plot and brush in the original's area border style, and the layers
+					// past the game's own that scripts draw: BUG's dot map's cities, as in the Wine game)
+					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER ||
+						m.layer >= NUM_AREA_BORDER_LAYERS);
+					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border, false, hatched, m.style });
 				}
 				for (const auto& s : signs)
 				{
