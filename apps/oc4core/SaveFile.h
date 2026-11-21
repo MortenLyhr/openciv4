@@ -33,6 +33,7 @@ namespace oc4::host
 		std::vector<std::byte> initCore; // CvInitCore::write
 		std::vector<std::byte> gameData; // decompressed DLL data
 		std::string pythonData;          // pickle string
+		std::vector<std::byte> engineData; // the engine's section after the Python data
 		std::string md5;
 
 		// Throws std::runtime_error on malformed files.

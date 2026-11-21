@@ -175,7 +175,10 @@ namespace oc4::host
 		}
 		s.gameData = inflateStream(compressed);
 		s.pythonData = r.str();
-		r.bytes(kTrailerZeros);
+		// The engine's own section runs up to the MD5 string at the end (int 32, 32 digits).
+		if (file.size() < r.p + 36)
+			throw std::runtime_error("save file truncated");
+		s.engineData = r.bytes(file.size() - r.p - 36);
 		s.md5 = r.str();
 		return s;
 	}
@@ -192,8 +195,13 @@ namespace oc4::host
 		w.i32(0);
 		deflateChunks(gameData, w);
 		w.str(pythonData);
-		const std::byte zeros[kTrailerZeros] = {};
-		w.raw(zeros, sizeof zeros);
+		if (engineData.empty())
+		{
+			const std::byte zeros[kTrailerZeros] = {};
+			w.raw(zeros, sizeof zeros);
+		}
+		else
+			w.raw(engineData.data(), engineData.size());
 		w.str(md5Hex(gameData));
 
 		const auto tmp = std::filesystem::path(path).concat(".tmp");
