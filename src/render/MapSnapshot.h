@@ -142,6 +142,7 @@ namespace oc4::render
 		bool revealed = true, visible = true; // to the active team
 		bool riverSouth = false, riverEast = false; // a river along the plot's south / east edge
 		uint8_t bonusState = 0; // the resource's look (CvPlot::getVisibleBonusState): 1 not improved, 2 improved, 3 improved and worked
+		uint8_t improvementState = 0; // the improvement's (CvPlot::getVisibleImprovementState): 2 not worked, 3 worked (its KFM's NotWorked / On)
 		int16_t layout = -1; // what the plot LSystem lays out on it instead of the improvement's art: into MapSnapshot::plotLayouts
 	};
 

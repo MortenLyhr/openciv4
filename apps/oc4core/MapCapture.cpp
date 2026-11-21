@@ -524,7 +524,12 @@ namespace oc4::host
 	// (not a farm, or nothing of it in the file: the improvement's own model is drawn).
 	int MapCapture::plotLayout(const CvPlot& plot, int bonus)
 	{
-		const ImprovementTypes improvement = plot.getImprovementType();
+		// The improvement the player sees there (CvPlot::getVisibleImprovementState), as the
+		// original lays out: on a worked plot without one, IMPROVEMENT_LAND_WORKED (a small
+		// farmhouse) or IMPROVEMENT_WATER_WORKED (nets).
+		ImprovementTypes improvement = NO_IMPROVEMENT;
+		bool worked = false;
+		const_cast<CvPlot&>(plot).getVisibleImprovementState(improvement, worked);
 		if (improvement == NO_IMPROVEMENT || m_plotNodes.empty())
 			return -1;
 		const std::string improvementName = text(GC.getImprovementInfo(improvement).getType());
@@ -533,9 +538,6 @@ namespace oc4::host
 		const PlayerTypes owner = plot.getOwner() != NO_PLAYER ? plot.getOwner() : GC.getGame().getActivePlayer();
 		const int era = owner != NO_PLAYER ? int(player(owner).getCurrentEra()) : int(GC.getGame().getCurrentEra());
 		const int artStyle = owner != NO_PLAYER ? int(player(owner).getArtStyleType()) : -1;
-		ImprovementTypes shown = NO_IMPROVEMENT;
-		bool worked = false;
-		const_cast<CvPlot&>(plot).getVisibleImprovementState(shown, worked);
 		const bool irrigated = plot.isIrrigationAvailable();
 		const uint32_t variant = (uint32_t(plot.getX()) * 73856093u) ^ (uint32_t(plot.getY()) * 19349663u);
 		const uint64_t key = uint64_t(uint8_t(era)) | uint64_t(uint16_t(bonus + 1)) << 8 | uint64_t(worked) << 24 | uint64_t(irrigated) << 25 |
@@ -779,29 +781,57 @@ namespace oc4::host
 			return art ? modelIndex(art, art->getNIF(), art->getKFM(), art->getScale() * improvementScale) : -1;
 		};
 
-		// Straight from the root.
+		// Straight from the root, to a leaf with the goal: at once, or through nodes between
+		// (the water's nets: PLOT_ROOT -> Water_Worked_4x4 -> Leaf_Water_Worked_4x4, turned -40).
+		// Of the root's productions that get there, one (WaterWorkedProd: five places).
+		struct Reached
+		{
+			const LArtRef* goal = nullptr;
+			float x = 0, y = 0, degrees = 0;
+		};
+		std::vector<Reached> reached;
+		const auto reach = [&](auto&& self, const std::string& node, float x, float y, float degrees, int depth) -> std::optional<Reached> {
+			if (node.rfind("Leaf_", 0) == 0)
+			{
+				if (const LArtRef* goal = artOf(node, [&](const LArtRef& r) { return r.name == goalName; }))
+					return Reached{ goal, x, y, degrees };
+				return std::nullopt;
+			}
+			if (depth > 4)
+				return std::nullopt;
+			for (const LProduction& p : m_plotProductions)
+				if (p.from == node && fits(p))
+					for (const LProduction::To& t : p.to)
+					{
+						const float rc = std::cos(degrees * kDegrees), rs = std::sin(degrees * kDegrees);
+						if (auto r = self(self, t.node, x + t.x * rc - t.y * rs, y + t.x * rs + t.y * rc, degrees + t.rotate, depth + 1))
+							return r;
+					}
+			return std::nullopt;
+		};
 		for (const LProduction& p : m_plotProductions)
 		{
 			if (p.from != "PLOT_ROOT" || !p.lists.contains("Improvement") || !fits(p))
 				continue;
 			for (const LProduction::To& to : p.to)
-			{
-				if (to.node.rfind("Leaf_", 0) != 0)
-					continue;
-				const LArtRef* goal = artOf(to.node, [&](const LArtRef& r) { return r.name == goalName; });
-				if (!goal)
-					continue;
-				render::PlotPiece& piece = pieces.emplace_back();
-				piece.model = whole(*goal);
-				piece.x = to.x / 12;
-				piece.y = to.y / 12;
-				// (a goal with an fTwist, the forts: turned by it and a quarter more, which puts
-				// the tower on the left corner and the gate front right, as the original draws
-				// them in every era)
-				piece.yaw = twistOf(*goal) + (to.rotate + turnOf(*goal) + goal->rotate + (goal->scalar("fTwist").empty() ? 0.0f : 90.0f)) * kDegrees;
-				piece.cut = centerCut(*goal);
-				return;
-			}
+				if (to.node.rfind("Node_", 0) != 0)
+					if (auto r = reach(reach, to.node, to.x, to.y, to.rotate, 0))
+						reached.push_back(*r);
+		}
+		if (!reached.empty())
+		{
+			const Reached& r = reached[next() % reached.size()];
+			const LArtRef* goal = r.goal;
+			render::PlotPiece& piece = pieces.emplace_back();
+			piece.model = whole(*goal);
+			piece.x = r.x / 12;
+			piece.y = r.y / 12;
+			// (a goal with an fTwist, the forts: turned by it and a quarter more, which puts
+			// the tower on the left corner and the gate front right, as the original draws
+			// them in every era)
+			piece.yaw = twistOf(*goal) + (r.degrees + turnOf(*goal) + goal->rotate + (goal->scalar("fTwist").empty() ? 0.0f : 90.0f)) * kDegrees;
+			piece.cut = centerCut(*goal);
+			return;
 		}
 
 		// Its goal on a leaf of the plot's 12x12 cells.
@@ -1059,7 +1089,13 @@ namespace oc4::host
 			v.feature = int16_t(plot->getFeatureType());
 			v.featureVariety = uint8_t(std::max(plot->getFeatureVariety(), 0));
 			v.owner = int16_t(plot->getOwner());
-			v.improvement = int16_t(plot->getImprovementType());
+			// (the one the player sees: on a worked plot without one, the original's worked look)
+			{
+				ImprovementTypes shown = NO_IMPROVEMENT;
+				bool worked = false;
+				plot->getVisibleImprovementState(shown, worked);
+				v.improvement = int16_t(shown);
+			}
 			// (a resource the active team cannot see yet, by its techs, is not there for it)
 			v.bonus = int16_t(plot->getBonusType(active));
 			v.route = int16_t(plot->getRouteType());
@@ -1069,6 +1105,13 @@ namespace oc4::host
 				bool improved = false, worked = false;
 				plot->getVisibleBonusState(shownBonus, improved, worked);
 				v.bonusState = uint8_t(!improved ? 1 : worked ? 3 : 2);
+			}
+			{
+				// (the improvement's KFM: On, a worked plot's (the mine's cart and smoke, ...); NotWorked)
+				ImprovementTypes shownImprovement = NO_IMPROVEMENT;
+				bool worked = false;
+				plot->getVisibleImprovementState(shownImprovement, worked);
+				v.improvementState = uint8_t(shownImprovement == NO_IMPROVEMENT ? 0 : worked ? 3 : 2);
 			}
 			v.water = plot->isWater();
 			v.hills = plot->isHills();

@@ -464,6 +464,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 		bool embeddedMoves = false;              // ... which move or hide nodes, not only materials
 		std::vector<Affine> bindLocals, bindWorld;
 		std::vector<uint8_t> bindVisible;
+		// Its nodes laid on the terrain (scene::DrawItem::contour), if any: 1 per such node.
+		std::vector<uint8_t> contourNodes;
 		// The node the pieces hang below; per node the piece it belongs to (itself above).
 		int spread = -1;
 		// Its nodes' attachables ("ATTACH:<node>:<type>"), and those loaded.
@@ -1196,6 +1198,12 @@ float4 PSTerrain(PSIn i) : SV_Target
 				lm.bindLocals = lm.model.bindLocals();
 				lm.bindWorld = lm.model.worldTransforms(lm.bindLocals);
 				lm.bindVisible = lm.model.visibility(lm.model.bindHidden());
+				for (const auto& item : lm.model.items)
+					if (item.contour && item.node >= 0)
+					{
+						lm.contourNodes.resize(lm.model.nodes.size(), 0);
+						lm.contourNodes[size_t(item.node)] = 1;
+					}
 				lm.bounds = lm.model.bounds;
 				for (size_t i = 0; i < lm.model.nodes.size(); ++i)
 				{
@@ -2133,7 +2141,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 
 		// What the plot LSystem lays out on a plot: models standing, and nodes of models (a
 		// farm's crops) laid on the ground, each over the one before it.
-		void addLayout(const std::vector<PlotPiece>& pieces, Vec3 center, uint32_t h)
+		void addLayout(const std::vector<PlotPiece>& pieces, Vec3 center, uint32_t h, int state = 0)
 		{
 			float lift = 0.5f;
 			for (const PlotPiece& piece : pieces)
@@ -2143,7 +2151,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					layoutCuts.push_back({ at, piece.cut * S() });
 				if (piece.node.empty())
 				{
-					addDecor(piece.model, at, piece.yaw, h++);
+					addDecor(piece.model, at, piece.yaw, h++, state);
 					continue;
 				}
 				if (piece.model < 0 || size_t(piece.model) >= map.models.size())
@@ -2310,9 +2318,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 					if (p.route >= 0)
 						addRoute(x, y, p);
 					if (p.layout >= 0 && size_t(p.layout) < map.plotLayouts.size())
-						addLayout(map.plotLayouts[size_t(p.layout)], center, hash(x, y, 7));
+						addLayout(map.plotLayouts[size_t(p.layout)], center, hash(x, y, 7), p.improvementState);
 					else if (p.improvement >= 0 && size_t(p.improvement) < map.improvements.size())
-						addDecor(map.improvements[size_t(p.improvement)], center, 0, hash(x, y, 7));
+						addDecor(map.improvements[size_t(p.improvement)], center, 0, hash(x, y, 7), p.improvementState);
 					if (p.bonus >= 0 && size_t(p.bonus) < map.bonuses.size())
 						addDecor(map.bonuses[size_t(p.bonus)], center, 0, hash(x, y, 8), p.bonusState, !p.water);
 				}
@@ -3396,6 +3404,29 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// own particles and animation).
 		bool frozen = false, showEffects = true; // (MapView::Options)
 
+		// A model standing at a height (base: its place's): its parts marked ContourGeometry laid
+		// on the terrain, as the original's ContourShader.fx does (their heights over the ground
+		// there, not over the model's base), the rest as placed. A mine's ground patch sat at the
+		// mine's base, over the ground in front of it, and covered the mine's wooden deck.
+		void drawModel(const LoadedModel& lm, std::span<const Affine> world, std::span<const uint8_t> visible,
+			std::span<const scene::Material> materials, Vec3 team, bool onGround, float base)
+		{
+			if (lm.contourNodes.empty() || onGround)
+			{
+				renderer.draw(*lm.gpu, world, visible, materials, team, onGround);
+				return;
+			}
+			std::vector<uint8_t> standing(visible.begin(), visible.end()), laid(visible.size(), 0);
+			for (size_t i = 0; i < standing.size() && i < lm.contourNodes.size(); ++i)
+				if (lm.contourNodes[i])
+					laid[i] = standing[i], standing[i] = 0;
+			renderer.draw(*lm.gpu, world, standing, materials, team, false);
+			std::vector<Affine> lowered(world.begin(), world.end());
+			for (auto& w : lowered)
+				w.translation.z -= base;
+			renderer.draw(*lm.gpu, lowered, laid, materials, team, true);
+		}
+
 		void drawEffects(const Instance& inst, std::span<const Affine> world, std::span<const uint8_t> visible)
 		{
 			if (!showEffects)
@@ -3422,6 +3453,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 			{
 				const auto& a = lm.attachments[k];
 				if (size_t(a.node) >= world.size()) // (its node itself hidden, a helper: shown all the same)
+					continue;
+				// ... unless the state playing hides it: a mine's smoke and fire, on in its On
+				// state, off in NotWorked.
+				if (inst.sequence && inst.sequence->drivesVisibility(a.node) && size_t(a.node) < visible.size() && !visible[size_t(a.node)])
 					continue;
 				const LoadedModel& am = *a.model;
 				const Affine at = world[size_t(a.node)] * placement({}, 0, a.scale);
@@ -3632,7 +3667,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 					world.resize(lm.bindWorld.size());
 					for (size_t k = 0; k < world.size(); ++k)
 						world[k] = place * lm.bindWorld[k];
-					renderer.draw(*lm.gpu, world, lm.bindVisible, {}, inst.team, inst.onGround);
+					drawModel(lm, world, lm.bindVisible, {}, inst.team, inst.onGround, place.translation.z);
 					drawEffects(inst, world, lm.bindVisible);
 					continue;
 				}
@@ -3707,7 +3742,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 						for (const auto& item : lm.model.items)
 							materials.push_back(anim::animatedMaterial(item, pose));
 					const auto shownNodes = lm.model.visibility(pose.hidden);
-					renderer.draw(*lm.gpu, world, shownNodes, materials, inst.team, inst.onGround);
+					drawModel(lm, world, shownNodes, materials, inst.team, inst.onGround, place.translation.z);
 					drawEffects(inst, world, shownNodes);
 					if (inst.shadow)
 					{
@@ -3747,20 +3782,20 @@ float4 PSTerrain(PSIn i) : SV_Target
 						for (auto& w : world)
 							w.translation.x += dx;
 					}
-					renderer.draw(*lm.gpu, world, shown, materials, inst.team, inst.onGround);
+					drawModel(lm, world, shown, materials, inst.team, inst.onGround, inst.place.translation.z);
 					drawEffects(inst, world, shown);
 					continue;
 				}
 				if (dx == 0)
 				{
-					renderer.draw(*lm.gpu, inst.world, visible, inst.materials, inst.team, inst.onGround);
+					drawModel(lm, inst.world, visible, inst.materials, inst.team, inst.onGround, inst.place.translation.z);
 					drawEffects(inst, inst.world, visible);
 					continue;
 				}
 				world = inst.world;
 				for (auto& w : world)
 					w.translation.x += dx;
-				renderer.draw(*lm.gpu, world, visible, inst.materials, inst.team, inst.onGround);
+				drawModel(lm, world, visible, inst.materials, inst.team, inst.onGround, inst.place.translation.z);
 				drawEffects(inst, world, visible);
 			}
 		}
@@ -3784,9 +3819,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 			const PlotView& p = snapshot.plots[i];
 			shape[i] = uint8_t((p.water ? 1 : 0) | (p.hills ? 2 : 0) | (p.peak ? 4 : 0) | (p.riverSouth ? 8 : 0) | (p.riverEast ? 16 : 0));
 			featureKey[i] = int32_t(p.feature) << 8 | p.featureVariety;
-			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint16_t(p.route)) << 32 |
-				uint64_t(p.riverSouth) << 48 | uint64_t(p.riverEast) << 49 | uint64_t(uint16_t(p.layout + 1) & 0xFFF) << 50 |
-				uint64_t(p.bonusState & 3) << 62; // (the layout's 12 bits: two layouts 4096 apart on a plot would look unchanged)
+			// (the route's 8 bits and the layout's 16: two of them 256 or 65536 apart on a plot would look unchanged)
+			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint8_t(p.route)) << 32 |
+				uint64_t(p.riverSouth) << 40 | uint64_t(p.riverEast) << 41 | uint64_t(uint16_t(p.layout + 1)) << 42 |
+				uint64_t(p.improvementState & 3) << 58 | uint64_t(p.bonusState & 3) << 60;
 		}
 		const bool reshaped = resized || shape != m->shape;
 		const bool refeatured = reshaped || newArt || featureKey != m->featureKey;
