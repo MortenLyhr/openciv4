@@ -83,6 +83,7 @@ struct PSIn
 	float3 world : TEXCOORD0;
 	float3 nrm : NORMAL;
 	float3 drawn : TEXCOORD1; // where it is drawn (the copy, bent round the globe): the distance fog's
+	float under : TEXCOORD2;  // the culture borders' pass: 1 where the ground is under the water's level
 };
 
 PSIn VSTerrain(VSIn i)
@@ -92,6 +93,7 @@ PSIn VSTerrain(VSIn i)
 	o.pos = mul(float4(o.drawn, 1), viewProj);
 	o.world = i.pos;
 	o.nrm = i.nrm;
+	o.under = 0;
 	return o;
 }
 
@@ -331,23 +333,33 @@ float4 PSTerrain(PSIn i) : SV_Target
 	return float4(color * distanceFog(i.drawn), 1);
 }
 
-// The culture borders as their own layer, as the original's (CultureBorderShader.fx): drawn
-// after the water, over it at full strength (the water does not dim them), on the ground and
-// at the water's level where the ground is under it; not lit, darkened by the fog of war.
+// The culture borders as their own layer, as the original's (CultureBorderShader.fx): not lit,
+// darkened by the fog of war. In two passes (showBorders): 1, the ground above the water's level,
+// right after the terrain, so that what stands on it blends over the border as over the ground
+// (the original: the soft dirt under resources and improvements tinted, the rocks on it not);
+// 2, at the water's level where the ground is under it, after the water, over it at full
+// strength (the water does not dim them).
 PSIn VSBorder(VSIn i)
 {
 	PSIn o;
-	// (a hair above the ground, so that it is never behind it)
-	float3 pos = float3(i.pos.xy, max(i.pos.z, waterZ) + 0.002 * plotSize);
+	// (a little above the ground and towards the eye, so that it is never behind it nor behind the
+	// pieces laid on it, drawn before it: rivers 0.8, roads 0.6, a farm's crops from 0.5 up, a plot
+	// 180 world units; the model shader moves those 6 towards the eye. What is drawn after it
+	// covers it whatever its depth: it writes none.)
+	float3 pos = float3(i.pos.xy, max(i.pos.z, waterZ) + 0.012 * plotSize);
 	o.drawn = globeBend(pos + worldOffset);
-	o.pos = mul(float4(o.drawn, 1), viewProj);
+	float3 toEye = eyePos - o.drawn;
+	o.pos = mul(float4(dot(toEye, toEye) > 100 ? o.drawn + normalize(toEye) * 8 : o.drawn, 1), viewProj);
 	o.world = pos;
 	o.nrm = i.nrm;
+	o.under = i.pos.z < waterZ ? 1 : 0;
 	return o;
 }
 
 float4 PSBorder(PSIn i) : SV_Target
 {
+	// (each pass its part: they meet where the ground crosses the water's level)
+	clip(showBorders == 2 ? i.under - 0.5 : 0.5 - i.under);
 	float2 p = i.world.xy / plotSize;
 	float4 b = cultureBorder(p, fwidth(p));
 	clip(b.a - 1.0 / 255);
@@ -695,6 +707,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			Vec3 anchor, offset;
 			float yaw = 0, scale = 1;
 			bool onGround = false; // heights over the terrain (roads)
+			bool laid = false;     // a piece laid on the terrain (rivers, roads, a farm's crops): drawn before the culture borders
 			int plot = -1;         // the plot it belongs to (fog of war)
 			uint64_t unit = 0;     // a unit's figure: owner and id
 			const anim::Sequence* sequence = nullptr; // animated: what it plays (none: its idle)
@@ -2647,6 +2660,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				inst.center = { at.x, at.y, ground(at.x, at.y) };
 				inst.radius = part->bounds.radius() * art.scale + 0.2f * S();
 				inst.onGround = true;
+				inst.laid = true; // (the original: a farm's crops tinted by the border, as the ground)
 				decor.push_back(std::move(inst));
 				lift += 0.1f;
 			}
@@ -2668,6 +2682,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			inst.center = { at.x, at.y, ground(at.x, at.y) };
 			inst.radius = lm->bounds.radius() + 0.2f * S();
 			inst.onGround = true;
+			inst.laid = true;
 			decor.push_back(std::move(inst));
 		}
 
@@ -3454,12 +3469,14 @@ float4 PSWater(WaterOut i) : SV_Target
 			drawGround(frustum, terrainPipeline, tc);
 		}
 
-		// The culture borders over the ground and the water (Options::borders).
-		void drawBorders(const Frustum& frustum, const MapView::Options& options)
+		// The culture borders (Options::borders): over the ground above the water's level (pass
+		// 1, before what stands on it) or under it (pass 2, after the water).
+		void drawBorders(const Frustum& frustum, const MapView::Options& options, uint32_t part)
 		{
 			if (!options.borders || !vb || !atlasTex || !plotTex || !detailTex || !decalTex || !cellTex || !borderTex)
 				return;
 			TerrainConstants tc = terrainConstants(options);
+			tc.showBorders = part;
 			drawGround(frustum, borderPipeline, tc);
 		}
 
@@ -4063,13 +4080,16 @@ float4 PSWater(WaterOut i) : SV_Target
 			}
 		}
 
-		void drawInstances(const std::vector<Instance>& list, const Frustum& frustum, bool needsSight = false)
+		// laid: -1 every instance, 1 only those laid on the terrain (Instance::laid), 0 the others.
+		void drawInstances(const std::vector<Instance>& list, const Frustum& frustum, bool needsSight = false, int laid = -1)
 		{
 			std::vector<Affine> world;
 			std::vector<scene::Material> materials;
 			const float zoom = figureZoom();
 			for (const Instance& inst : list)
 			{
+				if (laid >= 0 && inst.laid != (laid == 1))
+					continue;
 				if (fogged(inst, needsSight))
 					continue;
 				const Motion* motion = nullptr;
@@ -4382,15 +4402,24 @@ float4 PSWater(WaterOut i) : SV_Target
 		m->drawTerrain(frustum, options);
 		m->renderer.setFog(options.fog ? m->plotTex.get() : nullptr, m->S(), uint32_t(m->map.width), uint32_t(m->map.height), m->map.wrapX,
 			m->map.wrapY);
+		// The culture borders over the ground and what is laid on it (the original: their line over
+		// a river's water along its bank), under what stands on it (the soft dirt under resources
+		// and improvements blends over the border as over the ground).
+		if (options.improvements)
+		{
+			m->drawInstances(m->decor, frustum, false, 1);
+			m->renderer.drawGroundBlended();
+		}
+		m->drawBorders(frustum, options, 1);
 		if (options.features)
 			m->drawInstances(m->features, frustum);
 		if (options.improvements)
-			m->drawInstances(m->decor, frustum);
+			m->drawInstances(m->decor, frustum, false, 0);
 		// The sea's water over what is under it: the rivers' water laid on the ground (a delta's,
 		// out at sea, seen through the sea's) and what stands in the water.
 		m->renderer.drawGroundBlended();
 		m->drawWater(frustum, options);
-		m->drawBorders(frustum, options);
+		m->drawBorders(frustum, options, 2);
 		if (options.cities)
 			m->drawInstances(m->cities, frustum);
 		m->figureHits.clear();
