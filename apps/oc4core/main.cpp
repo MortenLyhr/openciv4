@@ -710,6 +710,7 @@ namespace
 
 		std::vector<int> actionIds; // the action of each button the window shows
 		std::optional<std::pair<int, int>> pathShown; // where the way the window shows leads
+		std::optional<std::vector<IDInfo>> selectedBeforeClick; // (the units selected before the last left click on the map)
 		std::pair<const void*, int> pathFrom{};        // (the unit it starts from and its plot: the gamepad's plot cursor shows it all the while)
 		std::tuple<const void*, const void*, int, int> coloredFor{}; // what was selected when the plots were last coloured
 		uint64_t marksShown = ~0ull; // the marks the window has
@@ -1337,12 +1338,29 @@ namespace
 				// units). One click on one of the figures in it is, as anywhere, its unit's; a double
 				// click there opens the city too (Wine, backlog #46). OpenCiv4's option opens the
 				// screen with one click on the city or its bar.
+				// The first click of a double click is a click (it selects the units there); the city's
+				// screen then opens with the units selected before it, the ones Esc gives back (Wine,
+				// backlog #46: on its plot, its bar or a figure in it).
 				CvCity* ownCity = plot->getPlotCity() && plot->getPlotCity()->getOwner() == me ? plot->getPlotCity() : nullptr;
+				const auto before = std::exchange(selectedBeforeClick, std::nullopt);
+				if (!click.right && !click.twice)
+				{
+					selectedBeforeClick.emplace();
+					for (CLLNode<IDInfo>* n = ui.headSelectionListNode(); n; n = ui.nextSelectionListNode(n))
+						selectedBeforeClick->push_back(n->m_data);
+				}
 				if (!click.right && (!click.onFigure || click.twice) && !opt.ownInterface && screens.active())
 					if (CvCity* city = ownCity)
 					{
 						if (click.twice || utility.cityOneClick())
 						{
+							if (click.twice && before)
+							{
+								ui.clearSelectionList();
+								for (const IDInfo& id : *before)
+									if (CvUnit* u = CvPlayerAI::getPlayerNonInl(id.eOwner).getUnit(id.iID); u && u->getOwner() == me)
+										ui.insertIntoSelectionList(u, false, false, false, false, true);
+							}
 							ui.selectCity(city, true);
 							continue;
 						}
