@@ -119,8 +119,16 @@ namespace oc4::host
 		}
 		void mark(const PlotMark& m)
 		{
+			// (a plot marked again in its layer takes the new colour, as the original's: BUG's dot
+			// map erases a dot so, with a colour of alpha 0)
 			std::lock_guard lock(marksMutex);
-			marks.push_back(m);
+			const auto same = std::find_if(marks.begin(), marks.end(), [&m](const PlotMark& o) {
+				return o.x == m.x && o.y == m.y && o.layer == m.layer && o.border == m.border && o.core == m.core;
+			});
+			if (same != marks.end())
+				*same = m;
+			else
+				marks.push_back(m);
 			++marksVersion;
 		}
 		void clear(int layer, bool border)

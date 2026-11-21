@@ -1223,6 +1223,40 @@ namespace
 			// The WorldBuilder: the mouse over the map is its screen's (where it is, its buttons held,
 			// its clicks: CvScreensInterface's mouseOverPlot, leftMouseDown, rightMouseDown), and the
 			// plot its brush is on outlined (WorldBuilderGetHighlightPlot); the game's clicks wait.
+			// Out of it, the mouse over the map as the original engine keeps it for the scripts
+			// (CyInterface's getMouseOverPlot, isLeftMouseDown, isRightMouseDown; BUG's dot map editor
+			// reads them every frame and draws its city where the mouse is): the plot under it, the
+			// screens over the map told when it moves to another, and its buttons held. A click
+			// whose press no frame saw (a scripted one, or one quicker than a frame) is held for this
+			// frame, so that it is seen once.
+			if (!ui.worldBuilder() && !opt.ownInterface)
+			{
+				static bool heldSeen[2] = {};
+				const auto [hx, hy] = window.hoveredPlot();
+				ui.mouseOverMap = hx >= 0 && window.uiHovered() < 0;
+				int px = ui.mouseOverMap ? hx : ui.mouseX, py = ui.mouseOverMap ? hy : ui.mouseY;
+				bool clicked[2] = {};
+				for (const auto& click : clicks)
+					if (!click.clear && !click.either)
+					{
+						clicked[click.right ? 1 : 0] = true;
+						px = click.x, py = click.y;
+					}
+				if (px != ui.mouseX || py != ui.mouseY)
+				{
+					ui.mouseX = px, ui.mouseY = py;
+					if (px >= 0)
+						screens.mouseOverPlot();
+				}
+				bool down[2];
+				for (int b = 0; b < 2; ++b)
+				{
+					const bool held = render::mouseHeld(b == 0);
+					down[b] = (ui.mouseOverMap && held) || (clicked[b] && !heldSeen[b]);
+					heldSeen[b] = held || (heldSeen[b] && !clicked[b]);
+				}
+				ui.mouseLeft = down[0], ui.mouseRight = down[1];
+			}
 			window.setWorldBuilder(ui.worldBuilder());
 			if (ui.worldBuilder())
 			{

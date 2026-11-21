@@ -1508,6 +1508,23 @@ if _walls:
 		return taken;
 	}
 
+	void Screens::mouseOverPlot()
+	{
+		if (!m_active || m_menu)
+			return;
+		try
+		{
+			py::module_ entry = py::module_::import("CvScreensInterface");
+			for (py::handle id : py::module_::import("oc4screens").attr("shownScreens")().cast<py::list>())
+				if (const int screen = id.cast<int>(); screen != kDiplomacyScreen)
+					entry.attr("mouseOverPlot")(py::make_tuple(screen));
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+		}
+	}
+
 	bool Screens::diploKey(unsigned key)
 	{
 		if (!m_active || !m_utility.diplomacy().active())

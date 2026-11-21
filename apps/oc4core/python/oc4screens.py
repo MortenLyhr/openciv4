@@ -2387,7 +2387,11 @@ class CyEngine(object):
 	def getSelectionCursorVisibility(self): return _engineFlags['cursor']
 	def setSelectionCursorVisibility(self, b): _engineFlags['cursor'] = bool(b)
 	# the plots it marks (oc4host keeps them, the window draws them): coloured, outlined
-	def addColoredPlot(self, iX, iY, color, ePlotStyle, eLayer):
+	# (the Mac engine's has no style, addColoredPlot(iX, iY, color, eLayer): BUG calls it so when
+	# sys.platform is darwin, for its dot map)
+	def addColoredPlot(self, iX, iY, color, ePlotStyle, eLayer=None):
+		if eLayer is None:
+			ePlotStyle, eLayer = None, ePlotStyle
 		oc4host.engine_mark(_int(iX), _int(iY), float(color.r), float(color.g), float(color.b), float(color.a), _int(eLayer, 0), False)
 
 	def addColoredPlotAlt(self, iX, iY, ePlotStyle, eLayer, szColor, fAlpha):
