@@ -127,12 +127,20 @@ namespace oc4::render
 		Camera camera;
 		float tilt = 0; // the user's change of the zoom-dependent pitch
 		float zoomTo = 0; // the distance a zoom glides to (0: none)
-		// A flight of the camera from one view to another (into the city screen and out again).
+		// Where on the screen (0 bottom, 1 top) what the camera looks at is drawn: on the map, the
+		// original's CyCamera().GetDefaultViewPortCenter() (0.5, 0.569), clear of the interface along
+		// the bottom; on the city screen lower, at 0.534 (the original's city screen, measured in
+		// Wine: the city's plot 419 px from the top at 1600x900 and 467 at 1280x1000, the camera
+		// straight above it at CAMERA_CITY_ZOOM_IN_DISTANCE, while GetDefaultViewPortCenter still
+		// says 0.569), which keeps the fat cross's top row clear of the city screen's top panel.
+		static constexpr float kMapCentre = 0.569f, kCityCentre = 0.534f;
 		struct View
 		{
 			Vec3 target;
 			float distance = 0, pitch = 0, yaw = 0, tilt = 0;
+			float centre = kMapCentre; // where on the screen the target is drawn (Camera::centreUp)
 		};
+		// A flight of the camera from one view to another (into the city screen and out again).
 		struct Glide
 		{
 			View from, to;
@@ -303,10 +311,10 @@ namespace oc4::render
 			const float w = float(renderer->width()), h = std::max(float(renderer->height()), 1.0f);
 			const float diagonal = std::clamp(view->map().cameraFov, 10.0f, 120.0f) * 3.14159265f / 180;
 			camera.fovY = 2 * std::atan(std::tan(diagonal / 2) * h / std::hypot(w, h));
-			// (what the camera looks at is drawn above the window's middle, as the original's
-			// CyCamera().GetDefaultViewPortCenter() (0.5, 0.569) has it: clear of the interface
-			// along the bottom)
-			camera.centreUp = 0.569f;
+			// (what the camera looks at is drawn above the window's middle: kMapCentre, or the city
+			// screen's kCityCentre; a glide between them moves it along)
+			if (!glide)
+				camera.centreUp = cityView ? kCityCentre : kMapCentre;
 		}
 
 		float closestZoom() const { return std::max(view->map().cameraMinDistance, plot()); }
@@ -371,7 +379,7 @@ namespace oc4::render
 			camera.target.z = 0;
 		}
 
-		View currentView() const { return { camera.target, camera.distance, camera.pitch, camera.yaw, tilt }; }
+		View currentView() const { return { camera.target, camera.distance, camera.pitch, camera.yaw, tilt, camera.centreUp }; }
 
 		// The camera flies to the view: closer or farther evenly by ratio (a zoom), across the
 		// shorter way round a wrapping map, turning the shorter way, easing in and out.
@@ -403,6 +411,7 @@ namespace oc4::render
 			camera.distance = g.from.distance * std::pow(g.to.distance / std::max(g.from.distance, 1.0f), k);
 			camera.pitch = mix(g.from.pitch, g.to.pitch);
 			camera.yaw = mix(g.from.yaw, g.to.yaw);
+			camera.centreUp = mix(g.from.centre, g.to.centre);
 			tilt = g.to.tilt;
 			if (g.t >= 1)
 			{
@@ -420,7 +429,7 @@ namespace oc4::render
 				beforeCity = glide ? glide->to : currentView();
 			cityView = true;
 			View to{ { (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 }, std::max(view->map().cameraCityDistance, 5 * plot()),
-				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0 };
+				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0, kCityCentre };
 			glideTo(to);
 		}
 
