@@ -629,7 +629,21 @@ namespace oc4::host
 			a.start = std::chrono::steady_clock::now();
 			if (std::getenv("OC4_PLAY_LOG"))
 				std::printf("  action %d of unit %d: %.2fs at %d,%d%s%s\n", a.mission, a.unit.iID, a.seconds, a.targetX, a.targetY, a.effect.empty() ? "" : ", ", a.effect.c_str());
+			// (a plane intercepted: the interceptor shoots at it over the plot it flies to, a SAM its
+			// missile; a plane flies there as to a strike)
+			const CvUnit* interceptor = (m == MISSION_AIRSTRIKE || m == MISSION_PARADROP) ? pDefinition->getUnit(BATTLE_UNIT_DEFENDER) : nullptr;
 			std::lock_guard lock(g_actionMutex);
+			if (interceptor && interceptor != unit)
+			{
+				a.mission = 5; // (it is shot at on its way: it strikes nothing)
+				Action i = a;
+				i.unit = interceptor->getIDInfo();
+				i.mission = interceptor->getDomainType() == DOMAIN_AIR ? 2 : 4;
+				i.effect.clear();
+				if (std::getenv("OC4_PLAY_LOG"))
+					std::printf("  intercepted by unit %d (%s)\n", i.unit.iID, i.mission == 4 ? "from the ground" : "in the air");
+				g_actions.push_back(std::move(i));
+			}
 			g_actions.push_back(std::move(a));
 			return;
 		}

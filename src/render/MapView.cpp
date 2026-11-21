@@ -413,6 +413,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// Giving itself up (ANIMCAT_SURRENDER: event code 1002, a worker's or a settler's), and a
 		// unit's fading out (its XFadeOut, code 1: the material's alpha to 0).
 		std::optional<anim::Sequence> surrender, fadeOut;
+		std::optional<anim::Sequence> antiAir; // event code 1042: a SAM's anti-air strike (its missile)
 		// Working, by work (irrigate, build, mine, chop, shovel, railroad: categories 50 + 3 a
 		// work): its beginning, the work, a pause in it; founding a city (ANIMCAT_FOUND 40).
 		std::optional<anim::Sequence> work[6][3], found;
@@ -537,6 +538,12 @@ float4 PSTerrain(PSIn i) : SV_Target
 			Affine place;
 			float start = 0, until = 0, last = 0;
 			Particles particles;
+			// A projectile (an arrow, a rock, a bomb, a missile): it flies from `from` to `to` for
+			// `flight` seconds (its run clip, if any), then plays its explosion (event code 1022),
+			// whose text keys set off its effects and sounds.
+			bool projectile = false;
+			Vec3 from, to;
+			float flight = 0, scale = 1, keysLast = -1;
 		};
 		std::vector<Burst> bursts;
 		std::vector<std::function<void()>> pendingBursts; // (set off before the map came)
@@ -1165,6 +1172,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 				wanted.emplace_back(1004u, &lm.heal);
 				wanted.emplace_back(1002u, &lm.surrender);
 				wanted.emplace_back(1u, &lm.fadeOut);
+				wanted.emplace_back(1042u, &lm.antiAir);
 				std::vector<std::optional<anim::Sequence>> damaged(16);
 				for (uint32_t state = 0; state < 4; ++state)
 					for (uint32_t part = 0; part < 4; ++part)
@@ -3079,8 +3087,8 @@ float4 PSTerrain(PSIn i) : SV_Target
 		// keys "SOUND:...,AS3D_..."): the strikes' of its first two, every death's.
 		void battleSounds(const Instance& inst, const BattlePose& p)
 		{
-			if (p.clip && (p.dying || inst.figureIndex < 2))
-				clipSounds(inst, *p.clip, p.at);
+			if (p.clip)
+				clipSounds(inst, *p.clip, p.at, p.dying || inst.figureIndex < 2); // (every figure's arrows fly)
 		}
 
 		// A figure acting (a mission's animation) at this time: pillaging (its melee strike,
@@ -3096,6 +3104,16 @@ float4 PSTerrain(PSIn i) : SV_Target
 			// (a plane strikes over its plot, once, after it flew there; it flies back as it does)
 			if (inst.air && inst.actionX >= 0)
 			{
+				// (intercepted: hit as it comes over, it strikes nothing)
+				if (inst.action == 5)
+				{
+					const LoadedModel& lm = *inst.model;
+					const anim::Sequence* h = lm.hurt[0][0] ? &*lm.hurt[0][0] : nullptr;
+					const float s = t - kFlightOut;
+					if (!h || s < 0 || s > h->duration())
+						return { nullptr, 0.0f };
+					return { h, s };
+				}
 				const anim::Sequence* c = strikeClip(*inst.model);
 				const float s = t - kFlightOut;
 				if (!c || s < 0 || s > strikeTime(*inst.model))
@@ -3118,6 +3136,16 @@ float4 PSTerrain(PSIn i) : SV_Target
 			case 1: // pillaging
 				clip = first(lm.strike, 0);
 				break;
+			case 4: // intercepting from the ground: once, as the plane comes over (its missile flies to it)
+			{
+				clip = lm.antiAir ? &*lm.antiAir : first(lm.strike, 1);
+				if (!clip)
+					clip = first(lm.strike, 0);
+				const float at = t - 0.5f * kFlightOut;
+				if (!clip || at < 0 || at > clip->duration())
+					return { nullptr, 0.0f };
+				return { clip, at };
+			}
 			default: // bombarding, a ranged attack, an air strike or bomb, a paradrop, recon, a nuke
 				clip = first(lm.strike, 1);
 				if (!clip)
@@ -3421,8 +3449,53 @@ float4 PSTerrain(PSIn i) : SV_Target
 						at = world[n];
 						break;
 					}
-				addBurst(model(art->nif, ""), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
+				if (art->projectile)
+					addProjectile(*art, at.translation, at.scale); // (as large as the figure that sets it off)
+				else
+					addBurst(effectModel(art->nif), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
 			}
+		}
+
+		// What a figure's projectiles fly to (set before its clip's effects are set off): the plot
+		// it attacks, the plane it shoots at; none: straight down to the ground.
+		std::optional<Vec3> keyTarget;
+
+		// An effect's model: a NIF, or a KFM's (with its clips).
+		LoadedModel* effectModel(const std::string& path)
+		{
+			if (path.size() < 4 || _stricmp(path.c_str() + path.size() - 4, ".kfm") != 0)
+				return model(path, "");
+			const std::string key = makeAssetKey(path);
+			const auto loc = assets.locate(key);
+			if (!loc)
+				return nullptr;
+			try
+			{
+				const nif::KfmFile kfm = nif::parseKfm(assets.read(*loc));
+				return model(folderOf(key) + kfm.nifFile, path);
+			}
+			catch (const std::exception&)
+			{
+				return nullptr;
+			}
+		}
+
+		void addProjectile(const MapSnapshot::Attachable& art, const Vec3& from, float size = 1)
+		{
+			LoadedModel* lm = effectModel(art.nif);
+			const size_t before = bursts.size();
+			addBurst(lm, placement(from, 0, art.scale > 0 ? art.scale : 1));
+			if (bursts.size() == before)
+				return;
+			Burst& b = bursts.back();
+			b.projectile = true;
+			b.from = from;
+			b.to = keyTarget ? *keyTarget : Vec3{ from.x, from.y, ground(from.x, from.y) };
+			b.scale = (art.scale > 0 ? art.scale : 1) * size;
+			const float speed = std::max(art.speed, 50.0f) / 180.0f * S(); // (world units a second; a plot is 180)
+			b.flight = std::clamp(length(b.to - b.from) / speed, 0.05f, 4.0f);
+			const anim::Sequence* explode = lm->strike[0][0] ? &*lm->strike[0][0] : nullptr;
+			b.until = b.start + b.flight + (explode ? explode->duration() : 0);
 		}
 
 		void drawBursts(const Frustum& frustum)
@@ -3438,9 +3511,59 @@ float4 PSTerrain(PSIn i) : SV_Target
 				anim::Pose pose = anim::Pose::bind(lm.model);
 				if (lm.embedded)
 					lm.embedded->apply(at, pose);
+				const anim::Sequence* explode = b.projectile && lm.strike[0][0] ? &*lm.strike[0][0] : nullptr;
+				if (b.projectile)
+				{
+					// (flying, it heads for its target; there, it explodes)
+					const Vec3 d = b.to - b.from;
+					const float f = std::clamp(at / b.flight, 0.0f, 1.0f);
+					const float yaw = std::abs(d.x) + std::abs(d.y) > 0.01f ? std::atan2(d.y, d.x) + std::numbers::pi_v<float> / 2 : 0.0f;
+					b.place = placement(b.from + d * f, yaw, b.scale);
+					if (at < b.flight && lm.run)
+						lm.run->apply(at, pose);
+					else if (explode)
+						explode->apply(at - b.flight, pose);
+					for (const char* root : { "MD", "MD NonAccum" })
+						if (const int n = lm.model.findNode(root); n >= 0 && size_t(n) < pose.locals.size())
+							pose.locals[size_t(n)] = lm.model.nodes[size_t(n)].local;
+				}
 				world = lm.model.worldTransforms(pose.locals);
 				for (auto& w : world)
 					w = b.place * w;
+				// (its explosion's effects and sounds: the text keys passed since the last frame)
+				if (explode && at >= b.flight)
+				{
+					const float now = at - b.flight;
+					for (const auto& [keyTime, text] : explode->textKeys())
+					{
+						const float k = keyTime - explode->startTime();
+						if (k <= b.keysLast || k > now)
+							continue;
+						for (size_t e = 0; (e = text.find("ffect:", e)) != std::string::npos; e += 6)
+						{
+							const size_t colon = text.find(':', e + 6);
+							if (colon == std::string::npos)
+								break;
+							const size_t end = std::min(text.find_first_of(" ,;\r\n", colon + 1), text.size());
+							const std::string node = text.substr(e + 6, colon - e - 6), type = text.substr(colon + 1, end - colon - 1);
+							Affine nodeAt = world.empty() ? b.place : world[0];
+							for (size_t n = 0; n < lm.model.nodes.size() && n < world.size(); ++n)
+								if (_stricmp(lm.model.nodes[n].name.c_str(), node.c_str()) == 0)
+									nodeAt = world[n];
+							explosions.push_back({ type, nodeAt });
+						}
+						if (onSound && text.size() > 6 && _strnicmp(text.c_str(), "SOUND:", 6) == 0)
+						{
+							std::string tag = text.substr(6);
+							if (const size_t comma = tag.rfind(','); comma != std::string::npos)
+								tag = tag.substr(comma + 1);
+							while (!tag.empty() && tag.front() == ' ')
+								tag.erase(tag.begin());
+							onSound(tag, b.to.x / S(), b.to.y / S());
+						}
+					}
+					b.keysLast = now;
+				}
 				const auto shown = lm.model.visibility(pose.hidden);
 				if (time >= b.until)
 					b.particles.stopEmitting();
@@ -3465,7 +3588,14 @@ float4 PSTerrain(PSIn i) : SV_Target
 				}
 			}
 			std::erase_if(bursts, [&](const Burst& b) { return time >= b.until && (b.particles.alive() == 0 || time > b.until + 20); });
+			for (const auto& [type, at] : std::exchange(explosions, {}))
+			{
+				const auto art = std::ranges::find_if(map.effects, [&](const auto& a) { return _stricmp(a.type.c_str(), type.c_str()) == 0; });
+				if (art != map.effects.end() && !art->projectile)
+					addBurst(effectModel(art->nif), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
+			}
 		}
+		std::vector<std::pair<std::string, Affine>> explosions; // (set off by projectiles this frame)
 
 		// The original engine's showPromotionGlow: keep EFFECT_PROMOTION_UNIT at every unit
 		// that can take a promotion. It is a looping blue aura and rising sparkles in BtS.
@@ -3634,7 +3764,27 @@ float4 PSTerrain(PSIn i) : SV_Target
 					for (auto& w : world)
 						w = place * w;
 					if (!keyEffects.empty())
+					{
+						// (its projectiles' target: the plot its action aims at, over it the plane a
+						// SAM shoots at; in a battle, a figure on the other side's plot)
+						keyTarget.reset();
+						if (inst.action >= 0 && inst.actionX >= 0)
+						{
+							Vec3 c{ (float(inst.actionX) + 0.5f) * S() + dx, (float(inst.actionY) + 0.5f) * S(), 0 };
+							c.z = ground(c.x - dx, c.y) + (inst.action == 4 ? kFlightHeight * S() : 0.0f);
+							keyTarget = c;
+						}
+						else if (battle.fighting && inst.battle >= 0 && size_t(inst.battle) < map.battles.size())
+						{
+							const BattleView& b = map.battles[size_t(inst.battle)];
+							const int ox = inst.attacking ? b.defenderX : b.attackerX, oy = inst.attacking ? b.defenderY : b.attackerY;
+							const float jx = (unitFloat(hash(inst.figureIndex, ox, oy)) - 0.5f) * 0.3f, jy = (unitFloat(hash(oy, inst.figureIndex, ox)) - 0.5f) * 0.3f;
+							Vec3 c{ (float(ox) + 0.5f + jx) * S() + dx, (float(oy) + 0.5f + jy) * S(), 0 };
+							c.z = ground(c.x - dx, c.y) + 0.08f * S();
+							keyTarget = c;
+						}
 						spawnKeyEffects(lm, world);
+					}
 					materials.clear();
 					if (std::ranges::any_of(pose.materials, [](const anim::MaterialOverride& o) { return o.any; }))
 						for (const auto& item : lm.model.items)

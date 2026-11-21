@@ -303,7 +303,11 @@ namespace oc4::host
 			if (!type || !path)
 				continue;
 			const XmlNode* scale = n->firstChildElement("fScale");
-			out.push_back({ narrow(type->text), narrow(path->text), scale ? std::wcstof(scale->text.c_str(), nullptr) : 1.0f });
+			auto& a = out.emplace_back(render::MapSnapshot::Attachable{ narrow(type->text), narrow(path->text), scale ? std::wcstof(scale->text.c_str(), nullptr) : 1.0f });
+			if (const XmlNode* projectile = n->firstChildElement("bIsProjectile"))
+				a.projectile = projectile->text == L"1";
+			if (const XmlNode* speed = n->firstChildElement("fSpeed"))
+				a.speed = std::wcstof(speed->text.c_str(), nullptr);
 		}
 	}
 
@@ -897,6 +901,12 @@ namespace oc4::host
 				for (int u = 0; u < count && !shown; ++u)
 					if (CvUnit* unit = plot->getUnitByIndex(u); seen(unit))
 						shown = unit;
+				// (one intercepting a plane: it, while it shoots)
+				for (int u = 0; u < count; ++u)
+					if (CvUnit* unit = plot->getUnitByIndex(u); seen(unit))
+						for (const Entities::Action& a : actions)
+							if (a.mission == 4 && a.unit.eOwner == unit->getOwner() && a.unit.iID == unit->getID())
+								shown = unit;
 				const auto fight = fighting.find(plot->getX() + plot->getY() * s.width);
 				if (fight != fighting.end())
 					for (int u = 0; u < count; ++u)

@@ -181,7 +181,9 @@ namespace oc4::render
 		float founded = -1;
 		// An action it shows (a mission's animation): how it acts (1 pillaging: its melee
 		// strikes; 2 a ranged or an air strike, bombarding: its ranged strike; 3 captured: it
-		// heals), seconds since it began, as captured, how long it lasts, the plot it aims at
+		// heals; 5 a plane intercepted on its way: it flies there and back, hit, and strikes nothing;
+		// 4 intercepting a plane from the ground: its anti-air strike, at the plane over the
+		// plot it aims at), seconds since it began, as captured, how long it lasts, the plot it aims at
 		// and the effect there (a CIV4EffectInfos type; none: empty).
 		int action = -1;
 		float actionSince = 0, actionLength = 0;
@@ -256,6 +258,10 @@ namespace oc4::render
 		{
 			std::string type, nif;
 			float scale = 1;
+			// (effects: one that flies, bIsProjectile, a KFM of its own: from where a clip sets it off
+			// to what it aims at, fSpeed world units a second (a plot is 180), then its explosion)
+			bool projectile = false;
+			float speed = 0;
 		};
 		std::vector<Attachable> attachables;
 		// The Great Wall (a building that is an area border obstacle): along the edges of the
