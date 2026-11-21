@@ -84,6 +84,15 @@ cbuffer Bones : register(b2, UNIFORMS)
 	float4 bones[128 * 3]; // world(bone) * skinToBone, 3x4 rows each
 };
 
+// A model's own lights (flags bit 15: a leader's parts without its shader), as Direct3D's
+// fixed-function pipeline lights them: point lights without falloff, the ambient lights' sum.
+cbuffer FixedLights : register(b3, UNIFORMS)
+{
+	float4 fixedLightPos[8];   // world position; w 1: a light
+	float4 fixedLightColor[8]; // diffuse * dimmer
+	float4 fixedAmbient;
+};
+
 Texture2D<float> groundHeights : register(t0, space0); // vertex shader: the terrain's heights
 SamplerState groundSampler : register(s0, space0);
 Texture2D baseMap : register(t0, space2);
@@ -250,6 +259,16 @@ float4 PSMain(PSIn i, bool front : SV_IsFrontFace) : SV_Target
 	}
 
 	float3 lit = (flags & 16) ? emi + amb * (unitLit ? unitAmbientLight : ambientLight) + dif * (unitLit ? unitLightColor : lightColor) * ndl : emi;
+	if ((flags & 32768) && (flags & 16))
+	{
+		// (Direct3D's lighting has no back face's normal: the vertex's, as it is)
+		const float3 vn = normalize(i.nrm);
+		float3 d = 0;
+		[unroll] for (int k = 0; k < 8; ++k)
+			if (fixedLightPos[k].w > 0)
+				d += saturate(dot(vn, normalize(fixedLightPos[k].xyz - i.world))) * fixedLightColor[k].rgb;
+		lit = emi + amb * fixedAmbient.rgb + dif * d;
+	}
 	float4 c = float4(saturate(lit), alpha);
 	if (flags & 2048)
 	{
@@ -658,7 +677,7 @@ float4 PSOverlay(Out p) : SV_Target
 	{
 		const std::string source = std::string(kFrameConstantsHlsl) + kShaderBody;
 		m_vs = compile(source, "model.hlsl", "VSMain", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0, 3);
-		m_ps = compile(source, "model.hlsl", "PSMain", SDL_GPU_SHADERSTAGE_FRAGMENT, 7, 0, 2);
+		m_ps = compile(source, "model.hlsl", "PSMain", SDL_GPU_SHADERSTAGE_FRAGMENT, 7, 0, 4);
 		m_overlayVs = compile(kOverlayHlsl, "overlay.hlsl", "VSOverlay", SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 2);
 		m_overlayPs = compile(kOverlayHlsl, "overlay.hlsl", "PSOverlay", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 0, 2);
 
@@ -838,6 +857,29 @@ float4 PSOverlay(Out p) : SV_Target
 	{
 		SDL_PushGPUVertexUniformData(commands(), 0, m_frame, sizeof(m_frame));
 		SDL_PushGPUFragmentUniformData(commands(), 0, m_frame, sizeof(m_frame));
+		SDL_PushGPUFragmentUniformData(commands(), 3, m_fixedLights, sizeof(m_fixedLights));
+	}
+
+	void Renderer::setFixedLights(std::span<const PointLight> lights, Vec3 ambient)
+	{
+		std::fill(std::begin(m_fixedLights), std::end(m_fixedLights), 0.0f);
+		for (size_t k = 0; k < lights.size() && k < 8; ++k)
+		{
+			const PointLight& l = lights[k];
+			float* pos = m_fixedLights + k * 4;
+			float* color = m_fixedLights + 32 + k * 4;
+			pos[0] = l.position.x, pos[1] = l.position.y, pos[2] = l.position.z, pos[3] = 1;
+			color[0] = l.color.x, color[1] = l.color.y, color[2] = l.color.z;
+		}
+		m_fixedLights[64] = ambient.x, m_fixedLights[65] = ambient.y, m_fixedLights[66] = ambient.z;
+		m_fixedLit = true;
+		if (m_cmd)
+			SDL_PushGPUFragmentUniformData(m_cmd, 3, m_fixedLights, sizeof(m_fixedLights));
+	}
+
+	void Renderer::clearFixedLights()
+	{
+		m_fixedLit = false;
 	}
 
 	void Renderer::upload(SDL_GPUTexture* texture, uint32_t layer, uint32_t mip, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void* data,
@@ -1092,7 +1134,8 @@ float4 PSOverlay(Out p) : SV_Target
 		writeRows(mesh.node >= 0 && size_t(mesh.node) < world.size() ? world[size_t(mesh.node)] : Affine{}, oc.world);
 		oc.flags = (mesh.texture ? 1u : 0u) | (m.alphaTest ? 2u : 0u) | ((m.vertexColorMode & 3u) << 2) | (m.lightingMode ? 16u : 0u) |
 			(mesh.decal ? 32u : 0u) | (m.baseIsTeamColor ? 64u : 0u) | (mesh.skinned ? 128u : 0u) | (onGround ? 256u : 0u) |
-			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) | (unitLight ? 16384u : 0u);
+			(m_inView && m_viewOnNothing && !m.alphaBlend ? 1024u : 0u) | (mesh.leader[0] ? 2048u : 0u) | (unitLight ? 16384u : 0u) |
+			(m_fixedLit && !mesh.leader[0] ? 32768u : 0u);
 		oc.alphaFunc = static_cast<uint32_t>(m.alphaFunc);
 		oc.alphaRef = m.alphaRef;
 		oc.treesCut = m.treesCut;
@@ -1373,6 +1416,7 @@ float4 PSOverlay(Out p) : SV_Target
 		pass(); // (a view with nothing drawn is still cleared)
 		endPass();
 		m_inView = false;
+		m_fixedLit = false;
 		m_target = { m_color->texture, m_depth->texture, m_width, m_height };
 		uploadFrameConstants();
 	}

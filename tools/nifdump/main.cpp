@@ -39,6 +39,21 @@ namespace
 				m[0][0], m[0][1], m[0][2], m[1][0], m[1][1], m[1][2], m[2][0], m[2][1], m[2][2]);
 		std::cout << '\n';
 
+		if (const auto* nn = dynamic_cast<const NiNode*>(obj); nn && !nn->effects.empty())
+		{
+			std::cout << indent << "    effects:";
+			for (const Ref e : nn->effects)
+				std::cout << ' ' << e;
+			std::cout << '\n';
+		}
+		if (const auto* l = dynamic_cast<const NiLight*>(obj))
+		{
+			std::cout << std::format("{}    light: on={} dimmer={:.2f} amb=({:.2f},{:.2f},{:.2f}) diff=({:.2f},{:.2f},{:.2f}) spec=({:.2f},{:.2f},{:.2f}) atten={:.3f},{:.5f},{:.7f} affects:", indent, l->switchState, l->dimmer,
+				l->ambient.r, l->ambient.g, l->ambient.b, l->diffuse.r, l->diffuse.g, l->diffuse.b, l->specular.r, l->specular.g, l->specular.b, l->constantAttenuation, l->linearAttenuation, l->quadraticAttenuation);
+			for (const Ref a : l->affectedNodes)
+				std::cout << ' ' << a;
+			std::cout << '\n';
+		}
 		if (const auto* g = dynamic_cast<const NiGeometry*>(obj))
 		{
 			if (const auto* d = f.get<NiTriBasedGeomData>(g->data))
