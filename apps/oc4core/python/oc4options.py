@@ -47,7 +47,7 @@ _profile = {
 	'clock': False, 'hours24': False,
 	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
 	'speakers': '', 'musicPath': '', 'voice': False,
-	'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True,
+	'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True, 'quickEnemyMoves': False,
 }
 
 
@@ -87,7 +87,7 @@ def _load():
 					_profile['nosound'][parts[1]] = value == '1'
 				elif parts[0] in ('graphic', 'player'):
 					_profile[parts[0]][int(parts[1])] = value == '1'
-				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
+				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'quickEnemyMoves'):
 					_profile[parts[0]] = value == '1'
 				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 					_profile[parts[0]] = int(value)
@@ -115,7 +115,7 @@ def _save():
 	lines = ['version=%d' % _VERSION]
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
-	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
+	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'quickEnemyMoves'):
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
 	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale'):
 		lines.append('%s=%d' % (key, _profile[key]))
@@ -144,6 +144,7 @@ def _applyGraphics():
 		oc4host.set_wasd_pan(_profile['wasdPan'])
 		oc4host.set_auto_end_turn(_profile['autoEndTurn'])
 		oc4host.set_edge_scroll(_profile['edgeScroll'])
+		oc4host.set_quick_enemy_moves(_profile['quickEnemyMoves'])
 	except Exception:
 		pass
 
@@ -234,6 +235,31 @@ def _edgeScrollOn():
 		return bool(oc4host.edge_scroll())
 	except Exception:
 		return _profile['edgeScroll']
+
+
+
+# Quick enemy moves (openciv4's own option, off as the original has none): the other civilizations'
+# moves the Show Enemy / Friendly Moves options show come at about half the time, the camera still
+# on each.
+QUICK_ENEMY_MOVES_CHECKBOX = 'Oc4QuickEnemyMovesCheckBox'
+
+
+def handleQuickEnemyMovesClicked(args):
+	on = bool(args[0])
+	_profile['quickEnemyMoves'] = on
+	_save()
+	try:
+		oc4host.set_quick_enemy_moves(on)
+	except Exception:
+		pass
+	return 1
+
+
+def _quickEnemyMovesOn():
+	try:
+		return bool(oc4host.quick_enemy_moves())
+	except Exception:
+		return _profile['quickEnemyMoves']
 
 
 def _applyPlayerOptions():
@@ -518,7 +544,8 @@ class CyGTabCtrl(object):
 
 	def _attachOpenCiv4Tab(self):
 		"""OpenCiv4's options, none of the original's: W A S D panning, ending idle turns, edge
-		scrolling (kept in the profile as wasdPan, autoEndTurn, edgeScroll)."""
+		scrolling, quicker shown moves of the others (kept in the profile as wasdPan, autoEndTurn, edgeScroll,
+		quickEnemyMoves)."""
 		self.attachTabItem(OC4_FORM, u'OpenCiv4')
 		self.attachVBox(OC4_FORM, 'Oc4VBox')
 		parent = 'Oc4Panel'
@@ -540,6 +567,11 @@ class CyGTabCtrl(object):
 			EDGE_SCROLL_CHECKBOX, _edgeScrollOn())
 		self.setToolTip(EDGE_SCROLL_CHECKBOX, u'Moving the mouse to the edge of the screen or window moves the map that way. '
 			u'Turn it off to pan only with the arrow keys (or W A S D) and the mouse.')
+		self.attachCheckBox(parent, QUICK_ENEMY_MOVES_CHECKBOX, u'Quick enemy moves', 'oc4options', 'handleQuickEnemyMovesClicked',
+			QUICK_ENEMY_MOVES_CHECKBOX, _quickEnemyMovesOn())
+		self.setToolTip(QUICK_ENEMY_MOVES_CHECKBOX, u'With Show Enemy Moves or Show Friendly Moves on, the other civilizations\' '
+			u'units move about twice as fast. The camera still goes to each unit and stays a moment after it arrives. '
+			u'The original has no such option: its Quick Moves speeds up only your own units.')
 
 	def attachVBox(self, parent, name): self._node('vbox', parent, name)
 	def attachHBox(self, parent, name):

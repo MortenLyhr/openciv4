@@ -246,6 +246,9 @@ namespace oc4::host
 		void setAutoEndTurn(bool on) { m_autoEndTurn = on; }
 		void forceAutoEndTurn() { m_forcedAutoEndTurn = true; }
 		void chooseAutoEndTurn(bool on) { m_forcedAutoEndTurn = false; m_autoEndTurn = on; }
+		// The other civilizations' shown moves at about half the time (OpenCiv4's own option, off).
+		bool quickEnemyMoves() const { return m_quickEnemyMoves; }
+		void setQuickEnemyMoves(bool on) { m_quickEnemyMoves = on; }
 		// The mouse at the window's edge scrolls the map (render/EdgeScroll.h; on unless the profile
 		// says off, or --no-edge-scroll / a scripted run for the session until the player chooses).
 		bool edgeScroll() const { return m_edgeScroll.on(); }
@@ -434,6 +437,7 @@ namespace oc4::host
 		int m_uiScale = 0, m_forcedUiScale = -1;
 		bool m_wasdPan = false, m_forcedWasdPan = false;
 		bool m_autoEndTurn = false, m_forcedAutoEndTurn = false;
+		bool m_quickEnemyMoves = false;
 		render::EdgeScrollOption m_edgeScroll;
 		std::array<std::atomic<int8_t>, 64> m_graphicOptions{}; // 0 the XML's default, 1 off, 2 on (set by the window's thread, read by the game's)
 		AudioScripts m_audio{ m_assets };
