@@ -1927,7 +1927,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		// The culture borders, as the original draws them: at every plot corner, for each owner
 		// of the four plots around it, the tile for which of them are its. The tiles are the
 		// cells of a 512-texel file, a plot square centred on the corner: no river,
-		// noriverborder.dds (the outer corners notched), where one of the plots is water
+		// noriverborder.dds (the outer corners notched), where the owner's plots there are water
 		// norivercurvedborder.dds, and where a river piece lies at the corner the piece's
 		// BorderFile, turned as the piece is, whose line keeps to that piece's banks (the river's
 		// water and any island in it nobody's). borderTex holds them, four texels a corner (BGRA:
@@ -1969,14 +1969,12 @@ float4 PSWater(WaterOut i) : SV_Target
 				{
 					// (the plots round the corner clockwise from the north-west: plot (cx, cy) is its north-east)
 					const int quad[4] = { plotIndex(cx - 1, cy), plotIndex(cx, cy), plotIndex(cx, cy - 1), plotIndex(cx - 1, cy - 1) };
-					int slice = 0, turn = 0;
+					int riverSlice = -1, turn = 0;
 					const auto river = cornerRiver.size() == size_t(CW) * CH ? cornerRiver[size_t(cy) * CW + cx] : std::pair<int16_t, int16_t>{ -1, 0 };
 					if (river.first >= 0 && size_t(river.first) < riverBorderSlice.size() && riverBorderSlice[size_t(river.first)] >= 0)
-						slice = riverBorderSlice[size_t(river.first)], turn = ((river.second / 90) % 4 + 4) % 4;
-					else if (std::ranges::any_of(quad, [&](int q) { return q >= 0 && water[size_t(q)]; }))
-						slice = 1;
+						riverSlice = riverBorderSlice[size_t(river.first)], turn = ((river.second / 90) % 4 + 4) % 4;
 					uint8_t* out = data.data() + (size_t(cy) * CW + cx) * 16;
-					int slot = 0;
+					int slot = 0, slice = 0;
 					const auto put = [&](int16_t owner, int mask) {
 						if (slot == 4 || kCell[mask] == kNone)
 							return;
@@ -1988,6 +1986,11 @@ float4 PSWater(WaterOut i) : SV_Target
 						const int16_t owner = quad[k] >= 0 ? owners[size_t(quad[k])] : int16_t(-1);
 						if (owner < 0 || std::ranges::any_of(quad, quad + k, [&](int q) { return q >= 0 && owners[size_t(q)] == owner; }))
 							continue;
+						// (the curved tiles where the owner's ground at the corner is water: in the
+						// original a corner of land by the sea is notched as inland, one over the sea
+						// is round)
+						slice = riverSlice >= 0 ? riverSlice
+							: std::ranges::any_of(quad, [&](int q) { return q >= 0 && owners[size_t(q)] == owner && water[size_t(q)]; }) ? 1 : 0;
 						// (unturned, the tile's quadrant j is the world's j + turn)
 						int mask = 0;
 						for (int j = 0; j < 4; ++j)
