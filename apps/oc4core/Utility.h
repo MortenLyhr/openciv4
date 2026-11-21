@@ -234,6 +234,11 @@ namespace oc4::host
 		int uiScale() const { return m_forcedUiScale >= 0 ? m_forcedUiScale : m_uiScale; }
 		void setUiScale(int percent) { m_uiScale = percent; }
 		void forceUiScale(int percent) { m_forcedUiScale = percent; }
+		// The options screen's quality choices the window follows: the movies' (0 high .. 2 low)
+		// and the anti-aliasing's samples (0, 2, 4, 8).
+		int movieQuality() const { return m_movieQuality; }
+		int antiAliasing() const { return m_antiAliasing; }
+		void setGraphicLevels(int movieQuality, int samples) { m_movieQuality = movieQuality, m_antiAliasing = samples; }
 		// W A S D pan the map (the profile's, or --wasd-pan's for the session until the player
 		// chooses: the options' check box, or Ctrl+Shift+W to turn it off).
 		bool wasdPan() const { return m_forcedWasdPan || m_wasdPan; }
@@ -432,6 +437,7 @@ namespace oc4::host
 		std::vector<CvMessageData*> m_messages;
 		std::array<int8_t, 64> m_playerOptions{}; // the profile's: 0 the XML's default, 1 off, 2 on
 		int m_uiScale = 0, m_forcedUiScale = -1;
+		std::atomic<int> m_movieQuality = 0, m_antiAliasing = 0;
 		bool m_wasdPan = false, m_forcedWasdPan = false;
 		bool m_autoEndTurn = false, m_forcedAutoEndTurn = false;
 		render::EdgeScrollOption m_edgeScroll;

@@ -268,6 +268,7 @@ namespace oc4::host
 		host.def("set_graphic_option", [&utility](int option, bool on) { utility.setGraphicOption(option, on); });
 		host.def("reset_graphic_options", [&utility] { utility.resetGraphicOptions(); });
 		host.def("set_ui_scale", [&utility](int percent) { utility.setUiScale(percent); });
+		host.def("set_graphic_levels", [&utility](int movieQuality, int samples) { utility.setGraphicLevels(movieQuality, samples); });
 		// W A S D panning: the profile's, as loaded; the player's, from the options' check box.
 		host.def("set_wasd_pan", [&utility](bool on) { utility.setWasdPan(on); });
 		host.def("choose_wasd_pan", [&utility](bool on) { utility.chooseWasdPan(on); });
@@ -731,6 +732,19 @@ if _walls:
 			m_active = false;
 		}
 		return m_active;
+	}
+
+	std::string Screens::menuSoundtrack()
+	{
+		try
+		{
+			return py::module_::import("oc4menu").attr("soundtrack")().cast<std::string>();
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+			return "AS2D_OPENING_MENU";
+		}
 	}
 
 	bool Screens::startMenu(int width, int height, const std::string& title, const std::vector<std::string>& mapScripts,

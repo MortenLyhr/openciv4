@@ -140,6 +140,7 @@ def _applyGraphics():
 		for i, on in _profile['graphic'].items():
 			oc4host.set_graphic_option(int(i), bool(on))
 		oc4host.set_ui_scale(_profile['uiScale'])
+		oc4host.set_graphic_levels(_profile['movieQuality'], _AA_SAMPLES[min(max(_profile['antiAliasing'], 0), len(_AA_SAMPLES) - 1)])
 		_applyPlayerOptions()
 		oc4host.set_wasd_pan(_profile['wasdPan'])
 		oc4host.set_auto_end_turn(_profile['autoEndTurn'])
@@ -267,9 +268,44 @@ def _playerDefault(i):
 		return False
 
 
-def _graphicDefault(i):
+# What the original's Graphics Level sets (Civ4BeyondSword.exe, CyUserProfile.setGraphicsLevel,
+# measured in Wine 2026-11-21): the graphic options it switches on and off, the render, globe and
+# movie quality (0 high, 1 medium, 2 low) and the anti-aliasing (an index into 0, 2, 4, 8 samples;
+# None: as it is).
+_LEVEL_PRESETS = {
+	0: ((), ('SINGLE_UNIT_GRAPHICS', 'FROZEN_ANIMATIONS', 'EFFECTS_DISABLED', 'GLOBE_VIEW_BUILDINGS_DISABLED', 'LOWRES_TEXTURES'), 0, None),
+	1: (('SINGLE_UNIT_GRAPHICS', 'GLOBE_VIEW_BUILDINGS_DISABLED'), ('FROZEN_ANIMATIONS', 'EFFECTS_DISABLED', 'LOWRES_TEXTURES'), 1, 1),
+	2: (('SINGLE_UNIT_GRAPHICS', 'FROZEN_ANIMATIONS', 'EFFECTS_DISABLED', 'GLOBE_VIEW_BUILDINGS_DISABLED', 'LOWRES_TEXTURES'), ('HIRES_TERRAIN',), 2, 0),
+}
+
+
+# The original's options OpenCiv4 does not do, by their controls' names on the options screen
+# (CvOptionsScreen.py): Render Quality and Globe Quality, which made no difference in the original
+# either, and High Detail Terrain (the terrain's mesh detail; OpenCiv4 has one).
+_AA_SAMPLES = (0, 2, 4, 8) # the anti-aliasing drop-down's choices (CvOptionsScreen: 0, 2, 4, 8, 16), as the renderer does them
+_NOT_DONE_TIP = u'OpenCiv4 does not implement this option.'
+
+
+def _notDone():
+	names = set(('GraphicsQualityLabel', 'RenderQualityDropdownBox', 'GlobeViewLabel', 'GlobeViewDropdownBox'))
 	try:
-		return bool(_cpe.CyGlobalContext().getGraphicOptionInfo(int(i)).getDefault())
+		names.add('GraphicOptionCheckbox_%d' % _graphicOption('HIRES_TERRAIN'))
+	except Exception:
+		pass
+	return names
+
+
+def _graphicOption(name):
+	return int(getattr(_cpe.GraphicOptionTypes, 'GRAPHICOPTION_' + name))
+
+
+def _graphicDefault(i):
+	"""The XML's default (CIV4GraphicOptionInfos), but full screen: OpenCiv4 starts in a window
+	until it is chosen (the host's graphicOptionChosen)."""
+	try:
+		if int(i) == int(_cpe.GraphicOptionTypes.GRAPHICOPTION_FULLSCREEN):
+			return False
+		return bool(_cpe.CyGlobalContext().getGraphicOptionsInfoByIndex(int(i)).getDefault())
 	except Exception:
 		return False
 
@@ -330,18 +366,33 @@ class _UserProfile(object):
 	def getGraphicOption(self, i): return _profile['graphic'].get(int(i), _graphicDefault(i))
 	def setGraphicOption(self, i, b): _profile['graphic'][int(i)] = bool(b); _save(); _applyGraphics()
 	def getGraphicsLevel(self): return _profile['graphicsLevel']
-	def setGraphicsLevel(self, i): _profile['graphicsLevel'] = int(i)
+	def setGraphicsLevel(self, i):
+		# (the original's level is a preset of the others, as measured in it: see _LEVEL_PRESETS)
+		_profile['graphicsLevel'] = int(i)
+		preset = _LEVEL_PRESETS.get(int(i))
+		if preset:
+			on, off, level, aa = preset
+			for name in on:
+				_profile['graphic'][_graphicOption(name)] = True
+			for name in off:
+				_profile['graphic'][_graphicOption(name)] = False
+			_profile['renderQuality'] = _profile['globeView'] = _profile['movieQuality'] = level
+			if aa is not None:
+				_profile['antiAliasing'] = aa
+		_save()
+		_applyGraphics()
 	def getRenderQualityLevel(self): return _profile['renderQuality']
 	def setRenderQualityLevel(self, i): _profile['renderQuality'] = int(i)
+	# (the movies' and the anti-aliasing's take effect at once)
 	def getGlobeViewRenderLevel(self): return _profile['globeView']
 	def setGlobeViewRenderLevel(self, i): _profile['globeView'] = int(i)
 	def getMovieQualityLevel(self): return _profile['movieQuality']
-	def setMovieQualityLevel(self, i): _profile['movieQuality'] = int(i)
+	def setMovieQualityLevel(self, i): _profile['movieQuality'] = int(i); _save(); _applyGraphics()
 	def getMainMenu(self): return _profile['mainMenu']
 	def setMainMenu(self, i): _profile['mainMenu'] = int(i)
 	def getAntiAliasing(self): return _profile['antiAliasing']
-	def setAntiAliasing(self, i): _profile['antiAliasing'] = int(i)
-	def getAntiAliasingMaxMultiSamples(self): return 0
+	def setAntiAliasing(self, i): _profile['antiAliasing'] = int(i); _save(); _applyGraphics()
+	def getAntiAliasingMaxMultiSamples(self): return len(_AA_SAMPLES) - 1
 	# (the map keeps the window's pixels: the resolution's choices are the interface's, which
 	# takes effect at once)
 	def getResolution(self):
@@ -438,12 +489,13 @@ _volumeAccessors()
 # ---------------------------------------------------------------- the tab control
 
 class _Node(object):
-	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip')
+	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip', 'enabled')
 
 	def __init__(self, id, kind, name):
 		self.id, self.kind, self.name = id, kind, name
 		self.children, self.text, self.value, self.items, self.callback = [], u'', 0, (), None
 		self.flags, self.style, self.minimum, self.maximum, self.tip = set(), '', 0, 0, u''
+		self.enabled = True
 
 
 _state = {'ctrl': None, 'dirty': False}
@@ -493,6 +545,9 @@ class CyGTabCtrl(object):
 
 	def _node(self, kind, parent, name):
 		n = _Node(self._next, kind, str(name))
+		# (the original's options OpenCiv4 does not do: greyed, with a tool tip saying so)
+		if n.name in _notDone():
+			n.enabled, n.tip = False, _NOT_DONE_TIP
 		self._next += 1
 		self._nodes[n.id] = n
 		self._byName[n.name] = n
@@ -607,7 +662,7 @@ class CyGTabCtrl(object):
 
 	def setToolTip(self, name, text):
 		n = self._byName.get(str(name))
-		if n is not None:
+		if n is not None and n.name not in _notDone():
 			n.tip = _text(text)
 
 	def setValue(self, name, value):
@@ -651,7 +706,11 @@ class CyGTabCtrl(object):
 			_schedule()
 
 	def getActiveTab(self): return self._tab
-	def setEnabled(self, *args): pass
+	def setEnabled(self, name, bEnabled=True):
+		n = self._byName.get(str(name))
+		if n is not None:
+			n.enabled = bool(bEnabled)
+			_schedule()
 
 
 def _schedule():
@@ -806,8 +865,12 @@ def _place(screen, n, x, y, w, h):
 			_place(screen, c, x + px, cy, inner, ch)
 			cy += ch + _GAP
 		return
+	# (a control OpenCiv4 does not do: greyed, takes no clicks, its tool tip says why)
+	grey, ungrey = (_GREY, u'</color>') if not n.enabled else (u'', u'')
 	if k == 'label':
-		screen.setLabel(name, 'Background', _FONT + n.text + u'</font>', 1 << 0, x, y + 4, 0, font, general, -1, -1)
+		screen.setLabel(name, 'Background', _FONT + grey + n.text + ungrey + u'</font>', 1 << 0, x, y + 4, 0, font, general, -1, -1)
+		if n.tip:
+			_tip(screen, name, n.tip)
 	elif k in ('checkbox', 'radio'):
 		# (the theme's check box, as the custom game screen's: GFC_Control_StandardCheckBox_Style)
 		screen.addCheckBoxGFC(name, '', '', x, y + 4, _BOX, _BOX, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
@@ -815,11 +878,12 @@ def _place(screen, n, x, y, w, h):
 		w_ = screen._s.get(name)
 		if w_ is not None:
 			w_.state = bool(n.value)
-		screen.setText(name + 'L', 'Background', _FONT + n.text + u'</font>', 1 << 0, x + _BOX_TEXT, y + 4, 0, font, general, -1, -1)
+		screen.setText(name + 'L', 'Background', _FONT + grey + n.text + ungrey + u'</font>', 1 << 0, x + _BOX_TEXT, y + 4, 0, font, general, -1, -1)
 		if n.tip:
-			w_ = screen._s.get(name)
-			if w_ is not None:
-				w_.help = n.tip
+			_tip(screen, name, n.tip)
+			_tip(screen, name + 'L', n.tip)
+		if not n.enabled:
+			screen.enable(name, False)
 	elif k == 'button':
 		screen.setButtonGFC(name, n.text, '', x, y + 4, w, 25, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
 	elif k == 'edit':
@@ -832,6 +896,10 @@ def _place(screen, n, x, y, w, h):
 		screen.addDropDownBoxGFC(name, x, y + 1, dw, general, -1, -1, font)
 		for i, item in enumerate(n.items):
 			screen.addPullDownString(name, item, i, i, i == int(n.value))
+		if n.tip:
+			_tip(screen, name, n.tip)
+		if not n.enabled:
+			screen.enable(name, False)
 	elif k in ('hslider', 'vslider'):
 		# (its stops, each a little button: the slider set to the one clicked)
 		stops = n.maximum - n.minimum + 1
@@ -851,6 +919,15 @@ def _place(screen, n, x, y, w, h):
 				b.state = on
 	elif k == 'hsep':
 		screen.addPanel(name, u'', u'', True, False, x, y + 4, w, 2, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+
+
+_GREY = u'<color=128,128,128>'
+
+
+def _tip(screen, name, text):
+	w = screen._s.get(name)
+	if w is not None:
+		w.help = text
 
 
 def resized():
@@ -955,6 +1032,8 @@ def handleInput(args):
 	n = ctrl._nodes.get(ident)
 	if n is None:
 		return 0
+	if not n.enabled:
+		return 1
 	if n.kind in ('checkbox', 'radio') and notify == 0:
 		w = _screen()._s.get('OptW%d' % n.id)
 		n.value = bool(w.state) if w is not None else not n.value
@@ -972,12 +1051,21 @@ def handleInput(args):
 	return 1
 
 
+def _noRestart(bForceShowing=False):
+	"""CvOptionsScreenCallbackInterface.restartPopup: the original's resolution, graphics level,
+	single unit graphics, full screen, terrain detail and speakers took a restart; here none does."""
+	pass
+
+
 def _call(n, args):
 	if not n.callback:
 		return
 	module, function = n.callback[0], n.callback[1]
 	try:
 		m = __import__(module)
+		# (no "Program must be restarted" popup: every option here takes effect at once)
+		if hasattr(m, 'restartPopup'):
+			m.restartPopup = _noRestart
 		getattr(m, function)(args)
 	except Exception:
 		import traceback
