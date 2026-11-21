@@ -1708,8 +1708,12 @@ namespace oc4::render
 			edges(0, m.color, std::min(1.0f, m.alpha + 0.1f), 3);
 		}
 
-		// The marked plots: circles; the outline of each layer's and colour's set of plots, its
-		// edges where the next plot is not of it; the signs' captions.
+		// A marked plot the scene draws, on the ground under the units (MapView::setGroundCircles):
+		// a circle, the original's PLOT_STYLE_CIRCLE.
+		static bool onGround(const MapWindow::PlotMarks::Mark& m) { return !m.fill && !m.border; }
+
+		// The marked plots: the outline of each layer's and colour's set of plots, its edges where
+		// the next plot is not of it; the signs' captions. (The circles are the scene's.)
 		void drawMarks()
 		{
 			const auto& map = view->map();
@@ -1738,11 +1742,11 @@ namespace oc4::render
 					sets[key(m)].insert({ m.x, m.y });
 			for (const auto& m : plotMarks.marks)
 			{
-				if (m.fill)
+				if (m.fill || onGround(m))
 					continue;
 				if (m.border && m.hatched)
 					drawHatched(m, sets[key(m)], S);
-				else if (m.border)
+				else
 				{
 					const auto& set = sets[key(m)];
 					// (the plot's edges: south, east, north, west, and the plot beyond each)
@@ -1761,17 +1765,6 @@ namespace oc4::render
 							overlay->line(ax, ay, bx, by, { 0, 0, 0 }, 0.35f * m.alpha, 4);
 							overlay->line(ax, ay, bx, by, m.color, std::min(1.0f, m.alpha + 0.2f), 2);
 						}
-					}
-				}
-				else
-				{
-					float cx = 0, cy = 0, ex = 0, ey = 0;
-					if (groundToScreen((float(m.x) + 0.5f) * S, (float(m.y) + 0.5f) * S, 3, cx, cy) &&
-						groundToScreen((float(m.x) + 0.85f) * S, (float(m.y) + 0.5f) * S, 3, ex, ey))
-					{
-						const float rx = std::abs(ex - cx), ry = rx * 0.6f;
-						overlay->ellipse(cx, cy, rx, ry, { 0, 0, 0 }, 0.4f * m.alpha, 5);
-						overlay->ellipse(cx, cy, rx, ry, m.color, std::min(1.0f, m.alpha + 0.2f), 2.5f);
 					}
 				}
 			}
@@ -2431,7 +2424,17 @@ namespace oc4::render
 			m->view->triggerEffect(nif, x, y, fx, fy, degrees, scale);
 	}
 
-	void MapWindow::setPlotMarks(PlotMarks marks) { m->plotMarks = std::move(marks); }
+	void MapWindow::setPlotMarks(PlotMarks marks)
+	{
+		// (the circles are laid on the ground in the scene, under the units, as the original's)
+		std::vector<MapView::GroundCircle> circles;
+		for (const auto& k : marks.marks)
+			if (Impl::onGround(k))
+				circles.push_back({ k.x, k.y, k.color, k.alpha });
+		if (m->view)
+			m->view->setGroundCircles(std::move(circles));
+		m->plotMarks = std::move(marks);
+	}
 
 	void MapWindow::setLayers(Layers layers)
 	{

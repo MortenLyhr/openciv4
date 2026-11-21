@@ -77,6 +77,16 @@ namespace oc4::render
 		// The plot of the unit whose figure the ray from a to b meets first, as last drawn.
 		std::optional<std::pair<int, int>> figureAt(Vec3 a, Vec3 b) const;
 
+		// The plots the game colours in the circle style (PLOT_STYLE_CIRCLE), drawn on the ground
+		// under the units from now on.
+		struct GroundCircle
+		{
+			int x = 0, y = 0;
+			Color color;
+			float alpha = 1;
+		};
+		void setGroundCircles(std::vector<GroundCircle> circles);
+
 		// Art that could not be loaded, once per asset.
 		const std::vector<std::string>& problems() const;
 
