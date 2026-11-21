@@ -921,6 +921,10 @@ float4 PSWater(WaterOut i) : SV_Target
 					throw std::runtime_error("not found");
 				ring.file = std::make_shared<const nif::File>(nif::parseFile(assets.read(*loc)));
 				ring.model = scene::buildModel(*ring.file);
+				// (drawn where it is drawn, before the units, as its alpha property's "no sorter" has
+				// it: it tests no depth, and the figures standing on it cover it, as in the original)
+				for (auto& item : ring.model.items)
+					item.material.blendUnsorted = true;
 				ring.gpu = renderer.upload(ring.model, assets, *loc);
 				std::vector<anim::Clip> clips;
 				std::optional<nif::KfmFile> kfm;
@@ -4803,8 +4807,9 @@ float4 PSWater(WaterOut i) : SV_Target
 		if (options.units && !options.cityScreen)
 		{
 			m->drawPromotionGlows(frustum);
-			m->drawInstances(m->units, frustum, true);
+			// (the selection rings under the units: the figures on them cover them)
 			m->ringsDrawn = m->drawRings();
+			m->drawInstances(m->units, frustum, true);
 			if (options.flags)
 				m->drawFlags(frustum);
 			if (options.flags && options.healthBars && m->renderer.camera().distance > m->map.cameraMinDistance + 0.5f &&
