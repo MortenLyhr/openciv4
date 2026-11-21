@@ -11,6 +11,8 @@
 ## play as loud), the graphic and player options, the clock; kept in the profile file the host
 ## names (Documents\My Games\openciv4\profile.ini).
 
+import os
+import time
 import CvPythonExtensions as _cpe
 import oc4host
 import oc4screens
@@ -38,17 +40,21 @@ def _scales():
 			out[out.index(seen[size])] = seen[size] = scale
 	return out
 
-_profile = {
-	'name': 'openciv4',
-	'volume': dict((v, _VOLUME_STOPS) for v in _VOLUMES),
-	'nosound': dict((v, False) for v in _VOLUMES),
-	'graphic': {},
-	'player': {},
-	'clock': False, 'hours24': False,
-	'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
-	'speakers': '', 'musicPath': '', 'voice': False,
-	'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True,
-}
+def _fresh():
+	"""A new profile's options."""
+	return {
+		'name': 'openciv4',
+		'volume': dict((v, _VOLUME_STOPS) for v in _VOLUMES),
+		'nosound': dict((v, False) for v in _VOLUMES),
+		'graphic': {},
+		'player': {},
+		'clock': False, 'hours24': False,
+		'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
+		'speakers': '', 'musicPath': '', 'voice': False,
+		'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True,
+	}
+
+_profile = _fresh()
 
 
 def _path():
@@ -65,23 +71,104 @@ _VERSION = 2
 _DEFAULTS_ON = (0, 1, 2)
 
 
+# ---------------------------------------------------------------- the profiles
+
+# As the original keeps its profiles, one file each (Profiles\<name>.pfl) and the one loaded at
+# start named by CivilizationIV.ini's UserProfile: Profiles/<name>.ini beside profile.ini, each
+# with the options the original keeps in a profile (the Game, Graphics, Audio and Other tabs' and
+# the minimap's toggles). profile.ini keeps the rest, the same whichever profile is loaded:
+# UserProfile=<name> and OpenCiv4's own options (the keys in _GLOBAL; the ini's settings too). A
+# profile.ini from before (every option in it) is the profile "openciv4"'s first file.
+_GLOBAL = ('UserProfile', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker')
+_DEFAULT_NAME = 'openciv4'
+_BAD = '\\/:*?"<>|'
+
+
+def _isGlobal(key):
+	return key.split('.')[0] in _GLOBAL
+
+
+def _profilesDir():
+	path = _path()
+	return os.path.join(os.path.dirname(path), 'Profiles') if path else ''
+
+
+def _fileName(name):
+	"""The profile's file (a name the file system cannot have: None)."""
+	name = str(name).strip()
+	if not name or name in ('.', '..') or [c for c in name if c in _BAD or ord(c) < 32]:
+		return None
+	folder = _profilesDir()
+	return os.path.join(folder, name + '.ini') if folder else None
+
+
+def _profileNames():
+	"""The profiles there are (their files'), sorted as the original lists them."""
+	folder = _profilesDir()
+	try:
+		names = [f[:-4] for f in os.listdir(folder) if f.lower().endswith('.ini') and os.path.isfile(os.path.join(folder, f))]
+	except OSError:
+		names = []
+	return sorted(names, key=lambda n: n.lower())
+
+
+def _resetProfile():
+	"""The profile's options as a new profile has them (the global ones kept)."""
+	keep = dict((k, _profile[k]) for k in _GLOBAL if k in _profile)
+	_profile.clear()
+	_profile.update(_fresh())
+	_profile.update(keep)
+
+
 def _load():
+	"""At start: profile.ini, then the profile it names (an older profile.ini's own options over it)."""
 	path = _path()
 	if not path:
 		return
+	legacy = _read(path, _isGlobal, True)
+	name = _profile.get('UserProfile') or legacy.get('name') or _DEFAULT_NAME
+	_profile['name'] = name
+	own = _fileName(name)
+	if own and os.path.isfile(own):
+		_read(own, lambda key: not _isGlobal(key))
+		_profile['name'] = name
+	if legacy:
+		_read(path, lambda key: not _isGlobal(key))
+		_profile['name'] = name
+		_save()
+
+
+def _read(path, which, others=False):
+	"""Reads the options in the file for which which(key) holds; with others, returns the rest's
+	(key: value) without taking them."""
+	rest = {}
 	try:
 		f = open(path, 'r')
 	except IOError:
-		return
+		return rest
 	version = 1
+	player = False
 	try:
 		for line in f:
 			if '=' not in line:
 				continue
 			key, value = line.strip().split('=', 1)
 			parts = key.split('.')
+			if key == 'version':
+				try:
+					version = int(value)
+				except ValueError:
+					pass
+				continue
+			if not which(key):
+				if others:
+					rest[key] = value
+				continue
+			player = player or parts[0] == 'player'
 			try:
-				if parts[0] in ('volume',) and parts[1] in _VOLUMES:
+				if parts[0] == 'UserProfile':
+					_profile['UserProfile'] = value
+				elif parts[0] in ('volume',) and parts[1] in _VOLUMES:
 					_profile['volume'][parts[1]] = max(0, min(_VOLUME_STOPS, int(value)))
 				elif parts[0] == 'nosound' and parts[1] in _VOLUMES:
 					_profile['nosound'][parts[1]] = value == '1'
@@ -93,8 +180,6 @@ def _load():
 					_profile[parts[0]] = int(value)
 				elif parts[0] in ('name', 'speakers', 'musicPath'):
 					_profile[parts[0]] = value
-				elif parts[0] == 'version':
-					version = int(value)
 			except (ValueError, IndexError):
 				pass
 	finally:
@@ -102,17 +187,48 @@ def _load():
 	# A profile the old options screen wrote: an option that is on by default and off there was
 	# most likely never chosen (the screen showed it off), so it is the default again, once. (With
 	# Wait at End of Turn off the game core ends a turn by itself after a unit moved.)
-	if version < _VERSION:
+	if player and version < _VERSION:
 		for i in _DEFAULTS_ON:
 			if _profile['player'].get(i) is False:
 				del _profile['player'][i]
+	return rest
 
 
-def _save():
+def _save(name=None):
+	"""The options kept: the profile's in its file (the loaded one's, or under name), the rest in
+	profile.ini. A profile with no name (while one is deleted) is not written, as the original's."""
 	path = _path()
 	if not path:
-		return
-	lines = ['version=%d' % _VERSION]
+		return False
+	if name is None:
+		name = _profile['name']
+	lines = _lines()
+	own = _fileName(name)
+	ok = False
+	if own:
+		try:
+			if not os.path.isdir(os.path.dirname(own)):
+				os.makedirs(os.path.dirname(own))
+			f = open(own, 'w')
+			f.write('\n'.join(['version=%d' % _VERSION] + [l for l in lines if not _isGlobal(l.split('=', 1)[0])]) + '\n')
+			f.close()
+			ok = True
+		except (IOError, OSError):
+			pass
+	if name == _profile['name']:
+		_profile['UserProfile'] = name
+	try:
+		f = open(path, 'w')
+		f.write('\n'.join(['version=%d' % _VERSION, 'UserProfile=%s' % _profile.get('UserProfile', '')] +
+			[l for l in lines if _isGlobal(l.split('=', 1)[0])]) + '\n')
+		f.close()
+	except IOError:
+		pass
+	return ok
+
+
+def _lines():
+	lines = []
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
 	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll'):
@@ -125,12 +241,7 @@ def _save():
 	for kind in ('graphic', 'player'):
 		for i, on in sorted(_profile[kind].items()):
 			lines.append('%s.%d=%d' % (kind, i, 1 if on else 0))
-	try:
-		f = open(path, 'w')
-		f.write('\n'.join(lines) + '\n')
-		f.close()
-	except IOError:
-		pass
+	return lines
 
 
 def _applyGraphics():
@@ -288,6 +399,10 @@ def _applyVolumes():
 		pass
 
 
+_names = [] # (the profiles listed, loadProfileFileNames)
+_clock = {'justOn': False}
+
+
 class _UserProfile(object):
 	"""CyUserProfile: the player's options (one profile, the host's file)."""
 
@@ -297,14 +412,46 @@ class _UserProfile(object):
 		return lambda *args, **kwargs: 0
 
 	# the profile itself
+	# the profiles (Profiles/<name>.ini): the Other tab's list, Create New Profile, Delete Profile
 	def getProfileName(self): return _profile['name']
 	def setProfileName(self, s): _profile['name'] = str(s)
-	def getNumProfileFiles(self): return 1
-	def getProfileFileName(self, i): return 'PROFILES\\%s.prf' % _profile['name']
-	def loadProfileFileNames(self): pass
-	def readFromFile(self, s): _load(); _applyVolumes(); _applyGraphics(); return True
-	def writeToFile(self, s): _save(); return True
-	def deleteProfileFile(self, s): return False
+	def loadProfileFileNames(self): _names[:] = _profileNames() or [_profile['name']]
+	def getNumProfileFiles(self): return len(_names)
+	def getProfileFileName(self, i):
+		# (as the original's, a path the screen cuts the name from: after PROFILES\ and before the extension)
+		i = int(i)
+		return 'PROFILES\\%s.pfl' % (_names[i] if 0 <= i < len(_names) else _profile['name'])
+	def isProfileFileExist(self, s):
+		own = _fileName(s)
+		return bool(own and os.path.isfile(own))
+	def readFromFile(self, s):
+		"""Loads the profile s (its file): its options, to the sounds, the map and the game core."""
+		own = _fileName(s)
+		if not own or not os.path.isfile(own):
+			return False
+		_resetProfile()
+		_read(own, lambda key: not _isGlobal(key))
+		_profile['name'] = str(s)
+		_save()
+		_clock['justOn'] = True
+		_applyVolumes()
+		_applyGraphics()
+		_applyPlayerOptions()
+		toggles = globals().get('_applyToggles') # (the minimap's toggles, where they are kept)
+		if toggles:
+			toggles()
+		return True
+	def writeToFile(self, s): return _save(str(s))
+	def deleteProfileFile(self, s):
+		"""Deletes the profile s's file; not the last one (a profile is always loaded)."""
+		own = _fileName(s)
+		if not own or not os.path.isfile(own) or len(_profileNames()) < 2:
+			return False
+		try:
+			os.remove(own)
+		except OSError:
+			return False
+		return True
 	def resetOptions(self, eTab):
 		if eTab == _cpe.TabGroupTypes.TABGROUP_GRAPHICS:
 			_profile['graphic'].clear()
@@ -402,12 +549,14 @@ class _UserProfile(object):
 	def getMaxPlaybackVolume(self): return 0
 
 	# the clock
+	# (the original marks the clock just turned on at every setClockOn, on or off, and at a profile's
+	# load; BUG's clock starts its time-and-turn alternation over then and clears the mark)
 	def isClockOn(self): return _profile['clock']
-	def setClockOn(self, b): _profile['clock'] = bool(b)
+	def setClockOn(self, b): _profile['clock'] = bool(b); _clock['justOn'] = True
 	def is24Hours(self): return _profile['hours24']
 	def set24Hours(self, b): _profile['hours24'] = bool(b)
-	def wasClockJustTurnedOn(self): return False
-	def setClockJustTurnedOn(self, b): pass
+	def wasClockJustTurnedOn(self): return _clock['justOn']
+	def setClockJustTurnedOn(self, b): _clock['justOn'] = bool(b)
 
 	# the map's toggles by the minimap, as they start
 	def getGrid(self): return False
@@ -438,12 +587,13 @@ _volumeAccessors()
 # ---------------------------------------------------------------- the tab control
 
 class _Node(object):
-	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip')
+	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip', 'disabled')
 
 	def __init__(self, id, kind, name):
 		self.id, self.kind, self.name = id, kind, name
 		self.children, self.text, self.value, self.items, self.callback = [], u'', 0, (), None
 		self.flags, self.style, self.minimum, self.maximum, self.tip = set(), '', 0, 0, u''
+		self.disabled = False
 
 
 _state = {'ctrl': None, 'dirty': False}
@@ -565,6 +715,10 @@ class CyGTabCtrl(object):
 		n = self._node('radio', parent, name)
 		n.text, n.value = _text(text), bool(bValue)
 		self._callback(n, module, function, arg)
+		if str(name) in _NETWORK:
+			# (the connection speed: what the original's multiplayer sends, CivilizationIV.ini's
+			# Bandwidth; OpenCiv4 has no multiplayer)
+			n.disabled, n.tip = True, _NETWORK_TIP
 
 	def attachButton(self, parent, name, text, module, function, arg):
 		n = self._node('button', parent, name)
@@ -651,7 +805,18 @@ class CyGTabCtrl(object):
 			_schedule()
 
 	def getActiveTab(self): return self._tab
-	def setEnabled(self, *args): pass
+	def setEnabled(self, name, bEnabled=True):
+		n = self._byName.get(str(name))
+		if n is not None:
+			n.disabled = not bEnabled
+			_schedule()
+
+
+# The Other tab's connection speed: no sense in OpenCiv4 (shown as the original's, greyed, with why).
+_NETWORK = ('BroadbandSelection', 'ModemSelection')
+_NETWORK_TIP = (u'OpenCiv4 has no multiplayer games, so there is no connection to set the speed of: '
+	u'this choice (the original\'s CivilizationIV.ini Bandwidth) does nothing here.')
+_GREY = u'<color=150,150,150>'
 
 
 def _schedule():
@@ -815,11 +980,15 @@ def _place(screen, n, x, y, w, h):
 		w_ = screen._s.get(name)
 		if w_ is not None:
 			w_.state = bool(n.value)
-		screen.setText(name + 'L', 'Background', _FONT + n.text + u'</font>', 1 << 0, x + _BOX_TEXT, y + 4, 0, font, general, -1, -1)
-		if n.tip:
-			w_ = screen._s.get(name)
+		text = n.text if not n.disabled else _GREY + n.text + u'</color>'
+		screen.setText(name + 'L', 'Background', _FONT + text + u'</font>', 1 << 0, x + _BOX_TEXT, y + 4, 0, font, general, -1, -1)
+		for part in (name, name + 'L'):
+			w_ = screen._s.get(part)
 			if w_ is not None:
-				w_.help = n.tip
+				if n.tip:
+					w_.help = n.tip
+				if n.disabled and part == name:
+					w_.enabled = False
 	elif k == 'button':
 		screen.setButtonGFC(name, n.text, '', x, y + 4, w, 25, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
 	elif k == 'edit':
@@ -955,6 +1124,8 @@ def handleInput(args):
 	n = ctrl._nodes.get(ident)
 	if n is None:
 		return 0
+	if n.disabled:
+		return 1
 	if n.kind in ('checkbox', 'radio') and notify == 0:
 		w = _screen()._s.get('OptW%d' % n.id)
 		n.value = bool(w.state) if w is not None else not n.value
@@ -989,16 +1160,121 @@ def _call(n, args):
 
 # ---------------------------------------------------------------- in place
 
-# (the engine's alarm clock, as the options screen sets it: off)
-_alarm = {'on': False, 'hour': 0, 'min': 0}
-_cpe.isAlarmOn = lambda: _alarm['on']
-_cpe.getAlarmHour = lambda: _alarm['hour']
-_cpe.getAlarmMin = lambda: _alarm['min']
-_cpe.getAlarmHourLeft = lambda: _alarm['hour']
-_cpe.getAlarmMinLeft = lambda: _alarm['min']
+# ---------------------------------------------------------------- the clock and the alarm
+
+# The engine's alarm clock (CvPythonExtensions' toggleAlarm and its getters), as in the original:
+# set to go off in so many hours and minutes from this minute (Alarm On on the Other tab, with the
+# boxes' hours and minutes), with a popup saying when; the interface clock has a * before it while
+# it is set; at that minute it rings (its sound and a popup) and is off again. Not in the profile:
+# kept until the program ends.
+_alarm = {'at': None} # (the minute it goes off, in seconds since the epoch)
+
+
+def _minuteNow():
+	return int(time.time()) // 60 * 60
+
+
+def _hhmm(t, hours24):
+	"""A time as the alarm's popups write it: 6:53, or 6:53 AM with the 12-hour clock."""
+	lt = time.localtime(t)
+	if hours24:
+		return u'%d:%02d' % (lt.tm_hour, lt.tm_min)
+	ampm = _cpe.CyTranslator().getText('TXT_KEY_MISC_PM_AFTERNOON' if lt.tm_hour >= 12 else 'TXT_KEY_MISC_AM_MORNING', ())
+	return u'%d:%02d%s' % ((lt.tm_hour + 11) % 12 + 1, lt.tm_min, ampm)
+
+
+def _alarmPopup(key, t):
+	try:
+		popup = oc4screens.CyPopup(-1, _cpe.EventContextTypes.NO_EVENTCONTEXT, True)
+		tr = _cpe.CyTranslator()
+		popup.setHeaderString(tr.getText('TXT_KEY_POPUP_ALARM_TITLE', ()), 1 << 2)
+		popup.setBodyString(tr.getText(key, (_hhmm(t, _profile['hours24']),)), 1 << 0)
+		popup.launch(True, _cpe.PopupStates.POPUPSTATE_IMMEDIATE)
+	except Exception:
+		import traceback
+		traceback.print_exc()
+
+
 def _toggleAlarm(bOn, iHour=0, iMin=0):
-	_alarm['on'], _alarm['hour'], _alarm['min'] = bool(bOn), int(iHour), int(iMin)
+	if bOn:
+		_alarm['at'] = _minuteNow() + 60 * (60 * int(iHour) + int(iMin))
+		_alarmPopup('TXT_KEY_MISC_ALARM_WILL_GO_OFF', _alarm['at'])
+	else:
+		_alarm['at'] = None
+
+
+def _alarmLeft():
+	"""Minutes till it goes off (0 when off)."""
+	return max(0, (_alarm['at'] - _minuteNow()) // 60) if _alarm['at'] is not None else 0
+
+
+def _alarmTime(i):
+	return time.localtime(_alarm['at'])[i] if _alarm['at'] is not None else -1
+
+
+def _checkAlarm():
+	"""(every frame) The alarm's minute come: it rings."""
+	if _alarm['at'] is not None and time.time() >= _alarm['at']:
+		_alarm['at'] = None
+		try:
+			oc4host.audio_play('AS2D_ALARM')
+		except Exception:
+			pass
+		_alarmPopup('TXT_KEY_MISC_ALARM_GOES_OFF', time.time())
+
+
+_PATTERN = []
+
+
+def clockText():
+	"""getClockText: the time of day as the user's system writes it (the original takes Windows'),
+	in 24 hours with the options' 24 Hour Clock; a * before it while the alarm is set."""
+	if not _PATTERN:
+		try:
+			_PATTERN.append(str(oc4host.clock_pattern()))
+		except Exception:
+			_PATTERN.append('HH:mm')
+	pattern = _PATTERN[0]
+	if _profile['hours24'] and ('h' in pattern or 'a' in pattern or 't' in pattern):
+		sep = ([c for c in pattern if c not in 'Hhm \'at'] or [':'])[0]
+		pattern = 'HH%smm' % sep
+	lt = time.localtime()
+	out, i = [], 0
+	while i < len(pattern):
+		c = pattern[i]
+		n = 1
+		while i + n < len(pattern) and pattern[i + n] == c:
+			n += 1
+		if c == 'H':
+			out.append('%02d' % lt.tm_hour if n > 1 else '%d' % lt.tm_hour)
+		elif c in 'hK':
+			h = (lt.tm_hour + 11) % 12 + 1 if c == 'h' else lt.tm_hour % 12
+			out.append('%02d' % h if n > 1 else '%d' % h)
+		elif c == 'm':
+			out.append('%02d' % lt.tm_min if n > 1 else '%d' % lt.tm_min)
+		elif c == 's':
+			out.append('%02d' % lt.tm_sec if n > 1 else '%d' % lt.tm_sec)
+		elif c in 'at':
+			out.append('PM' if lt.tm_hour >= 12 else 'AM')
+		elif c == "'":
+			n = 1
+		else:
+			out.append(c * n)
+		i += n
+	text = u''.join(out).strip()
+	return (u'*' if _alarm['at'] is not None else u'') + text
+
+
+_cpe.isAlarmOn = lambda: _alarm['at'] is not None
+_cpe.getAlarmHour = lambda: _alarmTime(3)
+_cpe.getAlarmMin = lambda: _alarmTime(4)
+_cpe.getAlarmHourLeft = lambda: _alarmLeft() // 60
+_cpe.getAlarmMinLeft = lambda: _alarmLeft() % 60
 _cpe.toggleAlarm = _toggleAlarm
+_cpe.getClockText = clockText
+if isinstance(getattr(oc4screens, '_clockText', None), list):
+	oc4screens._clockText[0] = clockText
+oc4screens.beforeDisplay.append(_checkAlarm)
 _cpe.CyGTabCtrl = CyGTabCtrl
 _cpe.CyUserProfile = _UserProfile
 oc4screens.beforeDisplay.append(relayout)

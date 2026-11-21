@@ -32,12 +32,50 @@
 #include <windows.h>
 #include <shlobj.h>
 
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <utility>
+
+namespace
+{
+	// The user's short time pattern (the clock on the main interface): the system's, else 24 hours.
+	std::string clockPattern()
+	{
+		std::string pattern = "HH:mm";
+#if defined(__APPLE__)
+		if (CFLocaleRef locale = CFLocaleCopyCurrent())
+		{
+			if (CFDateFormatterRef f = CFDateFormatterCreate(nullptr, locale, kCFDateFormatterNoStyle, kCFDateFormatterShortStyle))
+			{
+				if (CFStringRef format = CFDateFormatterGetFormat(f))
+				{
+					char buffer[64];
+					if (CFStringGetCString(format, buffer, sizeof buffer, kCFStringEncodingUTF8))
+						pattern = buffer;
+				}
+				CFRelease(f);
+			}
+			CFRelease(locale);
+		}
+#elif defined(_WIN32)
+		wchar_t buffer[64];
+		if (GetLocaleInfoEx(LOCALE_NAME_USER_DEFAULT, LOCALE_SSHORTTIME, buffer, 64) > 0)
+		{
+			pattern.clear();
+			for (const wchar_t* c = buffer; *c; ++c)
+				pattern += *c < 128 ? char(*c) : ' ';
+		}
+#endif
+		return pattern;
+	}
+}
 #include <unordered_map>
 
 namespace py = pybind11;
@@ -250,6 +288,9 @@ namespace oc4::host
 			engine.mark({ x, y, r, g, b, a, layer, border, true });
 		});
 		host.def("engine_effect", [&engine](int effect, float x, float y, float z, float rotation) { engine.TriggerEffect(effect, NiPoint3(x, y, z), rotation); });
+		// The interface clock's form (getClockText): the user's own short time, as the original
+		// takes Windows' (its "HH.mm" on a Danish Mac in Wine); an ICU/Windows pattern such as "h:mm a".
+		host.def("clock_pattern", [] { return clockPattern(); });
 		// The player's profile (oc4options): where it is kept, how loud the sounds play.
 		host.def("profile_path", [] {
 			PWSTR documents = nullptr;

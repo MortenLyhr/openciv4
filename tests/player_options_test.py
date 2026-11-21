@@ -107,8 +107,15 @@ def start(folder):
 
 
 def profileLines(folder):
+	"""profile.ini's lines and the loaded profile's (Profiles/<UserProfile>.ini)."""
 	with open(os.path.join(folder, 'profile.ini')) as f:
-		return set(f.read().split())
+		lines = set(f.read().split())
+	name = [l.split('=', 1)[1] for l in lines if l.startswith('UserProfile=')]
+	own = os.path.join(folder, 'Profiles', (name[0] if name else 'openciv4') + '.ini')
+	if os.path.isfile(own):
+		with open(own) as f:
+			lines |= set(f.read().split())
+	return lines
 
 
 def optionsScreen(options):
