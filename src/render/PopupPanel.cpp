@@ -25,7 +25,7 @@ namespace oc4::render
 		}
 
 		// (as the game's popups: their width, margins, the choices' pictures, the OK button's height)
-		constexpr float kWidth = 396, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
+		constexpr float kWidth = 400, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
 		constexpr float kStoneLine = 25, kStoneGap = 6, kStoneInset = 9; // (a choice's stone button)
 		constexpr Color kFocus{ 0.45f, 0.62f, 0.95f };                  // (the focus rim on the first)
 		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.97f, 0.97f, 0.97f }, kHot{ 1, 0.83f, 0.49f };
@@ -241,7 +241,7 @@ namespace oc4::render
 		// As the game's: its width, at the right under the top bar (in the middle when narrow).
 		const float w = std::min(kWidth, sw - 40), inner = w - 2 * kPadX;
 		const bool right = sw >= 2.5f * w && !m_view->centered;
-		const float x0 = right ? sw - 22 - w : (sw - w) / 2; // (Wine at 1600 x 900: its rim at 1182, 79)
+		const float x0 = right ? sw - 18 - w : (sw - w) / 2; // (Wine at 1600 x 900: its rim 1182-1582 from 77; 1280 wide, the game menu's at 1262)
 		const std::wstring header = widen(m_view->header);
 		std::vector<std::wstring> texts(items.size());
 		std::vector<float> heights(items.size());
@@ -255,9 +255,10 @@ namespace oc4::render
 			{
 			case Kind::Text: heights[i] = o.richHeight(texts[i], inner, m_textSize, false) + 10; break;
 			case Kind::Button:
-				// (on the theme's stone button, as the original's: 25 high for a line, 6 apart, the
-				// text 9 in; measured in Wine at 1600 x 900)
-				heights[i] = stone ? std::max(kIcon * (icon ? 1.0f : 0.0f), std::max(kStoneLine, o.richHeight(texts[i], inner - 2 * kStoneInset - (icon ? kIcon + 5 : 0), m_textSize, false) + 5)) + kStoneGap
+				// (on the theme's stone button, as the original's: 25 high for a line, the text's
+				// height and 3 for more (two lines of the game font: 47), 6 apart, the text 9 in;
+				// measured in Wine at 1600 x 900)
+				heights[i] = stone ? std::max(kIcon * (icon ? 1.0f : 0.0f), std::max(kStoneLine, o.richHeight(texts[i], inner - 2 * kStoneInset - (icon ? kIcon + 5 : 0), m_textSize, false) + 3)) + kStoneGap
 					: std::max(kIcon, o.richHeight(texts[i], inner - (icon ? kIcon + 5 : 0), m_textSize, false)) + 8;
 				break;
 			case Kind::Radio:
@@ -271,8 +272,10 @@ namespace oc4::render
 		const float headerHeight = header.empty() ? 0.0f : o.richHeight(header, inner, m_headerSize, false) + 10;
 		const float okHeight = m_view->okButton ? kOk + 10 : 0.0f;
 		float y0 = right ? 77.0f : 30.0f;
-		const float listHeight = std::max(0.0f, std::min(content, sh - y0 - 20 - headerHeight - okHeight - kPadTop - kPadBottom));
-		const float h = kPadTop + headerHeight + listHeight + okHeight + kPadBottom;
+		// (the original leaves 19 under a last stone button to the rim: 3 more than the margin)
+		const float tail = stone && !items.empty() && items.back().kind == Kind::Button && !m_view->okButton ? 3.0f : 0.0f;
+		const float listHeight = std::max(0.0f, std::min(content, sh - y0 - 20 - headerHeight - okHeight - kPadTop - kPadBottom - tail));
+		const float h = kPadTop + headerHeight + listHeight + okHeight + kPadBottom + tail;
 		if (!right)
 			y0 = std::max(30.0f, (sh - h) / 2);
 		m_panel = { x0, y0, x0 + w, y0 + h };
