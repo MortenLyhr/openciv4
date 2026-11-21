@@ -1244,7 +1244,7 @@ float4 PSOverlay(Out p) : SV_Target
 		});
 		std::ranges::stable_sort(ground, std::greater<>(), &Deferred::distance);
 		for (const auto& d : ground)
-			drawMesh(*d.mesh, m_deferredMaterials[d.material], m_deferredWorlds[d.world], d.teamColor, d.onGround);
+			drawMesh(*d.mesh, m_deferredMaterials[d.material], m_deferredWorlds[d.world], d.teamColor, d.onGround, d.unitLight);
 	}
 
 	void Renderer::endFrame()
