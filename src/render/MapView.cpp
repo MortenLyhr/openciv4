@@ -2205,6 +2205,7 @@ float4 PSWater(WaterOut i) : SV_Target
 
 			const float reach = kBorderReach * float(R);
 			std::vector<float> edge(owner.size(), reach);
+			std::vector<uint8_t> measured(owner.size(), 0); // (the texels whose distance the disc measured)
 			// The borders' corners rounded: in the plots along a border each texel is the owner's
 			// of most of the ground within kBorderCorner of it (a straight edge stays where it
 			// is; a corner, outwards or inwards, is cut round), but not by a river, whose bends
@@ -2337,11 +2338,16 @@ float4 PSWater(WaterOut i) : SV_Target
 					const float q = std::min(float(other) / float(all), 0.5f) * 2 * float(kChord.size() - 1);
 					const size_t k = std::min(size_t(q), kChord.size() - 2);
 					edge[i] = std::max(0.02f, radius * std::lerp(kChord[k], kChord[k + 1], q - float(k)));
+					measured[i] = 1;
 				}
 			}
 			// The distances on from there (two chamfer passes over the plots near the borders).
+			// (half a texel next to another's ground, unless measured to less than a texel above:
+			// along a river's slanting edge the measure is what keeps the line from stepping)
 			each(work, true, [&](int tx, int ty) {
 				const size_t i = size_t(ty) * TW + tx;
+				if (measured[i])
+					return;
 				for (const auto& s : kStep)
 					if (const int n = at(tx + s[0], ty + s[1]); n >= 0 && owner[size_t(n)] != owner[i])
 					{
