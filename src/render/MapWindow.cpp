@@ -1128,7 +1128,9 @@ namespace oc4::render
 			mouseY = y;
 			popup.hover(x, y);
 			ui.hover(x, y);
-			if (minimapDrag)
+			if (ui.barHeld())
+				ui.holdBar(x, y);
+			else if (minimapDrag)
 				jumpFromMinimap(std::clamp(x, int(minimapRect[0]), int(minimapRect[2])), std::clamp(y, int(minimapRect[1]), int(minimapRect[3])));
 			else if (panning)
 			{
@@ -1181,6 +1183,21 @@ namespace oc4::render
 			{
 				downOnUi = true;
 				ui.press(x, y, !left);
+				// (a scroll bar is held: its arrows and shaft step, its grip follows the mouse, until let go)
+				if (left)
+				{
+					ui.pressBar(x, y);
+					if (ui.barHeld())
+						SDL_CaptureMouse(true);
+				}
+				return;
+			}
+			if (!down && ui.barHeld())
+			{
+				SDL_CaptureMouse(false);
+				ui.releaseBar();
+				downOnUi = false;
+				ui.release(x, y, mods.shift, mods.ctrl, mods.alt);
 				return;
 			}
 			if (!down && std::exchange(downOnUi, false))
@@ -2218,6 +2235,8 @@ namespace oc4::render
 				frameStats.add(std::chrono::duration<double>(now - lastFrame).count());
 			lastFrame = now;
 			clock += dt;
+			if (ui.barHeld())
+				ui.holdBar(mouseX, mouseY);
 			handlePad(dt);
 			handleHeldKeys(dt);
 			easeZoom(dt);
@@ -2611,7 +2630,13 @@ namespace oc4::render
 	void MapWindow::pressKey(unsigned key) { m->onKey(key); }
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
-	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }
+	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks()
+	{
+		// (a scroll bar held: its latest, for the item as the screens have it now)
+		if (const auto bar = m->ui.takeBarClick())
+			m->uiClicks.push_back(*bar);
+		return std::exchange(m->uiClicks, {});
+	}
 	void MapWindow::setUiTextFocus(bool focus) { m->uiTextFocus = focus; }
 	std::wstring MapWindow::takeUiTyped() { return std::exchange(m->uiTyped, {}); }
 	void MapWindow::typeText(const std::string& utf8)

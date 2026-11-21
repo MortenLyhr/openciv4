@@ -12,6 +12,7 @@
 #include "render/Theme.h"
 
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -57,6 +58,17 @@ namespace oc4::render
 		// A press and its release on the same item make a click.
 		void press(int x, int y, bool right);
 		std::optional<MapWindow::UiClick> release(int x, int y, bool shift, bool ctrl, bool alt);
+		// A scroll bar pressed with the left button (after press): its arrows step a line and its
+		// shaft a page, again and again while held (the theme's 250 ms, then every 90 ms; the
+		// shaft until the grip reaches the mouse); its grip follows the mouse, wherever it goes,
+		// until the button is let go. holdBar: the mouse moved or time passed.
+		// What that asks of the screens is taken with takeBarClick (the latest: it stays with the
+		// bar when the screens are made again before it is taken).
+		void pressBar(int x, int y);
+		void holdBar(int x, int y);
+		void releaseBar() { m_barPart = BarPart::None; }
+		bool barHeld() const { return m_barPart != BarPart::None; }
+		std::optional<MapWindow::UiClick> takeBarClick() { return std::exchange(m_barClick, std::nullopt); }
 
 		void setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown);
 		// The size of a widget's font (FontTypes) as the screens draw it.
@@ -71,6 +83,16 @@ namespace oc4::render
 
 	private:
 		using Item = MapWindow::UiItem;
+		enum class BarPart { None, Back, Forward, PageBack, PageForward, Grip };
+		// A scroll bar's parts along it: its ends, its shaft's (between its arrows) and its grip's.
+		struct BarParts
+		{
+			bool down = true; // (up and down; else across)
+			float a0 = 0, t0 = 0, t1 = 0, a1 = 0, g0 = 0, g1 = 0;
+		};
+		static BarParts barParts(const Item& it);
+		BarPart barPartAt(const Item& it, int x, int y) const;
+		void barStep(int x, int y);
 		bool inside(const Item& item, int x, int y) const;
 		// What can be reached now: nothing clipped away or covered by a screen on top.
 		std::vector<int> reachable() const;
@@ -94,8 +116,20 @@ namespace oc4::render
 		Theme::Skin m_dropInner, m_dropBorder, m_dropSelect;
 		// The theme's scroll bars (GFC_Control_StandardScroll_Style): the shaft, up and down and
 		// across, and the grip, plain and under the mouse.
-		std::array<Theme::Skin, 2> m_shaft;
-		std::array<std::array<Theme::Skin, 2>, 2> m_grip;
+		// Its arrows (up, down, left, right) plain, under the mouse and pressed. The open pull
+		// down's list has the combo box's own (SF_CtrlTheme_Civ4_Control_ComboBox_Standard_Scroll_Style):
+		// look 1. Shaft: plain and pressed, up and across; grip: plain, under the mouse and pressed.
+		struct BarLook
+		{
+			std::array<std::array<Theme::Skin, 2>, 2> shaft;
+			std::array<std::array<Theme::Skin, 3>, 2> grip;
+			std::array<std::array<Theme::Skin, 3>, 4> arrow;
+		};
+		std::array<BarLook, 2> m_bar;
+		BarPart m_barPart = BarPart::None;
+		float m_barGrab = 0; // (where along the grip it was taken)
+		std::optional<MapWindow::UiClick> m_barClick;
+		std::chrono::steady_clock::time_point m_barNext; // (the next step while an arrow or the shaft is held)
 		std::array<float, 5> m_sizes{ 10, 12, 14, 16, 22 }; // the markup's <font=0..4> (the theme's)
 		std::vector<Item> m_items;
 		int m_hover = -1, m_pressed = -1;
