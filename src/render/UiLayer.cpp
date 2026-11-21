@@ -36,6 +36,39 @@ namespace oc4::render
 		}
 
 		constexpr Color kPanel{ 0.05f, 0.06f, 0.09f }, kEdge{ 0.78f, 0.64f, 0.36f }, kText{ 0.93f, 0.93f, 0.9f }, kHot{ 1, 0.9f, 0.6f };
+		// (a table header's text: the original's, dark brown on the parchment)
+		constexpr Color kHeaderText{ 65 / 255.f, 40 / 255.f, 38 / 255.f };
+
+		// The markup cut to the width with ".." after what is left of its text, as the theme's
+		// buttons crop (GFC_CF_BUTTON_CROP_DOTTED); its tags stay whole.
+		std::wstring fitWithDots(Overlay& o, const std::wstring& markup, float width, float size, std::wstring_view dots = L"..")
+		{
+			if (width <= 0)
+				return {};
+			if (o.richWidth(markup, size, false) <= width)
+				return markup;
+			std::vector<size_t> ends; // after each character of text
+			for (size_t i = 0; i < markup.size(); ++i)
+			{
+				if (markup[i] == L'<')
+					if (const size_t close = markup.find(L'>', i); close != std::wstring::npos)
+					{
+						i = close;
+						continue;
+					}
+				ends.push_back(i + 1);
+			}
+			// (one character, an icon, is drawn whole: BUG's religion marks in 25 px columns)
+			if (ends.size() <= 1)
+				return markup;
+			for (size_t k = ends.size(); k-- > 1;)
+			{
+				const std::wstring cut = markup.substr(0, ends[k - 1]) + std::wstring(dots);
+				if (o.richWidth(cut, size, false) <= width)
+					return cut;
+			}
+			return ends.empty() ? std::wstring() : markup.substr(0, ends[0]) + std::wstring(dots);
+		}
 
 		// The built-in panel styles that draw nothing (PANEL_STYLE_EMPTY, PANEL_STYLE_EXTERNAL).
 		bool emptyPanel(const std::string& style)
@@ -689,10 +722,36 @@ namespace oc4::render
 				break;
 			}
 			case Kind::Header:
-				o.rect(x0, y0, x1, y1, { 0.1f, 0.11f, 0.15f }, 0.9f, 0);
-				o.richText(widen(it.text), (it.flags & 2) ? x1 - 4 : x0 + 4, y0 + 2, m_sizes[1], true, { 1, 0.9f, 0.65f }, 1,
+			{
+				// A table's column header: the theme's header button (Civ4Theme_Table.thm's
+				// Header_Table_HButtonStyle: the parchment of bg_header.tga, header_h.tga's edges
+				// between the columns), its text in the button's colours, in the middle of its height.
+				const Theme::Table* t = m_theme.loaded() ? m_theme.table(it.style) : nullptr;
+				const Theme::Button* b = t ? t->header : nullptr;
+				const std::wstring text = widen(it.text);
+				const size_t state = hot ? size_t(Theme::State::Rollover) : size_t(Theme::State::Default);
+				if (b && !b->skin[state].empty())
+					Theme::draw(o, b->skin[state], x0, y0, x1, y1, alpha);
+				else
+					o.rect(x0, y0, x1, y1, { 0.1f, 0.11f, 0.15f }, 0.9f, 0);
+				const Color colour = b && b->coloured ? b->text[state] : b ? kHeaderText : Color{ 1, 0.9f, 0.65f };
+				const float ty = y0 + (h - o.richHeight(text, 4096, m_sizes[2], false)) / 2;
+				// (the column the table is sorted by: its arrow at the right, the text left of it, cut
+				// with dots where it does not fit: Wine's "P.. ^" over BUG's POP)
+				const int sorted = (it.flags & 0x100) ? 0 : (it.flags & 0x200) ? 1 : -1;
+				if (sorted >= 0 && t && t->sortArrow[sorted])
+				{
+					const Theme::Bitmap& arrow = t->sortArrow[sorted];
+					const float aw = arrow.width(), ah = arrow.height();
+					const float ax = std::round(x1 - 4 - aw), ay = std::round(y0 + (h - ah) / 2);
+					Theme::draw(o, arrow, ax, ay, ax + aw, ay + ah, alpha);
+					o.richText(fitWithDots(o, text, ax - 2 - (x0 + 4), m_sizes[2]), x0 + 4, ty, m_sizes[2], false, colour, alpha, Overlay::Align::Left);
+					break;
+				}
+				o.richText(text, (it.flags & 2) ? x1 - 4 : x0 + 4, ty, m_sizes[2], false, colour, alpha,
 					(it.flags & 2) ? Overlay::Align::Right : Overlay::Align::Left);
 				break;
+			}
 			case Kind::Cell:
 			{
 				if (it.style == "__option")
@@ -715,10 +774,11 @@ namespace oc4::render
 				if (!it.texture.empty() && icon(it.texture, x0 + 2, y0 + 1, x0 + h - 1, y1 - 1, alpha))
 					tx = x0 + h + 2;
 				const bool right = (it.flags & 2) != 0, centre = (it.flags & 4) != 0;
-				const std::wstring text = widen(it.text);
 				// (in its font, size 2 a table's, 3 a list box's; in the middle of the room the style
-				// leaves round a cell's content)
+				// leaves round a cell's content; cut with "..." where its column ends, as the original's:
+				// BUG's page editor's "GREATPEOPLE_TUR...")
 				const float size = m_sizes[size_t(std::clamp(it.font, 0, 4))];
+				const std::wstring text = fitWithDots(o, widen(it.text), (right || centre ? x1 - x0 - 8 : x1 - 4 - tx), size, L"...");
 				float above = 0, below = 0;
 				if (const Theme::Table* t = m_theme.loaded() ? m_theme.table(it.style) : nullptr)
 					above = t->content[1], below = t->content[3];

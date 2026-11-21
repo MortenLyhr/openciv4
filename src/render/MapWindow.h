@@ -387,7 +387,7 @@ namespace oc4::render
 		int textHeight(const std::string& markup, int width, int font) const;
 		// A table style's row (the theme's): its least height, and the room above and below a
 		// cell's content.
-		std::array<float, 3> tableRow(const std::string& style) const;
+		std::array<float, 4> tableRow(const std::string& style) const;
 		// The interactive item under the mouse, -1 none.
 		int uiHovered() const;
 		// As if the mouse rested on that item (a scripted game's look at its help).

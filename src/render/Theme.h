@@ -141,6 +141,14 @@ namespace oc4::render
 			};
 			std::array<std::array<Skin, RowCount>, 2> row; // [alt][state]
 			Skin inner; // its background (none with Flag_NoInnerFill: the Empty styles)
+			// Its headers: the header table's (StyleId_HHeader) button (StyleId_HButton): the
+			// standard one's bg_header.tga and header_h.tga, a light band with dark text; and
+			// how high they are (Size_Header, 22).
+			const Button* header = nullptr;
+			// The column it is sorted by: its arrow (HSortAscendButton / HSortDescendButton's
+			// image, table_sort_arrows.tga), up and down.
+			Bitmap sortArrow[2];
+			float headerHeight = 22;
 			float cellHeight = 24;
 			float content[4]{ 4, 2, 4, 2 }; // left, top, right, bottom
 		};
