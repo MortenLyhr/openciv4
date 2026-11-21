@@ -740,6 +740,7 @@ float4 PSTerrain(PSIn i) : SV_Target
 				mat.alphaBlend = true;
 				mat.zTest = true;
 				mat.zWrite = false;
+				mat.blendLast = true;
 				mat.cull = scene::Cull::None;
 				circleModel.items.push_back(std::move(quad));
 				circleGpu = renderer.upload(circleModel, assets, AssetLocation{});
@@ -759,7 +760,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 				const float dx = wrapOffset(middle.x);
 				if (!frustum.sphere(middle + Vec3{ dx, 0, 0 }, S()))
 					continue;
-				const Vec3 at{ float(c.x) * S() + dx, float(c.y) * S(), 0 };
+				// (above the pieces laid on the ground, rivers at 0.8 and roads at 0.6: those write
+				// depth, and the original draws the circle over their water and banks)
+				const Vec3 at{ float(c.x) * S() + dx, float(c.y) * S(), 1.5f };
 				material[0].emissive = { c.color.r, c.color.g, c.color.b };
 				material[0].alpha = std::clamp(c.alpha, 0.0f, 1.0f);
 				const Affine world[] = { placement(at, 0, S()) };
