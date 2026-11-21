@@ -2828,7 +2828,13 @@ float4 PSTerrain(PSIn i) : SV_Target
 							d.x -= std::copysign(worldW(), d.x);
 						const bool shooting = !b.rounds.empty() && std::all_of(b.rounds.begin(), b.rounds.end(), [](const BattleRoundView& r) { return r.ranged; });
 						if (const float len = length(d); len > 0)
-							inst.step = d * (role == 2 ? 0.5f : b.surrender || shooting ? 0.45f : 1 - (1 - kBattleCloseIn) * S() / len);
+						{
+							// (shooting, it stops twice its art's battle distance short, in plots: the
+							// original's tanks, catapults and cannons, 0.5, fire from their plot, its
+							// musketmen, 0.35, come a third of the way)
+							const float shootFrom = std::clamp(2 * art.battleDistance, 0.0f, 1.0f) * S();
+							inst.step = d * (role == 2 ? 0.5f : b.surrender ? 0.45f : shooting ? std::max(len - shootFrom, 0.0f) / len : 1 - (1 - kBattleCloseIn) * S() / len);
+						}
 					}
 					if (!art.shadow.empty())
 						if ((inst.shadow = model(art.shadow, {})))

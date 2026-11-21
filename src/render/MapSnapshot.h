@@ -84,6 +84,7 @@ namespace oc4::render
 		std::string shadow, shadowNode;
 		float shadowScale = 1;
 		bool ranged = false; // units: CvArtInfoUnit::getActAsRanged (their fortify is the ranged one)
+		float battleDistance = 0.35f; // units: CvArtInfoUnit::getBattleDistance (how far back it shoots from)
 		bool operator==(const ModelArt&) const = default;
 	};
 

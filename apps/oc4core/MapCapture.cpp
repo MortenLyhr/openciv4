@@ -964,6 +964,7 @@ namespace oc4::host
 							u.models.push_back(modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
 								info->getShadowScale()));
 							s.models[size_t(u.models.back())].ranged = info->getActAsRanged();
+							s.models[size_t(u.models.back())].battleDistance = info->getBattleDistance();
 						}
 					// (the great general's figure: its era's warlord, as CvUnitInfo::getArtInfo picks the
 					// early, middle or late art; the tags are not exported, BtS names them)
