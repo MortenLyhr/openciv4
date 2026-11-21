@@ -208,6 +208,12 @@ namespace oc4::host
 			CvDLLWidgetData::getInstance().parseHelp(text, w);
 			return std::wstring(text.getCString());
 		});
+		// A feature variety's button (CIV4ArtDefines_Feature's VarietyButton: the forest's leafy,
+		// evergreen and snowy ones), as the World Builder's palette shows them; "" for none.
+		host.def("feature_variety_button", [](int feature, int variety) {
+			const CvArtInfoFeature* art = feature >= 0 && feature < GC.getNumFeatureInfos() ? GC.getFeatureInfo(static_cast<FeatureTypes>(feature)).getArtInfo() : nullptr;
+			return art && variety >= 0 && variety < art->getNumVarieties() ? std::string(art->getVariety(variety).getVarietyButton().c_str()) : std::string();
+		});
 		host.def("ui_is_dirty", [&ui](int bit) { return ui.isDirty(static_cast<InterfaceDirtyBits>(bit)); });
 		host.def("ui_set_dirty", [&ui](int bit, bool value) { ui.setDirty(static_cast<InterfaceDirtyBits>(bit), value); });
 		host.def("ui_make_dirty", [&ui] { ui.makeInterfaceDirty(); });

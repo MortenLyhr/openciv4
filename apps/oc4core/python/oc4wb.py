@@ -287,7 +287,13 @@ def _items(ctrl):
 			for i in range(gc.getNumFeatureInfos()):
 				info = gc.getFeatureInfo(i)
 				for j in range(info.getNumVarieties()):
-					out.append((2, k, info.getButton(), info.getDescription(), sel(2, k), (W.WIDGET_PEDIA_JUMP_TO_FEATURE, i)))
+					# (each variety its own button, as the original's: the forest's leafy, evergreen
+					# and snowy ones)
+					try:
+						button = oc4host.feature_variety_button(i, j) or info.getButton()
+					except Exception:
+						button = info.getButton()
+					out.append((2, k, button, info.getDescription(), sel(2, k), (W.WIDGET_PEDIA_JUMP_TO_FEATURE, i)))
 					k += 1
 			for i in range(gc.getNumRouteInfos()):
 				out.append((3, i, gc.getRouteInfo(i).getButton(), gc.getRouteInfo(i).getDescription(), sel(3, i), None))
