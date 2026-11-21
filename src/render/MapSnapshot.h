@@ -73,6 +73,8 @@ namespace oc4::render
 		int connections = 0;
 		Delta delta = Delta::None;
 		std::vector<int> rotations;
+		// The culture borders' tiles at this piece's corner (BorderFile): the line along its banks.
+		std::string border;
 	};
 
 	// A model with its animations (CvArtInfoAsset and its scalable subclasses).
