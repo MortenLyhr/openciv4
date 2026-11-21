@@ -438,7 +438,7 @@ namespace oc4::host
 		const auto* unit = reinterpret_cast<const CvUnit*>(pEntity);
 		if (!unit || bCombat || unit->getOwner() < 0)
 			return;
-		const CvPlayer& owner = GET_PLAYER(unit->getOwner());
+		const CvPlayer& owner = CvPlayerAI::getPlayerNonInl(unit->getOwner()); // (exported: GET_PLAYER inlines a static the Windows DLL does not export)
 		const float seconds = owner.isHuman() && owner.isOption(PLAYEROPTION_QUICK_MOVES) ? 0.5f : 1.0f;
 		std::lock_guard lock(g_movementMutex);
 		if (const auto it = g_movements.find(movementKey(unit->getIDInfo())); it != g_movements.end())
