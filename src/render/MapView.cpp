@@ -4903,6 +4903,8 @@ float4 PSWater(WaterOut i) : SV_Target
 	// production bars and what is being built where the active player may see them.
 	void MapView::drawOverlay(Overlay& overlay)
 	{
+		// (no bars drawn, none to click: a city's screen hides them where they were)
+		m->cityBars.clear();
 		if (!m->hasMap || !options.banners || !options.cities || options.cityScreen || m->renderer.globe())
 			return;
 		const float* vp = m->renderer.viewProjection();
@@ -5024,7 +5026,6 @@ float4 PSWater(WaterOut i) : SV_Target
 				}
 			return &out;
 		};
-		m->cityBars.clear();
 		for (const CityView& c : m->map.cities)
 		{
 			if (options.fog && !m->map.plots[size_t(c.x) + size_t(c.y) * size_t(m->map.width)].revealed)

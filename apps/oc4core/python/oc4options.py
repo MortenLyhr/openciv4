@@ -1064,11 +1064,6 @@ class CyGTabCtrl(object):
 		self.setToolTip(name, tip)
 		self.attachLabel(row, row + 'After', after)
 
-		self.attachCheckBox(parent, CITY_ONE_CLICK_CHECKBOX, u'Open a city with a single click', 'oc4options', 'handleCityOneClickClicked',
-			CITY_ONE_CLICK_CHECKBOX, _cityOneClickOn())
-		self.setToolTip(CITY_ONE_CLICK_CHECKBOX, u'One click on your city or its name bar opens the city screen. Off, as in the '
-			u'original: a click on the name bar selects the city, a double click on the city or its bar opens it.')
-
 	def attachVBox(self, parent, name): self._node('vbox', parent, name)
 	def attachHBox(self, parent, name):
 		self._node('hbox', parent, name)
