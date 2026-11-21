@@ -203,7 +203,7 @@ def _read(path, which, others=False):
 					_profile['nosound'][parts[1]] = value == '1'
 				elif parts[0] in ('graphic', 'player'):
 					_profile[parts[0]][int(parts[1])] = value == '1'
-				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'keepAttacker') + _TOGGLES:
+				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _TOGGLES:
 					_profile[parts[0]] = value == '1'
 				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 					_profile[parts[0]] = int(value)
@@ -264,7 +264,7 @@ def _lines():
 	lines = []
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
-	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'keepAttacker') + _TOGGLES:
+	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _TOGGLES:
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
 	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 		lines.append('%s=%d' % (key, _profile[key]))
@@ -294,7 +294,9 @@ def _applyGraphics():
 		oc4host.set_wasd_pan(_profile['wasdPan'])
 		oc4host.set_auto_end_turn(_profile['autoEndTurn'])
 		oc4host.set_edge_scroll(_profile['edgeScroll'])
+		oc4host.set_city_one_click(_profile['cityOneClick'])
 		oc4host.set_keep_attacker(_profile['keepAttacker'])
+		oc4host.set_quick_enemy_moves(_profile['quickEnemyMoves'])
 	except Exception:
 		pass
 
@@ -981,7 +983,8 @@ class CyGTabCtrl(object):
 
 	def _attachOpenCiv4Tab(self):
 		"""OpenCiv4's options, none of the original's: W A S D panning, ending idle turns, edge
-		scrolling (kept in the profile as wasdPan, autoEndTurn, edgeScroll)."""
+		scrolling, quicker shown moves of the others (kept in the profile as wasdPan, autoEndTurn, edgeScroll,
+		quickEnemyMoves)."""
 		self.attachTabItem(OC4_FORM, u'OpenCiv4')
 		self.attachVBox(OC4_FORM, 'Oc4VBox')
 		parent = 'Oc4Panel'
@@ -1003,6 +1006,20 @@ class CyGTabCtrl(object):
 			EDGE_SCROLL_CHECKBOX, _edgeScrollOn())
 		self.setToolTip(EDGE_SCROLL_CHECKBOX, u'Moving the mouse to the edge of the screen or window moves the map that way. '
 			u'Turn it off to pan only with the arrow keys (or W A S D) and the mouse.')
+		self.attachCheckBox(parent, CITY_ONE_CLICK_CHECKBOX, u'Open a city with a single click', 'oc4options', 'handleCityOneClickClicked',
+			CITY_ONE_CLICK_CHECKBOX, _cityOneClickOn())
+		self.setToolTip(CITY_ONE_CLICK_CHECKBOX, u'One click on your city or its name bar opens the city screen. Off, as in the '
+			u'original: a click on the name bar selects the city, a double click on the city or its bar opens it.')
+		self.attachCheckBox(parent, KEEP_ATTACKER_CHECKBOX, u'Keep the camera on a unit after it attacks', 'oc4options', 'handleKeepAttackerClicked',
+			KEEP_ATTACKER_CHECKBOX, _keepAttackerOn())
+		self.setToolTip(KEEP_ATTACKER_CHECKBOX, u'After your unit attacks, the camera stays on it and it stays selected until you '
+			u'click or press a key, so you see how the battle ended. Off, as in the original game, the next unit that needs '
+			u'orders is selected and the camera goes to it as soon as the battle is over.')
+		self.attachCheckBox(parent, QUICK_ENEMY_MOVES_CHECKBOX, u'Quick enemy moves', 'oc4options', 'handleQuickEnemyMovesClicked',
+			QUICK_ENEMY_MOVES_CHECKBOX, _quickEnemyMovesOn())
+		self.setToolTip(QUICK_ENEMY_MOVES_CHECKBOX, u'With Show Enemy Moves or Show Friendly Moves on, the other civilizations\' '
+			u'units move about twice as fast. The camera still goes to each unit and stays a moment after it arrives. '
+			u'The original has no such option: its Quick Moves speeds up only your own units.')
 		self._attachIniOptions(parent)
 
 	def _attachIniOptions(self, parent):
