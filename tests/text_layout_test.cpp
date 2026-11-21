@@ -33,6 +33,8 @@ namespace
 	{
 		float width = 0, height = 0;
 		std::vector<float> baselines;
+		size_t lines = 0;      // (as DirectWrite's own layout breaks them)
+		bool sameLines = true; // (the GDI-compatible layout, with its rounded widths, breaks them the same)
 	};
 
 	Reference reference(IDWriteFactory* factory, const Case& c)
@@ -63,6 +65,8 @@ namespace
 		natural->GetMetrics(&metrics);
 		layout->GetMetrics(&lined);
 		Reference r{ metrics.widthIncludingTrailingWhitespace, lined.height };
+		r.lines = metrics.lineCount;
+		r.sameLines = lined.lineCount == metrics.lineCount;
 		UINT32 count = 0;
 		layout->GetLineMetrics(nullptr, 0, &count);
 		std::vector<DWRITE_LINE_METRICS> lines(count);
@@ -122,12 +126,13 @@ int main()
 		for (const auto& g : got.glyphs)
 			if (baselines.empty() || g.baseline != baselines.back())
 				baselines.push_back(g.baseline);
-		const bool ok = std::abs(got.width - want.width) < 0.6f && std::abs(got.height - want.height) < 0.6f &&
+		// (the height and every line's baseline where the GDI-compatible layout has the same lines; else the first)
+		const bool ok = std::abs(got.width - want.width) < 0.6f && (!want.sameLines || std::abs(got.height - want.height) < 0.6f) &&
 			(baselines.empty() || std::abs(baselines[0] - want.baselines[0]) < 0.6f);
 		bool linesOk = true;
-		for (size_t k = 0; k < baselines.size() && k < want.baselines.size(); ++k)
+		for (size_t k = 0; want.sameLines && k < baselines.size() && k < want.baselines.size(); ++k)
 			linesOk &= std::abs(baselines[k] - want.baselines[k]) < 0.6f;
-		const size_t visibleLines = want.baselines.size() - (c.text.ends_with(L"\n") ? 1 : 0);
+		const size_t visibleLines = want.lines - (c.text.ends_with(L"\n") ? 1 : 0);
 		linesOk &= baselines.size() == visibleLines || baselines.empty();
 		if (!ok || !linesOk)
 		{
