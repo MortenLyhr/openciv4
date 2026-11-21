@@ -374,7 +374,11 @@ namespace oc4::host
 			if (!type || !path)
 				continue;
 			const XmlNode* scale = n->firstChildElement("fScale");
-			out.push_back({ narrow(type->text), narrow(path->text), scale ? std::wcstof(scale->text.c_str(), nullptr) : 1.0f });
+			auto& a = out.emplace_back(render::MapSnapshot::Attachable{ narrow(type->text), narrow(path->text), scale ? std::wcstof(scale->text.c_str(), nullptr) : 1.0f });
+			if (const XmlNode* projectile = n->firstChildElement("bIsProjectile"))
+				a.projectile = projectile->text == L"1";
+			if (const XmlNode* speed = n->firstChildElement("fSpeed"))
+				a.speed = std::wcstof(speed->text.c_str(), nullptr);
 		}
 	}
 
@@ -1154,6 +1158,8 @@ namespace oc4::host
 			v.elapsed = std::chrono::duration<float>(std::chrono::steady_clock::now() - b.start).count();
 			v.slices = b.slices;
 			v.collateral = b.collateral;
+			v.surrender = b.surrender;
+			v.firstStrikes[0] = b.firstStrikes[0], v.firstStrikes[1] = b.firstStrikes[1];
 			v.attackerX = b.attackerX, v.attackerY = b.attackerY, v.defenderX = b.defenderX, v.defenderY = b.defenderY;
 			for (const auto& r : b.rounds)
 				v.rounds.push_back({ r.ranged, { r.killed[0], r.killed[1] }, { r.alive[0], r.alive[1] } });
@@ -1226,6 +1232,12 @@ namespace oc4::host
 				for (int u = 0; u < count && !shown; ++u)
 					if (CvUnit* unit = plot->getUnitByIndex(u); seen(unit))
 						shown = unit;
+				// (one intercepting a plane: it, while it shoots)
+				for (int u = 0; u < count; ++u)
+					if (CvUnit* unit = plot->getUnitByIndex(u); seen(unit))
+						for (const Entities::Action& a : actions)
+							if (a.mission == 4 && a.unit.eOwner == unit->getOwner() && a.unit.iID == unit->getID())
+								shown = unit;
 				const auto fight = fighting.find(plot->getX() + plot->getY() * s.width);
 				if (fight != fighting.end())
 					for (int u = 0; u < count; ++u)
@@ -1308,7 +1320,22 @@ namespace oc4::host
 							u.models.push_back(modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
 								info->getShadowScale()));
 							s.models[size_t(u.models.back())].ranged = info->getActAsRanged();
+							s.models[size_t(u.models.back())].battleDistance = info->getBattleDistance();
 						}
+					// (the great general's figure: its era's warlord, as CvUnitInfo::getArtInfo picks the
+					// early, middle or late art; the tags are not exported, BtS names them)
+					if (shown->getLeaderUnitType() != NO_UNIT)
+					{
+						const int eras = GC.getNumEraInfos();
+						const char* tag = era > eras / 2 ? "ART_DEF_UNIT_WARLORD_MODERN" : era > eras / 4 ? "ART_DEF_UNIT_WARLORD_MEDIEVAL" : "ART_DEF_UNIT_WARLORD_ANCIENT";
+						if (const CvArtInfoUnit* info = ARTFILEMGR.getUnitArtInfo(tag))
+							u.leader = modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
+								info->getShadowScale());
+					}
+					if (u.battle >= 0 && u.attacking && Entities::siegeTower(*shown))
+						if (const CvArtInfoUnit* info = ARTFILEMGR.getUnitArtInfo("ART_DEF_UNIT_SIEGE_TOWER"))
+							u.siegeTower = modelIndex(info, info->getNIF(), info->getKFM(), info->getScale(), info->getShadowNIF(), info->getShadowAttachNode(),
+								info->getShadowScale());
 				}
 			}
 

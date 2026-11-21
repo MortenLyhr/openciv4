@@ -652,6 +652,10 @@ float4 PSWater(WaterOut i) : SV_Target
 		// Hurt in a round it survives (ANIMCAT_MELEE_HURT 23, by set; the ranged have none of
 		// their own); healing (ANIMCAT_HEAL 4).
 		std::optional<anim::Sequence> hurt[3][2], heal;
+		// Giving itself up (ANIMCAT_SURRENDER: event code 1002, a worker's or a settler's), and a
+		// unit's fading out (its XFadeOut, code 1: the material's alpha to 0).
+		std::optional<anim::Sequence> surrender, fadeOut;
+		std::optional<anim::Sequence> antiAir; // event code 1042: a SAM's anti-air strike (its missile)
 		// Working, by work (irrigate, build, mine, chop, shovel, railroad: categories 50 + 3 a
 		// work): its beginning, the work, a pause in it; founding a city (ANIMCAT_FOUND 40).
 		std::optional<anim::Sequence> work[6][3], found;
@@ -750,6 +754,7 @@ float4 PSWater(WaterOut i) : SV_Target
 			int battle = -1;
 			bool attacking = false;
 			int figureIndex = 0;
+			int role = 0; // 0 a figure of the formation, 1 its great general, 2 its siege tower
 			Vec3 step;
 			Vec3 soundAt; // where its sounds come from (plot units)
 			int work = -1;       // at work: UnitView::work
@@ -788,6 +793,12 @@ float4 PSWater(WaterOut i) : SV_Target
 			Affine place;
 			float start = 0, until = 0, last = 0;
 			Particles particles;
+			// A projectile (an arrow, a rock, a bomb, a missile): it flies from `from` to `to` for
+			// `flight` seconds (its run clip, if any), then plays its explosion (event code 1022),
+			// whose text keys set off its effects and sounds.
+			bool projectile = false;
+			Vec3 from, to;
+			float flight = 0, scale = 1, keysLast = -1;
 		};
 		std::vector<Burst> bursts;
 		std::vector<std::function<void()>> pendingBursts; // (set off before the map came)
@@ -953,7 +964,8 @@ float4 PSWater(WaterOut i) : SV_Target
 				return false;
 			for (const UnitView& u : map.units)
 			{
-				if (!u.selected)
+				// (none under a stack while it fights, as in the original)
+				if (!u.selected || u.battle >= 0)
 					continue;
 				// (its dots: how the head unit can move)
 				if (const int d = std::clamp(u.moves + 1, 0, 3); d != ring.shown && ring.dots[d])
@@ -1605,6 +1617,9 @@ float4 PSWater(WaterOut i) : SV_Target
 				for (uint32_t code = 10; code < 10 + medallionStates.size(); ++code)
 					if (code % 10 < 5)
 						wanted.emplace_back(code, &medallionStates[code - 10]);
+				wanted.emplace_back(1002u, &lm.surrender);
+				wanted.emplace_back(1u, &lm.fadeOut);
+				wanted.emplace_back(1042u, &lm.antiAir);
 				std::vector<std::optional<anim::Sequence>> damaged(16);
 				for (uint32_t state = 0; state < 4; ++state)
 					for (uint32_t part = 0; part < 4; ++part)
@@ -3217,16 +3232,27 @@ float4 PSWater(WaterOut i) : SV_Target
 				const int columns = int(std::ceil(std::sqrt(double(n))));
 				const int rows = int((n + size_t(columns) - 1) / size_t(std::max(columns, 1)));
 				const float spacing = 0.12f * S();
-				for (size_t i = 0; i < n; ++i)
+				// (the formation's figures, then its great general and its siege tower)
+				std::vector<std::pair<int, int>> figures; // model, role
+				for (const int m : u.models)
+					figures.push_back({ m, 0 });
+				if (u.leader >= 0)
+					figures.push_back({ u.leader, 1 });
+				if (u.siegeTower >= 0)
+					figures.push_back({ u.siegeTower, 2 });
+				for (size_t i = 0; i < figures.size(); ++i)
 				{
-					if (u.models[i] < 0 || size_t(u.models[i]) >= map.models.size())
+					const auto [modelIndex, role] = figures[i];
+					if (modelIndex < 0 || size_t(modelIndex) >= map.models.size())
 						continue;
-					const ModelArt& art = map.models[size_t(u.models[i])];
+					const ModelArt& art = map.models[size_t(modelIndex)];
 					LoadedModel* lm = model(art.nif, art.kfm);
 					if (!lm)
 						continue;
-					const float ox = (float(int(i) % columns) - float(columns - 1) / 2) * spacing;
-					const float oy = (float(int(i) / columns) - float(rows - 1) / 2) * spacing;
+					// (the general beside the formation, on its right; the tower ahead of it, to the left)
+					const float ox = role == 1 ? (float(columns) / 2 + 0.6f) * spacing : role == 2 ? -0.25f * S()
+																								: (float(int(i) % columns) - float(columns - 1) / 2) * spacing;
+					const float oy = role ? 0.0f : (float(int(i) / columns) - float(rows - 1) / 2) * spacing;
 					const float c = std::cos(yaw), s = std::sin(yaw);
 					Instance inst;
 					inst.model = lm;
@@ -3245,7 +3271,8 @@ float4 PSWater(WaterOut i) : SV_Target
 					inst.unit = key;
 					inst.resting = u.resting;
 					inst.ranged = art.ranged;
-					inst.battle = u.battle, inst.attacking = u.attacking, inst.figureIndex = int(i);
+					// (the general fights as the first figure: it falls with the last)
+					inst.battle = u.battle, inst.attacking = u.attacking, inst.figureIndex = role ? 0 : int(i), inst.role = role;
 					inst.work = u.work;
 					inst.foundAt = u.founded >= 0 ? time - u.founded : -1;
 					// (as hurt as the unit: its model's states share the damage, the last the worst)
@@ -3275,14 +3302,25 @@ float4 PSWater(WaterOut i) : SV_Target
 					else if (const auto w = workSince.find(key); w == workSince.end() || w->second.first != u.work)
 						workSince[key] = { u.work, time };
 					inst.soundAt = { float(u.x) + 0.5f, float(u.y) + 0.5f, 0 };
-					if (u.battle >= 0 && u.attacking && size_t(u.battle) < map.battles.size())
+					// Fighting, as the original shows it (Wine, close up): the defenders stand where they
+					// are; the attackers run up to them, each figure to the one across (to close to fight
+					// hand to hand, a little short of its plot), or, when every round is ranged (both
+					// shoot), half way; to one giving itself up, half way.
+					if (u.battle >= 0 && size_t(u.battle) < map.battles.size() && u.attacking && role != 1)
 					{
 						const BattleView& b = map.battles[size_t(u.battle)];
 						Vec3 d{ float(b.defenderX - b.attackerX) * S(), float(b.defenderY - b.attackerY) * S(), 0 };
 						if (map.wrapX && std::abs(d.x) > worldW() / 2)
 							d.x -= std::copysign(worldW(), d.x);
+						const bool shooting = !b.rounds.empty() && std::all_of(b.rounds.begin(), b.rounds.end(), [](const BattleRoundView& r) { return r.ranged; });
 						if (const float len = length(d); len > 0)
-							inst.step = d * (0.4f * S() / len);
+						{
+							// (shooting, it stops twice its art's battle distance short, in plots: the
+							// original's tanks, catapults and cannons, 0.5, fire from their plot, its
+							// musketmen, 0.35, come a third of the way)
+							const float shootFrom = std::clamp(2 * art.battleDistance, 0.0f, 1.0f) * S();
+							inst.step = d * (role == 2 ? 0.5f : b.surrender ? 0.45f : shooting ? std::max(len - shootFrom, 0.0f) / len : 1 - (1 - kBattleCloseIn) * S() / len);
+						}
 					}
 					if (!art.shadow.empty())
 						if ((inst.shadow = model(art.shadow, {})))
@@ -3673,6 +3711,21 @@ float4 PSWater(WaterOut i) : SV_Target
 			float at = 0, step = 0;
 			bool dying = false;
 		};
+		// The battle's first rounds that are first strikes, one side's alone (CvUnit::planBattle: as
+		// many as the strikes one has more, or the other's figures killed in them by that many);
+		// the ranged rounds after them (both sides ranged) are both sides'.
+		static int firstStrikeRounds(const BattleView& b)
+		{
+			const int more = std::abs(b.firstStrikes[0] - b.firstStrikes[1]);
+			if (more == 0)
+				return 0;
+			const int struck = b.firstStrikes[0] > b.firstStrikes[1] ? 1 : 0;
+			int killed = 0, ranged = 0;
+			for (const BattleRoundView& r : b.rounds)
+				if (r.ranged)
+					killed += r.killed[struck], ++ranged;
+			return std::min(std::max(more, killed / more), ranged);
+		}
 		BattlePose battlePose(const Instance& inst) const
 		{
 			BattlePose p;
@@ -3680,13 +3733,44 @@ float4 PSWater(WaterOut i) : SV_Target
 				return p;
 			const BattleView& b = map.battles[size_t(inst.battle)];
 			const auto began = battleStarts.find(b.serial);
-			if (began == battleStarts.end() || b.rounds.empty())
+			if (began == battleStarts.end() || (b.rounds.empty() && !b.surrender))
 				return p;
 			const float slice = kBattleSliceSeconds, t = time - began->second, end = float(b.slices) * slice;
 			if (t < 0 || t > end + 1)
 				return p; // (over: as usual again)
 			p.fighting = true;
-			p.step = inst.attacking ? std::clamp(t / 0.6f, 0.0f, 1.0f) * std::clamp((end - t) / 0.6f, 0.0f, 1.0f) : 0;
+			if (b.surrender)
+			{
+				// Giving itself up, as the original shows it: the attacker steps up and stays; the
+				// other surrenders (its clip, else it stands), fades out over the last half second (its
+				// XFadeOut, else it is gone at the end) and is not seen again until the game takes it.
+				constexpr float fade = 0.5f;
+				if (inst.attacking)
+				{
+					p.step = std::clamp(t / 0.6f, 0.0f, 1.0f);
+					return p;
+				}
+				const LoadedModel& lm = *inst.model;
+				if (t >= end - fade && lm.fadeOut)
+				{
+					p.clip = &*lm.fadeOut, p.at = std::min((t - (end - fade)) / fade * lm.fadeOut->duration(), lm.fadeOut->duration());
+					p.gone = t >= end;
+				}
+				else if (t >= end)
+					p.gone = true;
+				else if (lm.surrender)
+					p.clip = &*lm.surrender, p.at = std::min(t, lm.surrender->duration());
+				return p;
+			}
+			// (the attackers run up while it is set up; they stay to its end, when the survivors stand
+			// in their places again, as the original's do)
+			p.step = std::clamp(t / kBattleRunUp, 0.0f, 1.0f);
+			// (the siege tower: rolled up with them, it stands there to the end)
+			if (inst.role == 2)
+			{
+				p.gone = t >= end;
+				return p;
+			}
 			const LoadedModel& lm = *inst.model;
 			const int side = inst.attacking ? 0 : 1;
 			const float roundsAt = float(kBattleSetupSlices) * slice, roundLength = float(kBattleRoundSlices) * slice;
@@ -3731,11 +3815,18 @@ float4 PSWater(WaterOut i) : SV_Target
 					p.gone = true;
 					return p;
 				}
+			// Over: those alive stand in their places again at once (the original's do).
+			if (t >= end)
+				return BattlePose{};
 			// A round on: it strikes (the figures a little one after another), or now and then,
-			// in a melee round, it is hit and staggers.
+			// in a melee round, it is hit and staggers. The ranged rounds of first strikes are the
+			// striker's alone: the other stands and takes them (the original: a crossbowman's or a
+			// longbowman's volleys, the axemen not answering).
 			if (t >= roundsAt)
 				if (const int r = int((t - roundsAt) / roundLength); r < int(b.rounds.size()))
 				{
+					if (r < firstStrikeRounds(b) && b.firstStrikes[side] < b.firstStrikes[1 - side])
+						return p;
 					const bool ranged = b.rounds[size_t(r)].ranged || inst.ranged;
 					const anim::Sequence* s = pick(lm.strike, r % 3, ranged);
 					if (!ranged && unitFloat(hash(inst.figureIndex * 7 + side, r, int(b.serial & 0xFFFF))) < 0.35f)
@@ -3752,8 +3843,8 @@ float4 PSWater(WaterOut i) : SV_Target
 		// keys "SOUND:...,AS3D_..."): the strikes' of its first two, every death's.
 		void battleSounds(const Instance& inst, const BattlePose& p)
 		{
-			if (p.clip && (p.dying || inst.figureIndex < 2))
-				clipSounds(inst, *p.clip, p.at);
+			if (p.clip)
+				clipSounds(inst, *p.clip, p.at, p.dying || inst.figureIndex < 2); // (every figure's arrows fly)
 		}
 
 		// A figure acting (a mission's animation) at this time: pillaging (its melee strike,
@@ -3769,6 +3860,19 @@ float4 PSWater(WaterOut i) : SV_Target
 			// (a plane strikes over its plot, once, after it flew there; it flies back as it does)
 			if (inst.air && inst.actionX >= 0)
 			{
+				// (intercepting another plane: it only flies out to meet it)
+				if (inst.action == 6)
+					return { nullptr, 0.0f };
+				// (intercepted: hit as it comes over, it strikes nothing)
+				if (inst.action == 5)
+				{
+					const LoadedModel& lm = *inst.model;
+					const anim::Sequence* h = lm.hurt[0][0] ? &*lm.hurt[0][0] : nullptr;
+					const float s = t - kFlightOut;
+					if (!h || s < 0 || s > h->duration())
+						return { nullptr, 0.0f };
+					return { h, s };
+				}
 				const anim::Sequence* c = strikeClip(*inst.model);
 				const float s = t - kFlightOut;
 				if (!c || s < 0 || s > strikeTime(*inst.model))
@@ -3791,6 +3895,16 @@ float4 PSWater(WaterOut i) : SV_Target
 			case 1: // pillaging
 				clip = first(lm.strike, 0);
 				break;
+			case 4: // intercepting from the ground: once, as the plane comes over (its missile flies to it)
+			{
+				clip = lm.antiAir ? &*lm.antiAir : first(lm.strike, 1);
+				if (!clip)
+					clip = first(lm.strike, 0);
+				const float at = t - 0.5f * kFlightOut;
+				if (!clip || at < 0 || at > clip->duration())
+					return { nullptr, 0.0f };
+				return { clip, at };
+			}
 			default: // bombarding, a ranged attack, an air strike or bomb, a paradrop, recon, a nuke
 				clip = first(lm.strike, 1);
 				if (!clip)
@@ -4121,8 +4235,53 @@ float4 PSWater(WaterOut i) : SV_Target
 						at = world[n];
 						break;
 					}
-				addBurst(model(art->nif, ""), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
+				if (art->projectile)
+					addProjectile(*art, at.translation, at.scale); // (as large as the figure that sets it off)
+				else
+					addBurst(effectModel(art->nif), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
 			}
+		}
+
+		// What a figure's projectiles fly to (set before its clip's effects are set off): the plot
+		// it attacks, the plane it shoots at; none: straight down to the ground.
+		std::optional<Vec3> keyTarget;
+
+		// An effect's model: a NIF, or a KFM's (with its clips).
+		LoadedModel* effectModel(const std::string& path)
+		{
+			if (path.size() < 4 || _stricmp(path.c_str() + path.size() - 4, ".kfm") != 0)
+				return model(path, "");
+			const std::string key = makeAssetKey(path);
+			const auto loc = assets.locate(key);
+			if (!loc)
+				return nullptr;
+			try
+			{
+				const nif::KfmFile kfm = nif::parseKfm(assets.read(*loc));
+				return model(folderOf(key) + kfm.nifFile, path);
+			}
+			catch (const std::exception&)
+			{
+				return nullptr;
+			}
+		}
+
+		void addProjectile(const MapSnapshot::Attachable& art, const Vec3& from, float size = 1)
+		{
+			LoadedModel* lm = effectModel(art.nif);
+			const size_t before = bursts.size();
+			addBurst(lm, placement(from, 0, art.scale > 0 ? art.scale : 1));
+			if (bursts.size() == before)
+				return;
+			Burst& b = bursts.back();
+			b.projectile = true;
+			b.from = from;
+			b.to = keyTarget ? *keyTarget : Vec3{ from.x, from.y, ground(from.x, from.y) };
+			b.scale = (art.scale > 0 ? art.scale : 1) * size;
+			const float speed = std::max(art.speed, 50.0f) / 180.0f * S(); // (world units a second; a plot is 180)
+			b.flight = std::clamp(length(b.to - b.from) / speed, 0.05f, 4.0f);
+			const anim::Sequence* explode = lm->strike[0][0] ? &*lm->strike[0][0] : nullptr;
+			b.until = b.start + b.flight + (explode ? explode->duration() : 0);
 		}
 
 		void drawBursts(const Frustum& frustum)
@@ -4138,9 +4297,59 @@ float4 PSWater(WaterOut i) : SV_Target
 				anim::Pose pose = anim::Pose::bind(lm.model);
 				if (lm.embedded)
 					lm.embedded->apply(at, pose);
+				const anim::Sequence* explode = b.projectile && lm.strike[0][0] ? &*lm.strike[0][0] : nullptr;
+				if (b.projectile)
+				{
+					// (flying, it heads for its target; there, it explodes)
+					const Vec3 d = b.to - b.from;
+					const float f = std::clamp(at / b.flight, 0.0f, 1.0f);
+					const float yaw = std::abs(d.x) + std::abs(d.y) > 0.01f ? std::atan2(d.y, d.x) + std::numbers::pi_v<float> / 2 : 0.0f;
+					b.place = placement(b.from + d * f, yaw, b.scale);
+					if (at < b.flight && lm.run)
+						lm.run->apply(at, pose);
+					else if (explode)
+						explode->apply(at - b.flight, pose);
+					for (const char* root : { "MD", "MD NonAccum" })
+						if (const int n = lm.model.findNode(root); n >= 0 && size_t(n) < pose.locals.size())
+							pose.locals[size_t(n)] = lm.model.nodes[size_t(n)].local;
+				}
 				world = lm.model.worldTransforms(pose.locals);
 				for (auto& w : world)
 					w = b.place * w;
+				// (its explosion's effects and sounds: the text keys passed since the last frame)
+				if (explode && at >= b.flight)
+				{
+					const float now = at - b.flight;
+					for (const auto& [keyTime, text] : explode->textKeys())
+					{
+						const float k = keyTime - explode->startTime();
+						if (k <= b.keysLast || k > now)
+							continue;
+						for (size_t e = 0; (e = text.find("ffect:", e)) != std::string::npos; e += 6)
+						{
+							const size_t colon = text.find(':', e + 6);
+							if (colon == std::string::npos)
+								break;
+							const size_t end = std::min(text.find_first_of(" ,;\r\n", colon + 1), text.size());
+							const std::string node = text.substr(e + 6, colon - e - 6), type = text.substr(colon + 1, end - colon - 1);
+							Affine nodeAt = world.empty() ? b.place : world[0];
+							for (size_t n = 0; n < lm.model.nodes.size() && n < world.size(); ++n)
+								if (_stricmp(lm.model.nodes[n].name.c_str(), node.c_str()) == 0)
+									nodeAt = world[n];
+							explosions.push_back({ type, nodeAt });
+						}
+						if (onSound && text.size() > 6 && _strnicmp(text.c_str(), "SOUND:", 6) == 0)
+						{
+							std::string tag = text.substr(6);
+							if (const size_t comma = tag.rfind(','); comma != std::string::npos)
+								tag = tag.substr(comma + 1);
+							while (!tag.empty() && tag.front() == ' ')
+								tag.erase(tag.begin());
+							onSound(tag, b.to.x / S(), b.to.y / S());
+						}
+					}
+					b.keysLast = now;
+				}
 				const auto shown = lm.model.visibility(pose.hidden);
 				if (time >= b.until)
 					b.particles.stopEmitting();
@@ -4165,7 +4374,14 @@ float4 PSWater(WaterOut i) : SV_Target
 				}
 			}
 			std::erase_if(bursts, [&](const Burst& b) { return time >= b.until && (b.particles.alive() == 0 || time > b.until + 20); });
+			for (const auto& [type, at] : std::exchange(explosions, {}))
+			{
+				const auto art = std::ranges::find_if(map.effects, [&](const auto& a) { return _stricmp(a.type.c_str(), type.c_str()) == 0; });
+				if (art != map.effects.end() && !art->projectile)
+					addBurst(effectModel(art->nif), at * placement({}, 0, art->scale > 0 ? art->scale : 1));
+			}
 		}
+		std::vector<std::pair<std::string, Affine>> explosions; // (set off by projectiles this frame)
 
 		// The original engine's showPromotionGlow: keep EFFECT_PROMOTION_UNIT at every unit
 		// that can take a promotion. It is a looping blue aura and rising sparkles in BtS.
@@ -4235,7 +4451,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				float yaw = inst.yaw;
 				// Fighting: the attacker steps up to the defender; the dead are gone.
 				const BattlePose battle = inst.figure ? battlePose(inst) : BattlePose{};
-				if (battle.gone)
+				if (battle.gone || (inst.role == 2 && !battle.fighting))
 					continue;
 				// (a settler founding a city: until its founding is done; without one, gone)
 				if (inst.foundAt >= 0 && (!inst.model->found || time - inst.foundAt > inst.model->found->duration()))
@@ -4299,7 +4515,7 @@ float4 PSWater(WaterOut i) : SV_Target
 						battle.clip->apply(battle.at, pose);
 						battleSounds(inst, battle);
 					}
-					else if (battle.fighting && inst.attacking && battle.step > 0 && battle.step < 1 && lm.run)
+					else if (battle.fighting && inst.attacking && inst.role == 0 && battle.step > 0 && battle.step < 1 && lm.run)
 						lm.run->apply(time, pose); // (stepping up, or back)
 					else if (motion && lm.run)
 					{
@@ -4350,7 +4566,27 @@ float4 PSWater(WaterOut i) : SV_Target
 					for (auto& w : world)
 						w = place * w;
 					if (!keyEffects.empty())
+					{
+						// (its projectiles' target: the plot its action aims at, over it the plane a
+						// SAM shoots at; in a battle, a figure on the other side's plot)
+						keyTarget.reset();
+						if (inst.action >= 0 && inst.actionX >= 0)
+						{
+							Vec3 c{ (float(inst.actionX) + 0.5f) * S() + dx, (float(inst.actionY) + 0.5f) * S(), 0 };
+							c.z = ground(c.x - dx, c.y) + (inst.action == 4 ? kFlightHeight * S() : 0.0f);
+							keyTarget = c;
+						}
+						else if (battle.fighting && inst.battle >= 0 && size_t(inst.battle) < map.battles.size())
+						{
+							const BattleView& b = map.battles[size_t(inst.battle)];
+							const int ox = inst.attacking ? b.defenderX : b.attackerX, oy = inst.attacking ? b.defenderY : b.attackerY;
+							const float jx = (unitFloat(hash(inst.figureIndex, ox, oy)) - 0.5f) * 0.3f, jy = (unitFloat(hash(oy, inst.figureIndex, ox)) - 0.5f) * 0.3f;
+							Vec3 c{ (float(ox) + 0.5f + jx) * S() + dx, (float(oy) + 0.5f + jy) * S(), 0 };
+							c.z = ground(c.x - dx, c.y) + 0.08f * S();
+							keyTarget = c;
+						}
 						spawnKeyEffects(lm, world);
+					}
 					materials.clear();
 					if (std::ranges::any_of(pose.materials, [](const anim::MaterialOverride& o) { return o.any; }))
 						for (const auto& item : lm.model.items)
@@ -4650,6 +4886,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			{
 				const int plot = u.x + u.y * m->map.width;
 				if (options.fog && !m->map.plots[size_t(plot)].visible)
+					continue;
+				// (a stack fighting shows no flag, nor a ring, while the battle is on: the original's)
+				if (u.battle >= 0)
 					continue;
 				// (where the unit is: the original's flag stands there at once, while its figures
 				// still walk there)

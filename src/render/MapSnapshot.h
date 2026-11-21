@@ -86,6 +86,7 @@ namespace oc4::render
 		std::string shadow, shadowNode;
 		float shadowScale = 1;
 		bool ranged = false; // units: CvArtInfoUnit::getActAsRanged (their fortify is the ranged one)
+		float battleDistance = 0.35f; // units: CvArtInfoUnit::getBattleDistance (how far back it shoots from)
 		bool operator==(const ModelArt&) const = default;
 	};
 
@@ -165,6 +166,10 @@ namespace oc4::render
 		std::vector<MoveStep> moveSteps; // the plots it walked through since the last snapshot, in order
 		float moveSeconds = 0; // how long the walk through them takes (0: as long as their plots make it)
 		std::vector<int> models; // one per figure of the formation, into MapSnapshot::models
+		// More figures, into MapSnapshot::models (none: -1): the great general leading it (its era's
+		// warlord: beside the formation, it strikes with it and falls with its last), and, an
+		// attacker the game core gave a siege tower (walls, a city attack bonus), the tower before it.
+		int leader = -1, siegeTower = -1;
 		int count = 1;           // units on the plot
 		float health = 1;
 		float healthBar = 0; // its health bar's length in the original's units (its strength now)
@@ -186,7 +191,10 @@ namespace oc4::render
 		float founded = -1;
 		// An action it shows (a mission's animation): how it acts (1 pillaging: its melee
 		// strikes; 2 a ranged or an air strike, bombarding: its ranged strike; 3 captured: it
-		// heals), seconds since it began, as captured, how long it lasts, the plot it aims at
+		// heals; 5 a plane intercepted on its way: it flies there and back, hit, and strikes nothing;
+		// 6 a plane intercepting another: it flies out to meet it and back, dropping nothing;
+		// 4 intercepting a plane from the ground: its anti-air strike, at the plane over the
+		// plot it aims at), seconds since it began, as captured, how long it lasts, the plot it aims at
 		// and the effect there (a CIV4EffectInfos type; none: empty).
 		int action = -1;
 		float actionSince = 0, actionLength = 0;
@@ -200,9 +208,14 @@ namespace oc4::render
 
 	// A battle the game shows (its CvBattleDefinition): the game holds it for `slices` of its
 	// updates, kBattleSliceSeconds each while it is on: setup (the attacker steps up), six a
-	// round (both sides strike; those killed in it die), then its end.
-	constexpr float kBattleSliceSeconds = 0.15f;
+	// round (both sides strike; those killed in it die), then its end. A slice is one of the
+	// original's game updates, 4 a second (measured in Wine: 0.255 s; an axeman's two-round battle
+	// of 20 slices lasts 5.1 s there).
+	constexpr float kBattleSliceSeconds = 0.25f;
 	constexpr int kBattleSetupSlices = 4, kBattleRoundSlices = 6;
+	// The attackers run up while the battle is set up (its first slices), to fight hand to hand this
+	// far across (in plots: a little short of the defenders' places, as the original's stop).
+	constexpr float kBattleRunUp = float(kBattleSetupSlices) * kBattleSliceSeconds, kBattleCloseIn = 0.7f;
 	struct BattleRoundView
 	{
 		bool ranged = false;
@@ -215,7 +228,11 @@ namespace oc4::render
 		int slices = 0;
 		int attackerX = 0, attackerY = 0, defenderX = 0, defenderY = 0;
 		std::vector<BattleRoundView> rounds;
+		// attacker, defender: its first strikes that hit (the game core counts a ranged unit's
+		// only); the battle's first rounds are the one with more's alone.
+		int firstStrikes[2]{};
 		int collateral = 0; // the defender's plot's other units hit too (collateral damage): blasts there
+		bool surrender = false; // the defender gives itself up (it cannot defend): no rounds, it surrenders and fades out
 	};
 
 	struct CityView
@@ -270,6 +287,10 @@ namespace oc4::render
 		{
 			std::string type, nif;
 			float scale = 1;
+			// (effects: one that flies, bIsProjectile, a KFM of its own: from where a clip sets it off
+			// to what it aims at, fSpeed world units a second (a plot is 180), then its explosion)
+			bool projectile = false;
+			float speed = 0;
 		};
 		std::vector<Attachable> attachables;
 		// The Great Wall (a building that is an area border obstacle): along the edges of the
