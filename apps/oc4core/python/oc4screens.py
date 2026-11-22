@@ -25,6 +25,7 @@ _FONT_LEFT, _FONT_RIGHT, _FONT_CENTER = 1 << 0, 1 << 1, 1 << 2
 
 _version = [1]          # bumped on every change the display list shows
 _screens = {}           # python file id -> _Screen
+_shownSeq = [0]         # screens shown so far: each one's shownAt
 _resolution = [1024, 768]
 _logged = set()
 _citySelection = [()]   # the cities a table's rows selected last
@@ -154,6 +155,9 @@ class _Screen(object):
 		self.hideLists = {}
 		self.endTurn = None    # (text, shown)
 		self.closeOnEscape = True
+		self.shownAt = 0       # when it was last shown (_shownSeq): the newest is on top
+		self.group = 0         # setScreenGroup: the Civilopedia's 1 (see _closeOthers)
+		self.passInput = False # (showScreen's bPassInput: the map under it still takes clicks and keys)
 
 	def add(self, name, kind, parent=None, mode='abs'):
 		name = _str(name)
@@ -260,7 +264,7 @@ def minimapOverlay(version):
 	"""The shown screen's own minimap, when it changed since that version: (version, width,
 	height, the game's map, territory, [(x, y, RGBA)], [(x, y, RGBA)], the whole map (a replay's));
 	None if unchanged, () for none (sizes 0: the game's map)."""
-	for s in sorted(_screens.values(), key=lambda s: -s.id):
+	for s in sorted(_screens.values(), key=lambda s: (-s.shownAt, -s.id)):
 		if s.shown and not s.main and s.minimap is not None and s.mm is not None:
 			mm = s.mm
 			if mm.version == version:
@@ -411,7 +415,11 @@ class CyGInterfaceScreen(object):
 			_changed()
 
 	def showScreen(self, bState=0, bPassInput=False):
+		self._s.passInput = bool(bPassInput)
 		if not self._s.shown:
+			_closeOthers(self._s)
+			_shownSeq[0] += 1
+			self._s.shownAt = _shownSeq[0]
 			self._s.shown = True
 			_changed()
 			_screenMusic(self._s, True)
@@ -444,8 +452,9 @@ class CyGInterfaceScreen(object):
 	def isRequiredForcedRedraw(self): return False
 	def setRenderInterfaceOnly(self, b): pass
 	def getRenderInterfaceOnly(self): return False
-	def setScreenGroup(self, iGroup): pass
-	def getScreenGroup(self): return 0
+	def setScreenGroup(self, iGroup):
+		self._s.group = _int(iGroup, 0)
+	def getScreenGroup(self): return self._s.group
 	# (the screen's sound as it is shown: the tech splash's quote)
 	def setSound(self, szSound):
 		if szSound:
@@ -1725,7 +1734,8 @@ def display():
 	del _areas[:]
 	_dropRects.clear()
 	_bars.clear()
-	for s in sorted(_screens.values(), key=lambda s: (not s.main, s.id)):
+	# (the main interface first, then the screens in the order they were shown: the newest on top)
+	for s in sorted(_screens.values(), key=lambda s: (not s.main, s.shownAt, s.id)):
 		if not (s.main or s.shown):
 			continue
 		items = []
@@ -1997,6 +2007,50 @@ def toggle(fileId, name):
 def closeOnEscape(fileId):
 	s = _screens.get(fileId)
 	return s is not None and s.shown and not s.main and s.closeOnEscape
+
+
+def _closeOthers(s):
+	"""A screen of its own shown: the ones up before it close, as the original's do (seen in Wine,
+	BUG + BULL: F5 over the Domestic Advisor leaves the Military Advisor alone up; F9 over Victory,
+	F3 over Info, F4 over Religion, F2 over the Sevopedia the same). Not the main interface, nor a
+	screen that lets the map's input through (the World Builder, BUG's dot map), nor the engine's
+	talk (an advisor opened from an AI's talk goes over it, and the talk is there as it was when
+	the advisor's EXIT closes it), nor a screen of a lower group than the new one's: the
+	Civilopedia's (setScreenGroup 1) opens over the tech advisor, and Esc closes it back to it."""
+	if s.main or s.id == _DIPLO or s.passInput:
+		return
+	for o in list(_screens.values()):
+		if o is s or not o.shown or o.main or o.id == _DIPLO or o.passInput or o.group < s.group:
+			continue
+		hide(o.id)
+		try:
+			import CvScreensInterface
+			CvScreensInterface.onClose((o.id,))
+		except Exception:
+			import traceback
+			traceback.print_exc()
+
+
+def topScreen():
+	"""The shown screen on top (the newest shown, the main interface not counted): its file id,
+	-1 none."""
+	up = [s for s in _screens.values() if s.shown and not s.main]
+	return max(up, key=lambda s: s.shownAt).id if up else -1
+
+
+def escapeTop():
+	"""The host: Esc (no talk up). The newest screen up that closes so closes (the Civilopedia over
+	an advisor first); false if none does."""
+	up = sorted([s for s in _screens.values() if s.shown and not s.main], key=lambda s: -s.shownAt)
+	for s in up:
+		if s.id == _DIPLO:
+			return False
+		if s.closeOnEscape:
+			hide(s.id)
+			import CvScreensInterface
+			CvScreensInterface.onClose((s.id,))
+			return True
+	return False
 
 
 def reset(fileId):

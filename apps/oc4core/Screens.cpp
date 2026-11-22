@@ -1534,19 +1534,12 @@ if _walls:
 				return true;
 			if (m_menu)
 				return py::module_::import("oc4menu").attr("escape")().cast<bool>();
-			// (a talk: its way out, when it has one)
+			// (a talk: its way out, when it has one, even with an advisor opened over it: the
+			// original's Esc answers the talk under it, seen in Wine)
 			if (m_utility.diplomacy().active())
 				return screens.attr("diploEscape")().cast<bool>();
-			for (auto entry : py::reinterpret_borrow<py::dict>(screens.attr("_screens")))
-			{
-				const int id = entry.first.cast<int>();
-				if (screens.attr("closeOnEscape")(id).cast<bool>())
-				{
-					screens.attr("hide")(id);
-					py::module_::import("CvScreensInterface").attr("onClose")(py::make_tuple(id));
-					return true;
-				}
-			}
+			// The newest screen up that closes so (the Civilopedia over an advisor: back to it).
+			return screens.attr("escapeTop")().cast<bool>();
 		}
 		catch (py::error_already_set& e)
 		{
