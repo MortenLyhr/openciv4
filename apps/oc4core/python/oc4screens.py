@@ -86,7 +86,7 @@ def _int(value, default=-1):
 
 class _Widget(object):
 	__slots__ = ('name', 'kind', 'parent', 'mode', 'x', 'y', 'z', 'w', 'h', 'style', 'pstyle', 'text', 'help', 'tex', 'tex2',
-		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'scroll', 'children',
+		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'scroll', 'clipRect', 'children',
 		'bars', 'lists', 'columns', 'rows', 'headers', 'iconw', 'iconh', 'items', 'selected', 'color', 'size', 'defw', 'defh', 'points',
 		'offset', 'extent', 'picked', 'hoffset', 'hextent', 'cells', 'sort', 'inset', 'maxChars', 'allowed', 'helpWidget')
 
@@ -113,6 +113,7 @@ class _Widget(object):
 		self.seq = 0
 		self.vertical = True
 		self.scroll = False
+		self.clipRect = None   # (x0, y0, x1, y1) on the screen: it drawn and clicked only there (oc4wb's partly shown tab)
 		self.children = []
 		self.maxChars = 0      # an edit box's: at most this many characters (0: any)
 		self.allowed = None    # ... and only these (None: any)
@@ -1530,6 +1531,8 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 	table's cell only there (cell: that cell's corner)."""
 	if not w.shown or (w.mode == 'cell') != (cell is not None):
 		return
+	if w.clipRect is not None:
+		clip = _clipTo(clip, w.clipRect)
 	if cell is not None:
 		x, y = cell
 	elif w.mode == 'abs':

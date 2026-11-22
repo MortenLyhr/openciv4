@@ -387,8 +387,15 @@ _WINDOW_TITLE = '@|SF_CtrlTheme_Civ4_Control_Window_Skin_Tool_TitleBar_Full_Defa
 _WINDOW_FRAME = '@SF_CtrlTheme_Civ4_Control_Window_Tool_InFrameBorder_Normal_Style|GFC_CtrlTheme_Bitmap_Control_Border_Skin_Full_Default'
 _TITLE_H = 20
 _TAB_SKIN = '@GFC_CtrlTheme_Bitmap_Control_Tab_SkinStyle_Top_Begin_BaseLevel_Single|GFC_CtrlTheme_Bitmap_Control_Tab_Skin_Full_'
+# The tabs end 13 px from the window's right edge. When they do not fit there (the map mode's),
+# as seen in Wine at 1600 x 900: the theme's End_Arrow_Indent (30, Civ4Theme_Tab.thm) is kept
+# for two arrow buttons, and the tab after the last whole one shows up to there, narrowed to end
+# there, its word cut. The arrows are the theme's tab arrows (12 x 25 each, the art
+# Civ4/tab_arrows.tga 14 x 14 in their middle); an arrow with nothing more that way is grey.
+_TAB_ARROWS = ('SF_CtrlTheme_Civ4_Control_Tab_Arrow_LeftButton_Style', 'SF_CtrlTheme_Civ4_Control_Tab_Arrow_RightButton_Style')
+_TAB_END, _ARROW_INDENT, _ARROW_X, _ARROW_Y, _ARROW_H = 13, 30, (38, 25), 3, 25
 _TITLES = {'player': 'TXT_KEY_WB_PLAYER_MODE', 'map': 'TXT_KEY_WB_MAP_MODE', 'edit': 'TXT_KEY_WB_WORLD_BUILDER_EDIT_CONTROL'}
-_WX, _WY, _WW = 0, 0, 318
+_WX, _WY, _WW = 0, 0, 315   # (seen in Wine at 1600 x 900: 315 wide in player and map mode)
 _TAB_Y, _TAB_H = 31, 28
 _BODY_X, _BODY_Y = 12, 59
 _GRID_H = 162       # four rows and a half show, as the original's
@@ -429,10 +436,13 @@ def _draw():
 			except Exception:
 				w = 9 * len(name)
 			tabs.append((name, w + 20))
-		# (as the original's: as wide as the player mode's, the tabs that do not fit scrolled to
-		# with two arrows at the right, the map mode's)
+		# (as the original's: as wide as the player mode's; the tabs that do not fit scrolled to
+		# with the two arrows at the right, the map mode's)
 		width = _WW
-		scroll = 15 + sum(tw + 1 for name, tw in tabs) + 14 > width
+		cut = _WX + width - _TAB_END
+		scroll = _WX + 15 + sum(tw + 1 for name, tw in tabs) - 1 > cut
+		if scroll:
+			cut -= _ARROW_INDENT
 		first = min(getattr(ctrl, 'tabFirst', 0), len(tabs) - 1) if scroll else 0
 		body_w = width - 2 * _BODY_X
 		items = _items(ctrl)
@@ -447,21 +457,35 @@ def _draw():
 		if title:
 			screen.setLabel(_add('OC4WBTitle'), 'Background', u'<font=3b>' + dark + title + u'</color></font>', 1 << 0, _WX + 6, _WY + 1, -0.3,
 				_cpe.FontTypes.TITLE_FONT, general, -1, -1)
-		# the tabs, each as wide as its word
+		# the tabs, each as wide as its word; the one that does not fit whole cut at the arrows
 		x = _WX + 15
+		more = False
 		for i, (name, tw) in enumerate(tabs):
-			if i < first or (scroll and x + tw > _WX + width - 44):
+			if i < first:
 				continue
+			if scroll and x >= cut:
+				more = True
+				break
+			part = scroll and x + tw > cut
+			more = more or part
 			tab = _add('OC4WBTabBack%d' % i)
-			screen.addPanel(tab, u'', u'', True, False, x, _WY + _TAB_Y, tw, _TAB_H, _cpe.PanelStyles.PANEL_STYLE_MAIN)
+			# (the cut one's skin narrowed to the room left, its end showing; its word cut there)
+			screen.addPanel(tab, u'', u'', True, False, x, _WY + _TAB_Y, cut - x if part else tw, _TAB_H, _cpe.PanelStyles.PANEL_STYLE_MAIN)
 			_style(screen, tab, _TAB_SKIN + ('Select' if i == ctrl.active else 'Default'))
-			screen.setText(_add('OC4WBTab%d' % i, ('tab', ctrl, i)), 'Background', dark + name + u'</color>', 1 << 2, x + tw / 2, _WY + _TAB_Y + 4, -0.3,
+			word = _add('OC4WBTab%d' % i, ('tab', ctrl, i))
+			screen.setText(word, 'Background', dark + name + u'</color>', 1 << 2, x + tw / 2, _WY + _TAB_Y + 4, -0.3,
 				_cpe.FontTypes.GAME_FONT, general, -1, -1)
+			w = screen._s.get(word)
+			if part and w is not None:
+				w.clipRect = (x, _WY + _TAB_Y, cut, _WY + _TAB_Y + _TAB_H)
 			x += tw + 1
 		if scroll:
-			for k, (arrow, d) in enumerate(((u'<', -1), (u'>', 1))):
-				screen.setText(_add('OC4WBTabScroll%d' % k, ('tabscroll', ctrl, d, len(tabs))), 'Background', u'<font=3b>' + dark + arrow + u'</color></font>', 1 << 2,
-					_WX + width - 34 + 14 * k, _WY + _TAB_Y + 3, -0.3, _cpe.FontTypes.TITLE_FONT, general, -1, -1)
+			for k, d in enumerate((-1, 1)):
+				b = _add('OC4WBTabScroll%d' % k, ('tabscroll', ctrl, d, len(tabs)))
+				screen.setButtonGFC(b, u'', '', _WX + width - _ARROW_X[k], _WY + _TAB_Y + _ARROW_Y, 14, _ARROW_H, general, -1, -1,
+					_cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
+				_style(screen, b, _TAB_ARROWS[k])
+				screen.enable(b, first > 0 if d < 0 else more)
 		body = _add('OC4WBBody')
 		screen.addPanel(body, u'', u'', True, False, _WX + _BODY_X, _WY + _BODY_Y, body_w, body_h, _cpe.PanelStyles.PANEL_STYLE_IN)
 		if items:
