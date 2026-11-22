@@ -27,6 +27,13 @@ namespace oc4::render
 		// (as the game's popups: their width, margins, the choices' pictures, the OK button's height)
 		constexpr float kWidth = 400, kPadX = 21, kPadTop = 18, kPadBottom = 20, kIcon = 28, kOk = 24;
 		constexpr float kStoneLine = 25, kStoneGap = 6, kStoneInset = 9; // (a choice's stone button)
+		// A choice with a picture is the theme's label button instead (GFC_Control_LabelButton_Style:
+		// no stone; Wine at 1600 x 900 and 1280 x 1000 alike): its picture 30 square 2 in, the text 4
+		// after it, one every 36 (the picture, the button's margin 2 round it, the item space 2), the
+		// content 1 lower while pressed. And a popup is never higher than the original's: what is
+		// longer scrolls, its title too (Wine's rim 77-553 at both sizes, its light line at 550: our
+		// frame's is 7 over its bottom, so 480), wrapped short of the scroll bar.
+		constexpr float kLabelIcon = 30, kLabelRow = 36, kLabelInset = 2, kLabelGap = 4, kMaxHeight = 480, kScrollRoom = 20;
 		// The game menu (Window_NoTitleBar_Style): 248 wide, where the other popups are (Wine at
 		// 1600 x 900 and 1280 x 1000 alike: its rim 1334-1582 and 1014-1262, from 77); its separator
 		// only a space (no line: the first button 10 under the title).
@@ -83,6 +90,18 @@ namespace oc4::render
 		m_hoverOk = false;
 		m_keyboard = false;
 		m_scrollTo = -1;
+		m_pressed = -1;
+		// (the focus starts on the first choice, as the original's: the gold one)
+		m_selected = -1;
+		for (size_t i = 0; i < view->items.size() && m_selected < 0; ++i)
+			if (view->items[i].kind == Kind::Button)
+				m_selected = int(i);
+	}
+
+	bool PopupPanel::label(int item) const
+	{
+		return m_view && item >= 0 && size_t(item) < m_view->items.size() && m_view->items[size_t(item)].kind == Kind::Button &&
+			!m_view->items[size_t(item)].icon.empty() && m_label != nullptr && m_label->coloured;
 	}
 
 	void PopupPanel::hover(int x, int y)
@@ -101,6 +120,20 @@ namespace oc4::render
 		for (size_t i = 0; i < m_items.size(); ++i)
 			if (m_items[i].contains(fx, fy) && chooses(m_view->items[i].kind))
 				m_hover = int(i);
+		// (a choice under the mouse takes the focus, and keeps it when the mouse leaves)
+		if (m_hover >= 0 && m_view->items[size_t(m_hover)].kind == Kind::Button)
+			m_selected = m_hover;
+	}
+
+	void PopupPanel::press(int x, int y)
+	{
+		hover(x, y);
+		m_pressed = m_hover;
+	}
+
+	void PopupPanel::release()
+	{
+		m_pressed = -1;
 	}
 
 	bool PopupPanel::click(int x, int y)
@@ -108,7 +141,10 @@ namespace oc4::render
 		if (!m_view)
 			return false;
 		hover(x, y);
+		const int pressed = std::exchange(m_pressed, -1);
 		if (m_answered)
+			return true;
+		if (pressed >= 0 && pressed != m_hover) // (let go off the choice pressed: nothing, as the original's)
 			return true;
 		if (m_hoverOk)
 			answer(-1);
@@ -142,7 +178,8 @@ namespace oc4::render
 				stops.push_back(int(i));
 		if (m_view->okButton)
 			stops.push_back(kOkStop);
-		const int current = m_keyboard ? (m_hoverOk ? kOkStop : m_hover) : -1;
+		// (the keys go on from the focus, the gold choice, when it is a label button)
+		const int current = m_keyboard ? (m_hoverOk ? kOkStop : m_hover) : label(m_selected) ? m_selected : -1;
 		const auto at = std::ranges::find(stops, current);
 		const int next = navStep(int(stops.size()), m_keyboard && at != stops.end() ? int(at - stops.begin()) : -1, delta);
 		if (next < 0)
@@ -151,6 +188,8 @@ namespace oc4::render
 		m_keyboard = true;
 		m_hoverOk = stop == kOkStop;
 		m_hover = m_hoverOk ? -1 : stop;
+		if (m_hover >= 0 && m_view->items[size_t(m_hover)].kind == Kind::Button)
+			m_selected = m_hover;
 		m_scrollTo = m_hover;
 		if (m_hover >= 0 && m_view->items[size_t(m_hover)].kind == Kind::Edit)
 			m_focus = m_hover;
@@ -185,6 +224,8 @@ namespace oc4::render
 		{
 			if (chosenWithKeys)
 				choose(m_hover);
+			else if (label(m_selected)) // (the gold choice, as the original's)
+				choose(m_selected);
 			else if (m_view->okButton)
 				answer(-1);
 		}
@@ -236,6 +277,9 @@ namespace oc4::render
 			m_frame = m_theme.skin("SF_CtrlTheme_Civ4_Control_Window_NoTitleBar_InFrameBorder_Normal_Style", "GFC_CtrlTheme_Bitmap_Control_Border_Skin_Full_Default");
 			m_tooltip = m_theme.skin("GFC_Control_StandardToolTip_Style", "GFC_CtrlTheme_Bitmap_Control_ToolTip_Skin_Inner_Default");
 			m_button = m_theme.button("BUTTON_STYLE_STANDARD");
+			m_label = m_theme.button("BUTTON_STYLE_LABEL");
+			m_shaft = m_theme.skin("GFC_Control_StandardScroll_Style", "GFC_CtrlTheme_Bitmap_Control_Scroll_Skin_VShaft_Default");
+			m_gripSkin = m_theme.skin("SF_CtrlTheme_Civ4_Control_Scroll_VGripButton_Style", "GFC_CtrlTheme_Bitmap_Control_Button_Skin_Default");
 			m_headerSize = m_theme.font(4).size;
 			m_textSize = m_theme.font(3).size;
 			m_helpSize = m_theme.font(2).size;
@@ -261,6 +305,11 @@ namespace oc4::render
 			{
 			case Kind::Text: heights[i] = o.richHeight(texts[i], inner, m_textSize, false) + 10; break;
 			case Kind::Button:
+				if (label(int(i)))
+				{
+					heights[i] = std::max(kLabelRow, o.richHeight(texts[i], inner - kLabelInset - kLabelIcon - kLabelGap, m_textSize, false) + 2 * kLabelInset + 2);
+					break;
+				}
 				// (on the theme's stone button, as the original's: 25 high for a line, the text's
 				// height and 3 for more (two lines of the game font: 47), 6 apart, the text 9 in;
 				// measured in Wine at 1600 x 900)
@@ -275,13 +324,24 @@ namespace oc4::render
 			}
 			content += heights[i];
 		}
-		const float headerHeight = header.empty() ? 0.0f : o.richHeight(header, inner, m_headerSize, false) + 10;
+		float headerWidth = inner;
+		float headerHeight = header.empty() ? 0.0f : o.richHeight(header, headerWidth, m_headerSize, false) + 10;
 		const float okHeight = m_view->okButton ? kOk + 10 : 0.0f;
 		float y0 = right ? 77.0f : 30.0f;
 		// (the original leaves 19 under a last stone button to the rim: 3 more than the margin)
 		const float tail = stone && !items.empty() && items.back().kind == Kind::Button && !m_view->okButton ? 3.0f : 0.0f;
-		const float listHeight = std::max(0.0f, std::min(content, sh - y0 - 20 - headerHeight - okHeight - kPadTop - kPadBottom - tail));
-		const float h = kPadTop + headerHeight + listHeight + okHeight + kPadBottom + tail;
+		// (no higher than the original's 477, nor than the screen: what does not fit scrolls, the
+		// title with the rest)
+		const float room = std::min(kMaxHeight, sh - y0 - 20) - okHeight - kPadTop - kPadBottom - tail;
+		const bool titleScrolls = headerHeight + content > room;
+		if (titleScrolls && !header.empty())
+		{
+			headerWidth = inner - kScrollRoom;
+			headerHeight = o.richHeight(header, headerWidth, m_headerSize, false) + 10;
+		}
+		const float scrolled = content + (titleScrolls ? headerHeight : 0.0f);
+		const float listHeight = std::max(0.0f, std::min(scrolled, room - (titleScrolls ? 0.0f : headerHeight)));
+		const float h = kPadTop + (titleScrolls ? 0.0f : headerHeight) + listHeight + okHeight + kPadBottom + tail;
 		if (!right)
 			y0 = std::max(30.0f, (sh - h) / 2);
 		m_panel = { x0, y0, x0 + w, y0 + h };
@@ -300,16 +360,16 @@ namespace oc4::render
 		}
 
 		float y = y0 + kPadTop;
-		if (!header.empty())
+		if (!header.empty() && !titleScrolls)
 		{
 			o.richBlock(header, x0 + kPadX, y, inner, m_headerSize, false, kText);
 			y += headerHeight;
 		}
 		m_list = { x0 + kPadX - 4, y, x0 + w - kPadX + 4, y + listHeight };
-		m_scrollMax = std::max(0.0f, content - listHeight);
+		m_scrollMax = std::max(0.0f, scrolled - listHeight);
 		if (m_scrollTo >= 0 && size_t(m_scrollTo) < items.size())
 		{
-			float top = 0;
+			float top = titleScrolls ? headerHeight : 0.0f;
 			for (int i = 0; i < m_scrollTo; ++i)
 				top += heights[size_t(i)];
 			if (top < m_scroll)
@@ -326,6 +386,12 @@ namespace oc4::render
 			if (items[i].kind == Kind::Button)
 				firstChoice = int(i);
 		float iy = y - m_scroll;
+		if (titleScrolls)
+		{
+			if (!header.empty())
+				o.richBlock(header, x0 + kPadX, iy, headerWidth, m_headerSize, false, kText);
+			iy += headerHeight;
+		}
 		const float rightEdge = x0 + w - kPadX - (m_scrollMax > 0 ? 10 : 0);
 		for (size_t i = 0; i < items.size(); ++i)
 		{
@@ -342,6 +408,27 @@ namespace oc4::render
 			case Kind::Text: o.richBlock(texts[i], r.x0, r.y0 + 4, r.x1 - r.x0, m_textSize, false, kText); break;
 			case Kind::Button:
 			{
+				if (label(int(i)))
+				{
+					// A choice with a picture, as the original's: the theme's label button, no stone.
+					// Its picture, and its text white; gold with the focus (the first, then the last
+					// under the mouse or the keys), RollText while pressed, the content then 1 lower.
+					const bool pressed = int(i) == m_pressed && hot;
+					const size_t st = pressed ? size_t(Theme::State::Press) : int(i) == m_selected ? size_t(Theme::State::Rollover) : size_t(Theme::State::Default);
+					const float down = pressed ? 1.0f : 0.0f;
+					float tx = r.x0 + kLabelInset;
+					if (const ButtonArt::Icon* ic = m_art.icon(item.icon))
+					{
+						const float iy0 = std::round(r.y0 + (ih - kLabelIcon) / 2) - 2 + down; // (Wine: its top 9 over the text's capitals)
+						o.image(ic->key, ic->bgra, ic->width, ic->height, 1, tx, iy0, tx + kLabelIcon, iy0 + kLabelIcon);
+					}
+					tx += kLabelIcon + kLabelGap;
+					const float tw = r.x1 - tx, th = o.richHeight(texts[i], tw, m_textSize, false);
+					o.setShadow(m_label->shadow[st], m_label->shadowAlpha[st]);
+					o.richBlock(texts[i], tx, std::round(r.y0 + (ih - th) / 2) + down, tw, m_textSize, false, m_label->text[st], m_label->textAlpha[st]);
+					o.resetShadow();
+					break;
+				}
 				if (stone)
 				{
 					// A choice: the theme's stone button across the window (lit under the mouse), its
@@ -434,7 +521,7 @@ namespace oc4::render
 				break;
 			}
 		}
-		if (m_keyboard && m_hover >= 0 && size_t(m_hover) < m_items.size())
+		if (m_keyboard && m_hover >= 0 && size_t(m_hover) < m_items.size() && !label(m_hover)) // (a label button shows it gold)
 		{
 			const Rect& r = m_items[size_t(m_hover)];
 			o.frame(r.x0 - 2, r.y0 + 1, r.x1 + 2, r.y1 - 1, kKeyChoice, 1, 3, 2);
@@ -442,10 +529,20 @@ namespace oc4::render
 		o.unclip();
 		if (m_scrollMax > 0)
 		{
-			// Where the list is.
-			const float track = m_list.y1 - m_list.y0, thumb = std::max(24.0f, track * listHeight / content);
+			// Where the list is: the theme's scroll bar, as the original's (14 wide, 20 from the
+			// window's right edge, from 21 under its top to 21 over its bottom when the title scrolls
+			// too); else a thin grip.
+			const float track = m_list.y1 - m_list.y0, thumb = std::max(24.0f, track * listHeight / scrolled);
 			const float ty = m_list.y0 + (track - thumb) * (m_scroll / m_scrollMax);
-			o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, 0.6f, 2);
+			if (!m_shaft.empty() && !m_gripSkin.empty())
+			{
+				const float bx0 = x0 + w - 34, bx1 = bx0 + 14, by0 = titleScrolls ? y0 + 21 : m_list.y0, by1 = titleScrolls ? y0 + h - 21 : m_list.y1;
+				const float gy = by0 + (by1 - by0 - thumb) * (m_scroll / m_scrollMax);
+				Theme::draw(o, m_shaft, bx0, by0, bx1, by1);
+				Theme::draw(o, m_gripSkin, bx0, gy, bx1, gy + thumb);
+			}
+			else
+				o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, 0.6f, 2);
 		}
 		m_ok = {};
 		if (m_view->okButton)

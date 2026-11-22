@@ -1371,6 +1371,8 @@ namespace oc4::render
 			if (down && popup.contains(x, y))
 			{
 				downOnPopup = true;
+				if (left)
+					popup.press(x, y); // (a choice shows pressed while held)
 				return;
 			}
 			// On the main interface's minimap: the camera goes there (and follows while held), as the
@@ -1428,6 +1430,7 @@ namespace oc4::render
 			{
 				if (downLeft && std::abs(x - downX) + std::abs(y - downY) < 5) // (button up messages do not say which)
 					popup.click(x, y);
+				popup.release();
 				return;
 			}
 			// The right button held while playing shows the way there; let go, the units go there.
