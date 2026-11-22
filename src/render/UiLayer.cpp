@@ -485,10 +485,7 @@ namespace oc4::render
 					o.clip(it.clipped ? std::max(x0, it.clip[0]) : x0, it.clipped ? std::max(y0, it.clip[1]) : y0,
 						it.clipped ? std::min(x1 - 3, it.clip[2]) : x1 - 3, it.clipped ? std::min(y1, it.clip[3]) : y1);
 					o.richText(text, tx, ty, size, false, colour, a);
-					if (it.clipped)
-						o.clip(it.clip[0], it.clip[1], it.clip[2], it.clip[3]);
-					else
-						o.unclip();
+					o.unclip(); // (back to its own clip, if it has one: the clips are a stack)
 				}
 				else
 					o.richText(text, tx, ty, size, false, colour, a);

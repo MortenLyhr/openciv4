@@ -908,7 +908,7 @@ class _Node(object):
 		self.offset, self.inside = 0, False # (a scroll panel: how far it is scrolled; being laid out inside)
 
 
-_state = {'ctrl': None, 'dirty': False}
+_state = {'ctrl': None, 'dirty': False, 'scrolling': 0}
 
 
 def _text(s):
@@ -1284,8 +1284,10 @@ def _height(n, w):
 		return max([_height(c, cw) for c, cw in zip(n.children, widths)] or [0])
 	if k == 'panel' and not n.children:
 		return 0 # (an empty one: the resolution's screen picture, none here)
-	if k == 'scroll' and not n.inside:
-		return 0 # (a scroll panel: what its box is given, its content scrolls in it)
+	if k == 'scroll' and not n.inside and not _state['scrolling']:
+		# (a scroll panel: as high as its box is given, what it holds scrolls in it; one inside
+		# another, the Audio tab's volume sliders in its panel, as high as what it holds)
+		return 0
 	px, py = _pad(n)
 	inner = w - 2 * px
 	h = sum(_height(c, inner) for c in n.children) + _GAP * max(0, len(n.children) - 1)
@@ -1435,10 +1437,12 @@ def _scrollPanel(screen, n, name, x, y, w, h):
 	panel.offset = n.offset
 	first = len(screen._s.order)
 	n.inside = True
+	_state['scrolling'] += 1
 	try:
 		_place(screen, n, x, y, w, h)
 	finally:
 		n.inside = False
+		_state['scrolling'] -= 1
 	for c in screen._s.order[first:]:
 		cw = screen._s.widgets.get(c)
 		if cw is None:
