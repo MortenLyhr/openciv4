@@ -1,0 +1,153 @@
+AUTO turn 2 year -3920: 2 files (clock 313.3)
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 2 year -3920: 2 files (clock 324.4)
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 2 year -3920: 2 files (clock 335.1)
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 2 year -3920: 2 files (clock 346.2)
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 3 year -3880: 2 files (clock 357.4)
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 4 year -3840: 3 files (clock 368.6)
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 5 year -3800: 3 files (clock 379.8)
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 6 year -3760: 4 files (clock 390.8)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 6 year -3760: 4 files (clock 401.6)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 6 year -3760: 4 files (clock 412.6)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 423.5)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 434.3)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 445.3)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 456.3)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 467.2)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 491.1)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 8 year -3680: 4 files (clock 501.9)
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 9 year -3640: 4 files (clock 512.8)
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 10 year -3600: 4 files (clock 523.7)
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 11 year -3560: 4 files (clock 534.8)
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 12 year -3520: 4 files (clock 545.6)
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 13 year -3480: 4 files (clock 557.1)
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 14 year -3440: 4 files (clock 568.0)
+AUTO   AutoSave_BC-3440.CivBeyondSwordSave 162900 1795356944
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 15 year -3400: 4 files (clock 579.3)
+AUTO   AutoSave_BC-3440.CivBeyondSwordSave 162900 1795356944
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 7 year -3720: 4 files (clock 491.1)
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_BC-3920.CivBeyondSwordSave 158984 1795356679
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 8 year -3680: 4 files (clock 501.9)
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 9 year -3640: 4 files (clock 512.8)
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_BC-3840.CivBeyondSwordSave 159049 1795356745
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 10 year -3600: 4 files (clock 523.7)
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 11 year -3560: 4 files (clock 534.8)
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_BC-3760.CivBeyondSwordSave 160714 1795356767
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 12 year -3520: 4 files (clock 545.6)
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 13 year -3480: 4 files (clock 557.1)
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_BC-3680.CivBeyondSwordSave 162179 1795356878
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 14 year -3440: 4 files (clock 568.0)
+AUTO   AutoSave_BC-3440.CivBeyondSwordSave 162900 1795356944
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
+AUTO turn 15 year -3400: 4 files (clock 579.3)
+AUTO   AutoSave_BC-3440.CivBeyondSwordSave 162900 1795356944
+AUTO   AutoSave_BC-3520.CivBeyondSwordSave 162704 1795356921
+AUTO   AutoSave_BC-3600.CivBeyondSwordSave 162206 1795356899
+AUTO   AutoSave_Initial_BC-4000.CivBeyondSwordSave 141028 1795356390
