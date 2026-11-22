@@ -1986,11 +1986,10 @@ namespace oc4::render
 		// A resource's bubble, as the original's plot picker draws it: the resource's button in a
 		// black disc with a bevelled rim, on a pin whose tip is the plot. The bubble keeps its size
 		// at every zoom and stands up and away from the middle of the screen: left of the plot on
-		// the left half, right of it on the right half.
-		void drawResourceBubble(float tipX, float tipY, const ButtonArt::Icon& icon)
+		// the left half, right of it on the right half (side: -1 left, 1 right).
+		void drawResourceBubble(float tipX, float tipY, const ButtonArt::Icon& icon, float side)
 		{
 			constexpr float r = 25.5f, offX = 29, offY = 31;
-			const float side = tipX < overlay->screenWidth() / 2 ? -1.0f : 1.0f;
 			const float cx = tipX + side * offX, cy = tipY - offY;
 			// The pin: from the disc's lower edge down to the plot.
 			const float px[4] = { cx - side * 2.5f, cx - side * 24, tipX, tipX };
@@ -2032,6 +2031,26 @@ namespace oc4::render
 		}
 		std::unordered_map<uint64_t, ButtonArt::Icon> roundIcons;
 
+		// The side of the screen's middle each plot's bubble stands on (-1 left, 1 right, 0 not yet
+		// chosen), kept from frame to frame. A bubble keeps its side until its plot is clearly over
+		// the middle (kBubbleDeadZone of the screen's width past it): a plot at the very middle, as
+		// when the camera glides out of a city's screen centred on the city, would otherwise swap
+		// sides with every frame's rounding.
+		static constexpr float kBubbleDeadZone = 0.02f;
+		std::vector<int8_t> bubbleSides;
+		float bubbleSide(size_t plotIndex, float tipX)
+		{
+			const float half = overlay->screenWidth() / 2, dead = kBubbleDeadZone * overlay->screenWidth();
+			int8_t& side = bubbleSides[plotIndex];
+			if (side == 0)
+				side = tipX < half ? -1 : 1;
+			else if (side < 0 && tipX > half + dead)
+				side = 1;
+			else if (side > 0 && tipX < half - dead)
+				side = -1;
+			return float(side);
+		}
+
 		// The game's layers over the plots near the camera: the yields (as many symbols as the
 		// plot gives, a row each), the resources' bubbles, the units' icons over their stacks.
 		void drawLayers()
@@ -2057,8 +2076,10 @@ namespace oc4::render
 				return sx > -40 && sy > -40 && sx < overlay->screenWidth() + 40 && sy < overlay->screenHeight() + 40;
 			};
 			const float zoom = std::clamp(12 * plot() / camera.distance, 0.6f, 1.4f);
-			struct Bubble { float x, y; const ButtonArt::Icon* icon; };
+			struct Bubble { float x, y; const ButtonArt::Icon* icon; float side; };
 			std::vector<Bubble> bubbles;
+			if (bubbleSides.size() != map.plots.size())
+				bubbleSides.assign(map.plots.size(), 0);
 			for (int y = 0; y < map.height; ++y)
 				for (int x = 0; x < map.width; ++x)
 				{
@@ -2071,7 +2092,7 @@ namespace oc4::render
 					// (on a city's screen the original shows no resources' bubbles, nor units' icons)
 					if (layers.resources && !cityView && p.bonus >= 0 && size_t(p.bonus) < map.bonusButtons.size())
 						if (const ButtonArt::Icon* ic = art.icon(map.bonusButtons[size_t(p.bonus)]))
-							bubbles.push_back({ sx, sy, ic });
+							bubbles.push_back({ sx, sy, ic, bubbleSide(size_t(x) + size_t(y) * size_t(map.width), sx) });
 					if (low && layers.yields)
 					{
 						// (a row a yield, as many of its symbol as it gives: five and more as a number)
@@ -2098,7 +2119,7 @@ namespace oc4::render
 			// (in the plots' order, south to north and west to east, as the original draws them: where
 			// bubbles crowd, the farther and the more easterly one covers its neighbour)
 			for (const Bubble& b : bubbles)
-				drawResourceBubble(b.x, b.y, *b.icon);
+				drawResourceBubble(b.x, b.y, *b.icon, b.side);
 			if (low && layers.units && !cityView)
 				for (const UnitView& u : map.units)
 				{
