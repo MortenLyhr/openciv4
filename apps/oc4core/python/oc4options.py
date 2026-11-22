@@ -898,13 +898,14 @@ _volumeAccessors()
 # ---------------------------------------------------------------- the tab control
 
 class _Node(object):
-	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip', 'disabled')
+	__slots__ = ('id', 'kind', 'name', 'children', 'text', 'value', 'items', 'callback', 'flags', 'style', 'minimum', 'maximum', 'tip', 'disabled', 'offset', 'inside')
 
 	def __init__(self, id, kind, name):
 		self.id, self.kind, self.name = id, kind, name
 		self.children, self.text, self.value, self.items, self.callback = [], u'', 0, (), None
 		self.flags, self.style, self.minimum, self.maximum, self.tip = set(), '', 0, 0, u''
 		self.disabled = False
+		self.offset, self.inside = 0, False # (a scroll panel: how far it is scrolled; being laid out inside)
 
 
 _state = {'ctrl': None, 'dirty': False}
@@ -1283,6 +1284,8 @@ def _height(n, w):
 		return max([_height(c, cw) for c, cw in zip(n.children, widths)] or [0])
 	if k == 'panel' and not n.children:
 		return 0 # (an empty one: the resolution's screen picture, none here)
+	if k == 'scroll' and not n.inside:
+		return 0 # (a scroll panel: what its box is given, its content scrolls in it)
 	px, py = _pad(n)
 	inner = w - 2 * px
 	h = sum(_height(c, inner) for c in n.children) + _GAP * max(0, len(n.children) - 1)
@@ -1338,6 +1341,9 @@ def _place(screen, n, x, y, w, h):
 		for c, cw in zip(n.children, widths):
 			_place(screen, c, cx, y, cw, h if _vgrow(c) else _height(c, cw))
 			cx += cw + _GAP
+		return
+	if k == 'scroll' and not n.inside:
+		_scrollPanel(screen, n, name, x, y, w, h)
 		return
 	if k in ('vbox', 'form', 'panel', 'scroll'):
 		px, py = _pad(n)
@@ -1415,6 +1421,34 @@ def _place(screen, n, x, y, w, h):
 				w_.enabled, w_.help = False, _VOICE_TIP
 
 
+def _scrollPanel(screen, n, name, x, y, w, h):
+	"""A scroll panel (attachScrollPanel): what it holds clipped to its box and, when longer,
+	scrolled there by the wheel and the scroll bar on its right, as the original's (BUG's City
+	Screen and Advisors tabs; the bar over the right edge of the tan panel, which keeps its width).
+	Its controls are placed as usual, then moved into an engine scroll panel at the same place."""
+	screen.addScrollPanel(name, u'', x, y, w, h, _cpe.PanelStyles.PANEL_STYLE_EMPTY)
+	panel = screen._s.get(name)
+	if panel is None:
+		return
+	panel.inset = 0
+	# (where it was scrolled to: the screen is laid out again after every click)
+	panel.offset = n.offset
+	first = len(screen._s.order)
+	n.inside = True
+	try:
+		_place(screen, n, x, y, w, h)
+	finally:
+		n.inside = False
+	for c in screen._s.order[first:]:
+		cw = screen._s.widgets.get(c)
+		if cw is None:
+			continue
+		cw.parent, cw.mode = name, 'rel'
+		cw.x, cw.y = cw.x - x, cw.y - y
+		panel.children.append(c)
+	del screen._s.order[first:]
+
+
 def _tip(screen, name, text):
 	w = screen._s.get(name)
 	if w is not None:
@@ -1436,6 +1470,11 @@ def relayout():
 	if ctrl is not None:
 		# (what was typed into the edit boxes stays: they are made again)
 		for n in ctrl._nodes.values():
+			if n.kind == 'scroll':
+				# (and how far each scroll panel was scrolled)
+				w_ = _screen()._s.get('OptW%d' % n.id)
+				if w_ is not None:
+					n.offset = w_.offset
 			if n.kind == 'edit':
 				w_ = _screen()._s.get('OptW%d' % n.id)
 				if w_ is not None:
