@@ -45,7 +45,9 @@ namespace oc4::host
 		setBaseTurn(std::min(baseTurn + increment, std::max(GC.getDefineFLOAT("CAMERA_MAX_YAW"), float(baseTurn))));
 	}
 
-	// (Alt+F: the original says so in the messages, in English, from its exe)
+	// (Alt+F: as seen in the running original under Wine, the line "Satellite camera enabled." or
+	// "Satellite camera disabled." among the event messages at the top, for about 10 s, the game's
+	// EVENT_MESSAGE_TIME; no TXT_KEY of the game's text holds it, so it is English only)
 	void Engine::SetSatelliteMode(bool value)
 	{
 		satellite = value;
