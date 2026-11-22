@@ -1673,7 +1673,18 @@ namespace
 			const InterfaceModeTypes pathMode = ui.getInterfaceMode();
 			window.setGoingTo(playing && pathMode > NO_INTERFACEMODE && pathMode < NUM_INTERFACEMODE_TYPES && GC.getInterfaceModeInfo(pathMode).getGotoPlot() &&
 				pathHead && pathHead->getOwner() == me);
-			if (const auto target = playing ? window.pathTarget() : std::nullopt; target != pathShown || (target && from != pathFrom))
+			// None while a script picks a plot (BUG's dot map editor, whose right button takes a city
+			// away): there the original shows no way to it, neither with the button held nor for a
+			// press begun in that mode and still held after the mode ends (backlog #68).
+			static bool pickPress = false;
+			std::optional<std::pair<int, int>> pointed = playing ? window.pathTarget() : std::nullopt;
+			if (!pointed)
+				pickPress = false;
+			else if (ui.getInterfaceMode() == INTERFACEMODE_PYTHON_PICK_PLOT)
+				pickPress = true;
+			if (pickPress)
+				pointed.reset();
+			if (const auto target = pointed; target != pathShown || (target && from != pathFrom))
 			{
 				pathShown = target;
 				pathFrom = from;
