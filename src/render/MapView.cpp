@@ -2967,7 +2967,9 @@ float4 PSTerrain(PSIn i) : SV_Target
 			{
 				const int plot = u.x + u.y * map.width;
 				const float health = std::clamp(u.health, 0.0f, 1.0f), width = u.healthBar * unit;
-				if ((fog && !map.plots[size_t(plot)].visible) || width <= 0)
+				// (none on a unit fighting, while its battle is shown: its damage is already the
+				// battle's end, and the original shows no bar until the fight is over; seen in Wine)
+				if ((fog && !map.plots[size_t(plot)].visible) || width <= 0 || u.battle >= 0)
 					continue;
 				Vec3 at{ (float(u.x) + 0.5f) * S(), (float(u.y) + 0.5f) * S(), 0 };
 				if (const auto it = unitPositions.find(uint64_t(uint32_t(u.owner)) << 32 | uint32_t(u.id)); it != unitPositions.end())
@@ -3004,6 +3006,10 @@ float4 PSTerrain(PSIn i) : SV_Target
 			{
 				const int plot = u.x + u.y * map.width;
 				if ((fog && !map.plots[size_t(plot)].visible) || u.shownOwner < 0 || size_t(u.shownOwner) >= map.players.size())
+					continue;
+				// (a unit fighting has no flag, nor its health light, while its battle is shown: the
+				// original's, attacker and defender, Combat Zoom on or off; seen in Wine)
+				if (u.battle >= 0)
 					continue;
 				const PlayerView& owner = map.players[size_t(u.shownOwner)];
 				const Vec3 at = flagPosition(u);
