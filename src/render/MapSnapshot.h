@@ -144,6 +144,7 @@ namespace oc4::render
 		int16_t improvement = -1, bonus = -1, route = -1; // (the resource as the active team knows it)
 		uint8_t yields[3]{}; // food, production, commerce (YieldTypes) of a plot the active team has seen
 		bool cityWorkable = false; // the selected city can work this plot
+		bool worked = false; // a citizen works it, as the active team sees (CvPlot::isVisibleWorked)
 		uint8_t featureVariety = 0;
 		bool water = false, hills = false, peak = false;
 		bool revealed = true, visible = true; // to the active team

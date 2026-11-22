@@ -2101,7 +2101,14 @@ namespace oc4::render
 							bubbles.push_back({ sx, sy, ic, bubbleSide(size_t(x) + size_t(y) * size_t(map.width), sx) });
 					if (low && (cityView ? p.cityWorkable : layers.yields))
 					{
-						const float size = 64 * zoom, step = size * 0.7f;
+						// (the original's plot symbols, CvPlot::getSymbolSize and updateSymbolDisplay: on
+						// the map 0.8 of their size and 0.6 opaque, a worked plot's 1.2 and 0.8; on the
+						// city's screen, its plots' (isShowCitySymbols) 1.2 and 0.8, a worked one's 1.6
+						// and opaque. 64 * zoom is an unworked plot's size, as seen in Wine on the map and
+						// on the city's screen; a worked one's is larger by the same ratio.)
+						const float symbol = cityView ? (p.worked ? 1.6f / 1.2f : 1) : (p.worked ? 1.2f / 0.8f : 1);
+						const float alpha = cityView ? (p.worked ? 1.0f : 0.8f) : (p.worked ? 0.8f : 0.6f);
+						const float size = 64 * zoom * symbol, step = size * 0.7f;
 						const int stackSize = std::max(map.maxYieldStack, 1);
 						int groups = 0;
 						for (int k = 0; k < 3; ++k)
@@ -2115,11 +2122,11 @@ namespace oc4::render
 								const auto& icons = map.yieldIcons[size_t(k)];
 								const ButtonArt::Icon* ic = size_t(count) <= icons.size() ? art.icon(icons[size_t(count - 1)]) : nullptr;
 								if (ic)
-									overlay->image(ic->key, ic->bgra, ic->width, ic->height, 1, gx - size / 2, sy - size / 2, gx + size / 2, sy + size / 2);
+									overlay->image(ic->key, ic->bgra, ic->width, ic->height, 1, gx - size / 2, sy - size / 2, gx + size / 2, sy + size / 2, alpha);
 								else // a mod without stack artwork: overlap its game-font symbols instead
 									for (int i = 0; i < count; ++i)
 										overlay->richText(yieldSymbols[size_t(k)], gx + (float(i) - float(count - 1) / 2) * size * 0.12f,
-											sy - size * 0.4f + float(i) * size * 0.1f, size * 0.65f, false, { 1, 1, 1 }, 1, Overlay::Align::Center);
+											sy - size * 0.4f + float(i) * size * 0.1f, size * 0.65f, false, { 1, 1, 1 }, alpha, Overlay::Align::Center);
 							}
 						}
 					}

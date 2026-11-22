@@ -1367,6 +1367,7 @@ namespace oc4::host
 			v.revealed = active == NO_TEAM || plot->isRevealed(active, false);
 			v.visible = active == NO_TEAM || plot->isVisible(active, false);
 			v.cityWorkable = cityWorkable[size_t(plot->getX()) + size_t(plot->getY()) * size_t(s.width)];
+			v.worked = plot->isVisibleWorked();
 			if (v.revealed)
 				shownYields(*plot, i, everything, active, v.yields);
 
