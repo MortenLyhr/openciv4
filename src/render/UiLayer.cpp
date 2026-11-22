@@ -258,11 +258,13 @@ namespace oc4::render
 		return false;
 	}
 
-	bool UiLayer::solid(int x, int y) const
+	bool UiLayer::solid(int x, int y) const { return solid(x, y, true); }
+
+	bool UiLayer::solid(int x, int y, bool mainInterface) const
 	{
 		for (const Item& it : m_items)
 		{
-			if (!inside(it, x, y))
+			if (!inside(it, x, y) || (!mainInterface && it.mainInterface))
 				continue;
 			if (it.blocks)
 				return true; // (a screen over the map)

@@ -1583,15 +1583,12 @@ namespace oc4::host
 		v.menu = popup.style == "Window_NoTitleBar_Style";
 		itemOf.clear();
 		const ButtonPopupTypes type = popup.info ? popup.info->getButtonPopupType() : BUTTONPOPUP_TEXT;
+		// (the original's Esc closes none of the questions a turn waits for: what to build, what to
+		// research, a new civic; Wine, the plain game and BUG alike)
+		v.escape = type != BUTTONPOPUP_CHOOSEPRODUCTION && type != BUTTONPOPUP_CHOOSETECH && type != BUTTONPOPUP_CHANGECIVIC;
 		for (size_t i = 0; i < popup.items.size(); ++i)
 		{
 			const Item& it = popup.items[i];
-			// In the research popup the buttons that are not a choice open the technology tree:
-			// not yet. (The production popup's examining the city opens its screen.)
-			const WidgetTypes w = it.widget.m_eWidgetType;
-			const bool choice = type != BUTTONPOPUP_CHOOSETECH || w == WIDGET_RESEARCH;
-			if (it.kind == Item::Kind::Button && !choice)
-				continue;
 			View::Item& out = v.items.emplace_back();
 			out.kind = static_cast<View::Item::Kind>(it.kind);
 			out.text = it.kind == Item::Kind::Edit ? gameText(it.text.c_str()) : gameMarkup(it.text.c_str()); // (the screens' markup but in an edit box)

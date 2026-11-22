@@ -35,7 +35,7 @@ namespace oc4::render
 		void press(int x, int y);
 		void release();
 		bool click(int x, int y);
-		bool wheel(int x, int y, int delta);
+		bool wheel(int x, int y, int delta, bool anywhere = false); // (anywhere: not only over it)
 		bool key(unsigned virtualKey);
 		// A character typed (WM_CHAR): into the edit box that has the focus.
 		bool character(wchar_t c);

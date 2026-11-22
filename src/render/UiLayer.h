@@ -34,6 +34,9 @@ namespace oc4::render
 		int hit(int x, int y) const;
 		// Whether the mouse is on something of the screens (a click there is theirs, not the map's).
 		bool solid(int x, int y) const;
+		// The same, the main interface left out: a screen of its own (the original's popups leave
+		// the main interface no clicks, the screens over it theirs).
+		bool solid(int x, int y, bool mainInterface) const;
 		// Whether the main interface's minimap is what the mouse is on (no button nor screen over it).
 		bool onMainMinimap(int x, int y) const;
 		void hover(int x, int y);

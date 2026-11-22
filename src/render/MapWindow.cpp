@@ -1367,7 +1367,7 @@ namespace oc4::render
 				if (!left || buttonClicks < 2)
 					firstClick.reset(); // (no double click: what the last click was on is forgotten)
 			}
-			// On a popup: its buttons (the map around it still pans).
+			// On a popup: its buttons.
 			if (down && popup.contains(x, y))
 			{
 				downOnPopup = true;
@@ -1375,6 +1375,12 @@ namespace oc4::render
 					popup.press(x, y); // (a choice shows pressed while held)
 				return;
 			}
+			// Elsewhere a popup leaves nothing a press, as the original's (Wine, the plain game and BUG
+			// alike, the build, research and civic questions: the map, its minimap, the main
+			// interface's buttons, End Turn, the action bar): only a screen of its own over the map
+			// takes clicks. (a release still ends what was held before it came)
+			if (down && popup.active() && !(ui.active() && ui.solid(x, y, false)))
+				return;
 			// On the main interface's minimap: the camera goes there (and follows while held), as the
 			// original's (where the team's map is not centred yet, the minimap and the camera's leash
 			// keep the map's edges hidden).
@@ -1508,6 +1514,13 @@ namespace oc4::render
 
 		void onWheel(int delta)
 		{
+			// (while a popup is up the wheel scrolls it wherever the mouse is, as the original's;
+			// a screen of its own over the map keeps its own)
+			if (popup.active() && !(ui.active() && ui.solid(mouseX, mouseY, false)))
+			{
+				popup.wheel(mouseX, mouseY, delta, true);
+				return;
+			}
 			if (popup.wheel(mouseX, mouseY, delta))
 				return;
 			// On the screens: what scrolls there, else nothing (the map only zooms where it shows).

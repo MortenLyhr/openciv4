@@ -195,9 +195,9 @@ namespace oc4::render
 			m_focus = m_hover;
 	}
 
-	bool PopupPanel::wheel(int x, int y, int delta)
+	bool PopupPanel::wheel(int x, int y, int delta, bool anywhere)
 	{
-		if (!contains(x, y))
+		if (!active() || (!anywhere && !contains(x, y)))
 			return false;
 		m_scroll = std::clamp(m_scroll - float(delta) / 120 * 3 * 36, 0.0f, m_scrollMax);
 		hover(x, y);
@@ -211,6 +211,8 @@ namespace oc4::render
 		if (m_answered)
 			return true;
 		const bool chosenWithKeys = m_keyboard && m_hover >= 0 && m_view->items[size_t(m_hover)].kind != Kind::Edit;
+		if (virtualKey == key::Escape && !m_view->escape)
+			return true; // (the original's questions stay: what to build, research, a new civic)
 		if (virtualKey == key::Escape)
 		{
 			m_answer = MapWindow::PopupAnswer{ .dismissed = true };
@@ -231,6 +233,8 @@ namespace oc4::render
 		}
 		else if (virtualKey == key::Space && chosenWithKeys && m_focus < 0) // (a space is text in an edit box)
 			choose(m_hover);
+		else if (virtualKey == key::Space && label(m_selected) && m_focus < 0) // (the gold choice, as Return)
+			choose(m_selected);
 		return true;
 	}
 
