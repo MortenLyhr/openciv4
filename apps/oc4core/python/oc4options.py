@@ -209,6 +209,10 @@ def _read(path, which, others=False):
 					_profile[parts[0]] = int(value)
 				elif parts[0] in ('name', 'speakers', 'musicPath'):
 					_profile[parts[0]] = value
+				elif parts[0] in _INI_FLAGS:
+					_profile[parts[0]] = value == '1'
+				elif parts[0] in dict(_INI_NUMBERS):
+					_profile[parts[0]] = max(0, int(value))
 			except (ValueError, IndexError):
 				pass
 	finally:
@@ -270,11 +274,16 @@ def _lines():
 	for kind in ('graphic', 'player'):
 		for i, on in sorted(_profile[kind].items()):
 			lines.append('%s.%d=%d' % (kind, i, 1 if on else 0))
+	for key in _INI_FLAGS:
+		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
+	for key, default in _INI_NUMBERS:
+		lines.append('%s=%d' % (key, _profile[key]))
 	return lines
 
 
 def _applyGraphics():
 	"""The graphic options the profile has, to the host (the game core and the window ask it)."""
+	_applyIniOptions()
 	try:
 		oc4host.reset_graphic_options()
 		for i, on in _profile['graphic'].items():
@@ -971,6 +980,49 @@ class CyGTabCtrl(object):
 			EDGE_SCROLL_CHECKBOX, _edgeScrollOn())
 		self.setToolTip(EDGE_SCROLL_CHECKBOX, u'Moving the mouse to the edge of the screen or window moves the map that way. '
 			u'Turn it off to pan only with the arrow keys (or W A S D) and the mouse.')
+		self._attachIniOptions(parent)
+
+	def _attachIniOptions(self, parent):
+		"""CivilizationIV.ini's settings the original sets only in its ini (see _INI_FLAGS)."""
+		self.attachHSeparator(parent, 'Oc4IniSeparator')
+		self.attachLabel(parent, 'Oc4IniLabel', u'From CivilizationIV.ini')
+		for name, key, text, tip in (
+				(NO_TECH_SPLASH_CHECKBOX, 'noTechSplash', u'No tech splash screens',
+					u'A new technology is not shown on its own screen with its quote (the ini\'s NoTechSplash).'),
+				(NO_EVENT_MESSAGES_CHECKBOX, 'noEventMessages', u'No event messages on the screen',
+					u'The messages are not shown at the top of the map; they are still in the turn log (Ctrl+Tab) and '
+					u'their sounds play (the ini\'s NoEventMessages).')):
+			self.attachCheckBox(parent, name, text, 'oc4options', 'handleIniFlagClicked', key, _profile[key])
+			self.setToolTip(name, tip)
+		for key, before, after, tip in (
+				('autoSaveInterval', u'Autosave every', u'turns (0: never)',
+					u'The game is saved at the start of every this many turns, and at its first, into Saves\\single\\auto '
+					u'(the ini\'s AutoSaveInterval, 4).'),
+				('autoSavesKept', u'Keep', u'autosaves',
+					u'The oldest autosaves beyond this many are deleted (the ini\'s MaxAutoSaves, 5).')):
+			self._attachNumber(parent, key, before, after, tip)
+		self.attachCheckBox(parent, OPENCIV4_AUTOSAVES_CHECKBOX, u'OpenCiv4\'s autosaves: each game its own, every 25th turn kept',
+			'oc4options', 'handleIniFlagClicked', 'openciv4AutoSaves', _profile['openciv4AutoSaves'])
+		self.setToolTip(OPENCIV4_AUTOSAVES_CHECKBOX, u'Autosaves go to My Games\\openciv4\\Saves\\auto, named by the civilization '
+			u'and the map, the kept ones in turn, and every 25th turn\'s is kept for good. Autosave every 1 turn and keep 10 '
+			u'is how OpenCiv4 saved before.')
+		for key, before, after, tip in (
+				('fieldOfView', u'Field of view', u'degrees (0: the game\'s, 42)',
+					u'How wide the camera sees; more shows more of the map at once (the ini\'s FIELD_OF_VIEW). BUG\'s slider '
+					u'on the map changes it too.'),
+				('maxFrameRate', u'At most', u'frames a second (0: no limit)',
+					u'Fewer frames save battery (the ini\'s SetMaxFrameRate).')):
+			self._attachNumber(parent, key, before, after, tip)
+
+	def _attachNumber(self, parent, key, before, after, tip):
+		row = 'Oc4Row' + key
+		self.attachHBox(parent, row)
+		self.attachLabel(row, row + 'Before', before)
+		name = 'Oc4Edit' + key
+		self.attachEdit(row, name, str(_profile[key]), 'oc4options', 'handleIniNumberTyped', key)
+		self._byName[name].flags.add('OC4_DIGITS')
+		self.setToolTip(name, tip)
+		self.attachLabel(row, row + 'After', after)
 
 	def attachVBox(self, parent, name): self._node('vbox', parent, name)
 	def attachHBox(self, parent, name):
@@ -1163,6 +1215,8 @@ def _natural(n):
 		return max([_width(i) for i in n.items] or [40]) + 36
 	if k in ('spacer', 'vsep'):
 		return 12
+	if k == 'edit' and 'OC4_DIGITS' in n.flags:
+		return 64
 	if k == 'hslider':
 		return 210 # (the original's voice volume sliders)
 	if k in ('vbox', 'scroll', 'panel'):
@@ -1289,6 +1343,9 @@ def _place(screen, n, x, y, w, h):
 	elif k == 'edit':
 		screen.addEditBoxGFC(name, x, y, min(w, 260), 24, general, -1, -1, font)
 		screen.setEditBoxString(name, n.text)
+		if 'OC4_DIGITS' in n.flags: # (a number box: digits only)
+			screen.setEditBoxCharacters(name, u'0123456789')
+			screen.setEditBoxMaxCharCount(name, 4)
 	elif k == 'dropdown':
 		dw = min(w, 260)
 		if 'LAYOUT_RIGHT' in n.flags:
@@ -1570,6 +1627,8 @@ oc4screens.beforeDisplay.append(_checkAlarm)
 _cpe.CyGTabCtrl = CyGTabCtrl
 _cpe.CyUserProfile = _UserProfile
 oc4screens.beforeDisplay.append(relayout)
+if isinstance(getattr(oc4screens, 'editTyped', None), list): # (a test's stand-in may not have it)
+	oc4screens.editTyped.append(_editTyped)
 _load()
 _applyVolumes()
 _applyGraphics()

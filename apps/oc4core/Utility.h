@@ -3,6 +3,7 @@
 // CvDLLUtilityIFaceBase: the engine services the game DLL calls through gDLL.
 
 #include "Audio.h"
+#include "AutoSaves.h"
 #include "Diplomacy.h"
 #include "FAStar.h"
 #include "Interface.h"
@@ -59,6 +60,10 @@ namespace oc4::host
 				onAutoSave(bInitial);
 		}
 		std::function<void(bool initial)> onAutoSave;
+		// How it saves (AutoSaves.h; the options' OpenCiv4 tab).
+		AutoSaveSettings autoSave;
+		// At most this many frames a second (the ini's SetMaxFrameRate; 0: as many as the display shows).
+		std::atomic<int> maxFrameRate = 0;
 
 		// The map's display the game's controls switch (Ctrl+R, the unit icons, Ctrl+T): the
 		// window shows them so.
