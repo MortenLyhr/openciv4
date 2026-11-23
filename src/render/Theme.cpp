@@ -730,6 +730,12 @@ namespace oc4::render
 					l.panelColour = tinted && f->kind == Value::Kind::Name && f->text == "GFC_Control_Panel_Color_Inner";
 					l.tintAlpha = tintAlpha;
 				}
+			// (FactorCombine's second part is the alpha's: "Source" keeps the image's own, the colour
+			// tints only; PANEL_STYLE_MAIN's, opaque as in the original, so the military advisor's
+			// SIT-REP panel hides what is under it)
+			if (const Value* combine = resolve(s, has("FactorCombine"));
+				tinted && combine && combine->args.size() > 1 && combine->args[1].text == "Source")
+				tintAlpha = l.tintAlpha = 1;
 			if (const Value* v = has("Image"))
 				l.image = bitmap(s, v, tinted ? &tint : nullptr, tintAlpha);
 			if (const Value* v = has("Center"))
