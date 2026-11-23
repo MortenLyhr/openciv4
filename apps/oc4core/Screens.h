@@ -93,6 +93,8 @@ namespace oc4::host
 		void input(render::MapWindow& window);
 		// Esc: closes the screen on top that closes so (not the main interface); true if one did.
 		bool escape();
+		// The newest screen up that closes on Esc closes, stopping at a talk (none over it: false).
+		bool closeTop();
 		// A screen of its own is up that keeps the map's input (a new tech's splash, an advisor):
 		// the map takes no clicks and the units no keys; Enter closes it, as Esc does.
 		bool holdsInput();

@@ -1578,6 +1578,21 @@ if _walls:
 		return false;
 	}
 
+	bool Screens::closeTop()
+	{
+		if (!m_active || m_menu)
+			return false;
+		try
+		{
+			return py::module_::import("oc4screens").attr("escapeTop")().cast<bool>();
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+		}
+		return false;
+	}
+
 	bool Screens::escape()
 	{
 		if (!m_active)

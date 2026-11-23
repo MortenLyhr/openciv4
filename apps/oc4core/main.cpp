@@ -826,6 +826,13 @@ namespace
 					act(a, k.shift, k.ctrl, k.alt);
 					return;
 				}
+			// (Enter with a screen of its own over a talk closes that screen; the talk stays unanswered, seen in Wine)
+			if (k.key == render::key::Return && !k.shift && !k.ctrl && !k.alt && utility.diplomacy().active() && screens.closeTop())
+			{
+				if (log)
+					std::printf("  key %u: closes the screen over the talk\n", k.key);
+				return;
+			}
 			if (screens.diploKey(k.key))
 				return;
 			if (k.key == render::key::Escape)
