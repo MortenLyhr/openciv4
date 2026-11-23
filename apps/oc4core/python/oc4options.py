@@ -115,14 +115,25 @@ def _fs(path):
 		return path
 
 
+def _bytes(text):
+	"""Text as the files keep it: UTF-8, whatever the system's code page."""
+	return text if _unicode is not None and not isinstance(text, _unicode) else text.encode('utf-8')
+
+
+def _textLine(line):
+	"""A line read from a file (bytes) as the profile keeps text: Python 2's UTF-8 str as it is,
+	Python 3's str decoded."""
+	return line if _unicode is not None else line.decode('utf-8', 'replace')
+
+
 def _write(path, text):
 	"""Writes the file whole or not at all: to a file beside it first, then over it (a crash while
-	writing leaves the old file)."""
+	writing leaves the old file). In UTF-8, not the system's code page."""
 	path = _fs(path)
 	tmp = path + '.tmp'
-	f = open(tmp, 'w')
+	f = open(tmp, 'wb')
 	try:
-		f.write(text)
+		f.write(_bytes(text))
 	finally:
 		f.close()
 	try:
@@ -212,13 +223,14 @@ def _read(path, which, others=False):
 	(key: value) without taking them."""
 	rest = {}
 	try:
-		f = open(_fs(path), 'r')
+		f = open(_fs(path), 'rb')
 	except IOError:
 		return rest
 	version = 1
 	player = False
 	try:
 		for line in f:
+			line = _textLine(line)
 			if '=' not in line:
 				continue
 			key, value = line.strip().split('=', 1)
