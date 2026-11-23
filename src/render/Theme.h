@@ -63,6 +63,11 @@ namespace oc4::render
 			bool section[4]{ true, true, true, true }; // its left, top, right, bottom columns / rows drawn
 			Color fill{};          // Middle::Fill, or the sides with sidesFill
 			float fillAlpha = 0;
+			// Tinted by the panel's own inner colour (FactorColor GFC_Control_Panel_Color_Inner),
+			// which a script's setPanelColor changes (the tech advisor's known, researched and
+			// open techs); its alpha the theme's.
+			bool panelColour = false;
+			float tintAlpha = 1;
 			bool sidesFill = false; // the ring inside its margin filled with its FactorColor (GFC_BITMAPSKIN_SIDES_FILL: a window's border round its glass)
 		};
 		using Skin = std::vector<Layer>;
@@ -133,6 +138,8 @@ namespace oc4::render
 		Bitmap addSigned(const Bitmap& bitmap, Color colour);
 		// The bitmap multiplied by the colour (the Modulate combine): a bar's fill in its colour.
 		Bitmap modulate(const Bitmap& bitmap, Color colour, float alpha = 1);
+		// The skin with its panel colour layers tinted by another colour (setPanelColor).
+		Skin recoloured(const Skin& skin, Color colour);
 		// The bitmap's brightness as the alpha of the colour (a glow drawn in black and white,
 		// laid over what is under it in a colour: the multi list's pulse).
 		Bitmap glow(const Bitmap& bitmap, Color colour);
