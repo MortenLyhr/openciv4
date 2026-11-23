@@ -1,49 +1,50 @@
-unit                  zoom   wine-unitsize h/plot w/plot  oc4-unitsize-before h/plot w/plot  oc4-unitsize-after h/plot w/plot
-CHARIOT               z15             pw 354  0.57  0.66            pw 356  0.64  0.44            pw 354  0.64  0.44
-CHRISTIAN_MISSIONARY  z15             pw 357  0.46  0.22            pw 375  0.57  0.26            pw 373  0.44  0.20
-ENGINEER              z15             pw 354  0.38  0.22            pw 356  0.47  0.21            pw 354  0.38  0.15
-WARRIOR               z15             pw 357  0.35  0.63            pw 375  0.38  0.42            pw 373  0.37  0.42
-ARTIST                z26             pw 192  0.42  0.22                             -            pw 194  0.41  0.22
-BUDDHIST_MISSIONARY   z26             pw 190  0.42  0.20            pw 198  0.69  0.30            pw 200  0.40  0.18
-CANNON                z26             pw 191  0.69  0.59                             -            pw 200  0.74  0.51
-CATAPULT              z26             pw 191  0.64  0.76                             -            pw 200  0.71  0.56
-CHARIOT               z26             pw 192  0.72  0.68                             -            pw 194  0.71  0.50
-CHRISTIAN_MISSIONARY  z26             pw 190  0.53  0.26            pw 198  0.87  0.42            pw 200  0.50  0.25
-CROSSBOWMAN           z26             pw 194  0.47  0.75            pw 196  0.73  0.58            pw 194  0.52  0.48
-ENGINEER              z26             pw 192  0.44  0.37                             -            pw 194  0.42  0.20
-GREAT_GENERAL         z26             pw 168  0.69  0.27            pw 194  0.94  0.46            pw 193  0.54  0.29
-HORSE_ARCHER          z26             pw 192  0.72  0.83                             -            pw 194  0.77  0.42
-INFANTRY              z26             pw 194  0.47  0.68            pw 196  0.71  0.48            pw 194  0.53  0.39
-KNIGHT                z26             pw 191  0.72  0.81                             -            pw 200  0.73  0.42
-LONGBOWMAN            z26             pw 194  0.46  0.72            pw 196  0.72  0.43            pw 194  0.51  0.36
-MACEMAN               z26             pw 194  0.46  0.69            pw 196  0.72  0.48            pw 194  0.52  0.44
-SCOUT                 z26             pw 168  0.31  0.28            pw 194  0.57  0.46            pw 193  0.43  0.38
-SETTLER               z26             pw 190  0.70  0.50            pw 198  0.58  0.45            pw 200  0.44  0.37
-SPY                   z26                              -            pw 194  0.72  0.33            pw 193  0.42  0.19
-WARRIOR               z26             pw 190  0.42  0.65            pw 198  0.60  0.51            pw 200  0.46  0.46
-WAR_ELEPHANT          z26             pw 191  0.91  0.85                             -            pw 200  0.86  0.50
-WORKER                z26             pw 168  0.49  0.75            pw 194  0.57  0.42            pw 193  0.42  0.35
-ARTIST                z35             pw 125  0.45  0.26            pw 125  0.75  0.42            pw 126  0.42  0.25
-AXEMAN                z35             pw 125  0.45  0.70            pw 128  0.65  0.51            pw 129  0.52  0.49
-BUDDHIST_MISSIONARY   z35             pw 125  0.45  0.23            pw 128  0.72  0.35            pw 129  0.43  0.21
-CHARIOT               z35             pw 125  0.89  0.74            pw 125  1.18  0.71            pw 126  0.88  0.57
-CHRISTIAN_MISSIONARY  z35             pw 125  0.52  0.30            pw 128  0.86  0.48            pw 129  0.51  0.29
-ENGINEER              z35             pw 125  0.47  0.26            pw 125  0.74  0.33            pw 126  0.44  0.20
-HORSE_ARCHER          z35             pw 125  0.82  0.84            pw 125  0.95  0.52            pw 126  0.72  0.44
-PROPHET               z35             pw 125  0.71  0.51            pw 128  1.21  0.96            pw 129  0.71  0.51
-SETTLER               z35             pw 125  0.79  0.51            pw 128  0.61  0.49            pw 129  0.53  0.42
-SPEARMAN              z35             pw 125  0.54  0.69            pw 125  0.76  0.56            pw 126  0.54  0.52
-TANK                  z35             pw 125  0.86  0.44            pw 125  1.30  0.77            pw 126  0.95  0.52
-WARRIOR               z35             pw 125  0.43  0.62            pw 128  0.66  0.53            pw 129  0.52  0.46
-ARTIST                z45             pw  83  0.34  0.28            pw  86  0.40  0.78            pw  86  0.28  0.57
-AXEMAN                z45             pw  81  0.41  0.69            pw  84  0.63  0.89            pw  84  0.60  0.82
-BUDDHIST_MISSIONARY   z45             pw  81  0.35  0.27            pw  84  0.55  0.75            pw  84  0.29  0.54
-CHARIOT               z45             pw  83  1.17  0.80            pw  86  1.36  0.73            pw  86  1.24  0.69
-CHRISTIAN_MISSIONARY  z45             pw  81  0.40  0.36            pw  84  0.43  0.85            pw  84  0.31  0.60
-ENGINEER              z45             pw  83  0.32  0.26            pw  86  0.41  0.80            pw  86  0.29  0.57
-HORSE_ARCHER          z45             pw  83  0.95  0.88            pw  86  0.80  0.67            pw  86  0.73  0.60
-PROPHET               z45             pw  81  0.86  0.77            pw  84  1.04  1.08            pw  84  0.76  0.81
-SETTLER               z45             pw  81  0.94  0.56            pw  84  0.61  0.92            pw  84  0.53  0.85
-SPEARMAN              z45             pw  83  0.48  0.71            pw  86  0.80  0.80            pw  86  0.87  0.76
-TANK                  z45             pw  83  1.02  0.52            pw  86  1.26  0.58            pw  86  0.92  0.42
-WARRIOR               z45             pw  81  0.38  0.68            pw  84  0.56  0.83            pw  84  0.53  0.75
+unit                  zoom               wine-unitsize h w fig         oc4-unitsize-before h w fig          oc4-unitsize-after h w fig
+(h: the unit's figures' box height, w: its width, fig: its tallest single figure; all over the plot width)
+CHARIOT               z15             pw 354  0.57  0.66  0.56            pw 356  0.64  0.44  0.58            pw 354  0.64  0.44  0.57
+CHRISTIAN_MISSIONARY  z15             pw 357  0.46  0.22  0.46            pw 375  0.57  0.26  0.57            pw 373  0.44  0.20  0.44
+ENGINEER              z15             pw 354  0.38  0.22  0.38            pw 356  0.47  0.21  0.47            pw 354  0.38  0.15  0.38
+WARRIOR               z15             pw 357  0.35  0.63  0.33            pw 375  0.38  0.42  0.38            pw 373  0.37  0.42  0.37
+ARTIST                z26             pw 192  0.42  0.22  0.42            pw 190  0.72  0.37  0.72            pw 194  0.41  0.22  0.41
+BUDDHIST_MISSIONARY   z26             pw 190  0.42  0.20  0.42            pw 198  0.69  0.30  0.69            pw 200  0.40  0.18  0.40
+CANNON                z26             pw 191  0.69  0.59  0.66            pw 187  0.86  0.81  0.85            pw 200  0.74  0.51  0.62
+CATAPULT              z26             pw 191  0.64  0.76  0.61            pw 187  0.86  0.74  0.86            pw 200  0.71  0.56  0.60
+CHARIOT               z26             pw 192  0.72  0.68  0.71            pw 190  0.96  0.63  0.96            pw 194  0.71  0.50  0.64
+CHRISTIAN_MISSIONARY  z26             pw 190  0.53  0.26  0.53            pw 198  0.87  0.42  0.87            pw 200  0.50  0.25  0.50
+CROSSBOWMAN           z26             pw 194  0.47  0.75  0.42            pw 196  0.73  0.58  0.67            pw 194  0.52  0.48  0.52
+ENGINEER              z26             pw 192  0.44  0.37  0.44            pw 190  0.72  0.31  0.72            pw 194  0.42  0.20  0.42
+GREAT_GENERAL         z26             pw 168  0.69  0.27  0.69            pw 194  0.94  0.46  0.94            pw 193  0.54  0.29  0.54
+HORSE_ARCHER          z26             pw 192  0.72  0.83  0.59            pw 190  0.83  0.52  0.83            pw 194  0.77  0.42  0.62
+INFANTRY              z26             pw 194  0.47  0.68  0.44            pw 196  0.71  0.48  0.68            pw 194  0.53  0.39  0.53
+KNIGHT                z26             pw 191  0.72  0.81  0.56            pw 187  0.88  0.54  0.88            pw 200  0.73  0.42  0.63
+LONGBOWMAN            z26             pw 194  0.46  0.72  0.42            pw 196  0.72  0.43  0.67            pw 194  0.51  0.36  0.51
+MACEMAN               z26             pw 194  0.46  0.69  0.42            pw 196  0.72  0.48  0.67            pw 194  0.52  0.44  0.52
+SCOUT                 z26             pw 168  0.31  0.28  0.31            pw 194  0.57  0.46  0.57            pw 193  0.43  0.38  0.43
+SETTLER               z26             pw 190  0.70  0.50  0.70            pw 198  0.58  0.45  0.58            pw 200  0.44  0.37  0.44
+SPY                   z26                                    -            pw 194  0.72  0.33  0.72            pw 193  0.42  0.19  0.42
+WARRIOR               z26             pw 190  0.42  0.65  0.39            pw 198  0.60  0.51  0.60            pw 200  0.46  0.46  0.46
+WAR_ELEPHANT          z26             pw 191  0.91  0.85  0.91            pw 187  1.25  0.96  1.25            pw 200  0.86  0.50  0.86
+WORKER                z26             pw 168  0.49  0.75  0.49            pw 194  0.57  0.42  0.57            pw 193  0.42  0.35  0.42
+ARTIST                z35             pw 125  0.45  0.26  0.45            pw 125  0.75  0.42  0.75            pw 126  0.42  0.25  0.42
+AXEMAN                z35             pw 125  0.45  0.70  0.45            pw 128  0.65  0.51  0.65            pw 129  0.52  0.49  0.52
+BUDDHIST_MISSIONARY   z35             pw 125  0.45  0.23  0.45            pw 128  0.72  0.35  0.72            pw 129  0.43  0.21  0.43
+CHARIOT               z35             pw 125  0.89  0.74  0.88            pw 125  1.18  0.71  1.18            pw 126  0.88  0.57  0.88
+CHRISTIAN_MISSIONARY  z35             pw 125  0.52  0.30  0.52            pw 128  0.86  0.48  0.86            pw 129  0.51  0.29  0.51
+ENGINEER              z35             pw 125  0.47  0.26  0.47            pw 125  0.74  0.33  0.74            pw 126  0.44  0.20  0.44
+HORSE_ARCHER          z35             pw 125  0.82  0.84  0.67            pw 125  0.95  0.52  0.95            pw 126  0.72  0.44  0.72
+PROPHET               z35             pw 125  0.71  0.51  0.71            pw 128  1.21  0.96  1.17            pw 129  0.71  0.51  0.71
+SETTLER               z35             pw 125  0.79  0.51  0.65            pw 128  0.61  0.49  0.61            pw 129  0.53  0.42  0.53
+SPEARMAN              z35             pw 125  0.54  0.69  0.54            pw 125  0.76  0.56  0.76            pw 126  0.54  0.52  0.54
+TANK                  z35             pw 125  0.86  0.44  0.71            pw 125  1.30  0.77  1.22            pw 126  0.95  0.52  0.76
+WARRIOR               z35             pw 125  0.43  0.62  0.43            pw 128  0.66  0.53  0.66            pw 129  0.52  0.46  0.52
+ARTIST                z45             pw  83  0.34  0.28  0.34            pw  86  0.40  0.78  0.40            pw  86  0.28  0.57  0.28
+AXEMAN                z45             pw  81  0.41  0.69  0.41            pw  84  0.63  0.89  0.63            pw  84  0.60  0.82  0.60
+BUDDHIST_MISSIONARY   z45             pw  81  0.35  0.27  0.35            pw  84  0.55  0.75  0.41            pw  84  0.29  0.54  0.29
+CHARIOT               z45             pw  83  1.17  0.80  1.17            pw  86  1.36  0.73  1.05            pw  86  1.24  0.69  0.95
+CHRISTIAN_MISSIONARY  z45             pw  81  0.40  0.36  0.40            pw  84  0.43  0.85  0.43            pw  84  0.31  0.60  0.31
+ENGINEER              z45             pw  83  0.32  0.26  0.32            pw  86  0.41  0.80  0.36            pw  86  0.29  0.57  0.29
+HORSE_ARCHER          z45             pw  83  0.95  0.88  0.72            pw  86  0.80  0.67  0.80            pw  86  0.73  0.60  0.73
+PROPHET               z45             pw  81  0.86  0.77  0.86            pw  84  1.04  1.08  1.04            pw  84  0.76  0.81  0.76
+SETTLER               z45             pw  81  0.94  0.56  0.64            pw  84  0.61  0.92  0.61            pw  84  0.53  0.85  0.53
+SPEARMAN              z45             pw  83  0.48  0.71  0.48            pw  86  0.80  0.80  0.80            pw  86  0.87  0.76  0.87
+TANK                  z45             pw  83  1.02  0.52  0.91            pw  86  1.26  0.58  1.26            pw  86  0.92  0.42  0.92
+WARRIOR               z45             pw  81  0.38  0.68  0.38            pw  84  0.56  0.83  0.56            pw  84  0.53  0.75  0.53
