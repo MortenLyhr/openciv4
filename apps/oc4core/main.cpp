@@ -598,7 +598,8 @@ namespace
 				return i >= 0 && utility.getGraphicOption(static_cast<GraphicOptionTypes>(i));
 			};
 			window.setGraphics({ option("GRAPHICOPTION_HEALTH_BARS"), option("GRAPHICOPTION_FROZEN_ANIMATIONS"), !option("GRAPHICOPTION_EFFECTS_DISABLED"),
-				utility.graphicOptionChosen(GC.getInfoTypeForString("GRAPHICOPTION_FULLSCREEN", true)) });
+				utility.graphicOptionChosen(GC.getInfoTypeForString("GRAPHICOPTION_FULLSCREEN", true)), !option("GRAPHICOPTION_GLOBE_VIEW_BUILDINGS_DISABLED"),
+				option("GRAPHICOPTION_LOWRES_TEXTURES"), utility.movieQuality() >= 2, utility.antiAliasing() });
 		};
 		{
 			std::array<std::string, 3> symbols;
@@ -1602,10 +1603,10 @@ namespace
 				for (const auto& m : marks)
 				{
 					const auto [x, y] = m.core ? host::windowPlot({ m.x, m.y }) : std::pair{ m.x, m.y };
-					// (the WorldBuilder's plot and brush, and a settler's founding border, in the
-					// original's area border style)
+					// (the WorldBuilder's plot and brush, a settler's founding border and a settler's view of the
+					// cities' plots (Show City Radius), in the original's area border style)
 					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER ||
-						m.layer == AREA_BORDER_LAYER_FOUNDING_BORDER);
+						m.layer == AREA_BORDER_LAYER_FOUNDING_BORDER || m.layer == AREA_BORDER_LAYER_CITY_RADIUS);
 					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border, false, hatched });
 				}
 				for (const auto& s : signs)
@@ -1946,7 +1947,8 @@ namespace
 		host::Sounds& sounds = utility.sounds();
 		if (const char* s = std::getenv("OC4_SOUND"); s ? std::string_view(s) != "0" : opt.viewSeconds <= 0)
 			sounds.start(s && std::string_view(s) == "mute");
-		sounds.setTalkMusic(-1, utility.audioScripts().index("AS2D_OPENING_MENU", AUDIOTAG_2DSCRIPT));
+		// (the opening menu's the options chose: Options -> Graphics -> Opening Menu)
+		sounds.setTalkMusic(-1, utility.audioScripts().index(screens.menuSoundtrack().c_str(), AUDIOTAG_2DSCRIPT));
 		std::optional<host::MenuChoice> choice;
 		auto last = Clock::now(), typed = last;
 		const auto start = last;
