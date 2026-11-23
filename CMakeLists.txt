@@ -177,6 +177,7 @@ add_library(oc4_render STATIC
 	src/render/ButtonArt.cpp
 	src/render/Cursor.cpp
 	$<IF:$<BOOL:${OC4_FREETYPE}>,src/render/FontFreeType.cpp,src/render/Font.cpp>
+	src/render/FontVdmx.cpp
 	src/render/Input.cpp
 	src/render/Leaderhead.cpp
 	src/render/ModelView.cpp
@@ -415,7 +416,7 @@ add_test(NAME flag_art COMMAND flag_art_test)
 set_target_properties(flag_art_test PROPERTIES FOLDER "tests")
 
 if(WIN32 AND TARGET freetype)
-	add_executable(text_layout_freetype_test tests/text_layout_test.cpp src/render/TextLayout.cpp src/render/FontFreeType.cpp)
+	add_executable(text_layout_freetype_test tests/text_layout_test.cpp src/render/TextLayout.cpp src/render/FontFreeType.cpp src/render/FontVdmx.cpp)
 	target_include_directories(text_layout_freetype_test PRIVATE src)
 	target_link_libraries(text_layout_freetype_test PRIVATE oc4_options freetype dwrite)
 	add_test(NAME text_layout_freetype COMMAND text_layout_freetype_test)
