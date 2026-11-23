@@ -626,10 +626,9 @@ def _playerDefault(i):
 		return False
 
 
-# What the original's Graphics Level sets (Civ4BeyondSword.exe, CyUserProfile.setGraphicsLevel,
-# measured in Wine 2026-11-21): the graphic options it switches on and off, the render, globe and
-# movie quality (0 high, 1 medium, 2 low) and the anti-aliasing (an index into 0, 2, 4, 8 samples;
-# None: as it is).
+# What the original's Graphics Level sets (CyUserProfile.setGraphicsLevel, measured in Wine): the
+# graphic options it switches on and off, the render, globe and movie quality (0 high, 1 medium,
+# 2 low) and the anti-aliasing (an index into 0, 2, 4, 8 samples; None: as it is).
 _LEVEL_PRESETS = {
 	0: ((), ('SINGLE_UNIT_GRAPHICS', 'FROZEN_ANIMATIONS', 'EFFECTS_DISABLED', 'GLOBE_VIEW_BUILDINGS_DISABLED', 'LOWRES_TEXTURES'), 0, None),
 	1: (('SINGLE_UNIT_GRAPHICS', 'GLOBE_VIEW_BUILDINGS_DISABLED'), ('FROZEN_ANIMATIONS', 'EFFECTS_DISABLED', 'LOWRES_TEXTURES'), 1, 1),

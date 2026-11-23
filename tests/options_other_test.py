@@ -1,5 +1,5 @@
 # Checks the options' Other tab (apps/oc4core/python/oc4options.py) against what the original does
-# (measured in the Wine game, 2026-11-21, docs/options-other.md):
+# (measured in the Wine game, docs/options-other.md):
 # - profiles: one file each (Profiles/<name>.ini beside profile.ini, the original's Profiles\<name>.pfl),
 #   the loaded one named in profile.ini (the original's CivilizationIV.ini UserProfile); Create New
 #   Profile writes the options under the new name and loads it, the drop-down loads another (its

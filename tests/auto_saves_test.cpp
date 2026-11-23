@@ -38,7 +38,7 @@ int main()
 	check(autoSaveName(false, -3840) == L"AutoSave_BC-3840.CivBeyondSwordSave", "a BC year");
 	check(autoSaveName(false, 1250) == L"AutoSave_AD-1250.CivBeyondSwordSave", "an AD year (not seen: written as a BC one)");
 
-	// openciv4's own: the kept ones in turn (every turn, 10 kept: as before the option).
+	// openciv4's own: the kept ones in turn (every turn, 10 kept).
 	check(openciv4AutoSaveName(L"AutoSave_Rome_1", { 1, 10, true }, 23) == L"AutoSave_Rome_1_3.CivBeyondSwordSave", "openciv4's, slot 3");
 	check(openciv4AutoSaveName(L"AutoSave_Rome_1", { 4, 5, true }, 24) == L"AutoSave_Rome_1_1.CivBeyondSwordSave", "openciv4's, every 4th, 5 kept");
 
