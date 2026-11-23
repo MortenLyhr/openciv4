@@ -972,9 +972,10 @@ float4 PSWater(WaterOut i) : SV_Target
 		}
 
 		// Under each selected stack the game's ring (false: its art is missing).
-		// A selected unit's bubble, as the original draws it when the unit is down by the
-		// interface's bottom panel (seen in Wine: testgames/shots/wine-batch3/s1-galley-low,
-		// s6-settler-low): the plot picker's art (CIV4ArtDefines_Interface: PickerBase, a white
+		// A selected unit's bubble, as the original draws it when the unit is down under the
+		// interface's action buttons (seen in Wine: testgames/shots/wine-batch3/s1-galley-low,
+		// s6-settler-low; from 2.95 plots below the camera's look-at on land, 2.85 at sea,
+		// wine-batch4/cut-*): the plot picker's art (CIV4ArtDefines_Interface: PickerBase, a white
 		// disc with a black rim; the button cut by PickerIconMask64, PickerBorderBevel64 over
 		// it; all three 80 points across, so the button shows 64 across in a thin white rim;
 		// PickerArrow turned to point down, its tip 20 points under the disc), over the unit,
@@ -5100,12 +5101,12 @@ float4 PSWater(WaterOut i) : SV_Target
 					}
 				}
 				p.z = m->ground(p.x, p.y);
-				// (a selected unit whose ring, 0.95 plot across on the ground, reaches under the
-				// interface's bottom panel: its bubble, pointing at it from above)
+				// (a selected unit whose plot's centre, on the ground, is under the top of the
+				// interface's action buttons: its bubble, pointing at it from above)
 				if (u.selected && !walking && options.bottomPanel > 0 && !u.button.empty())
 				{
-					float rx = 0, ry = 0;
-					if (toScreen(p - Vec3{ 0, 0.475f * m->S(), 0 }, rx, ry) && ry > H - options.bottomPanel)
+					float gx = 0, gy = 0;
+					if (toScreen(p, gx, gy) && gy > H - options.bottomPanel)
 						bubble = &u;
 				}
 				p.z += 0.3f * m->S() * m->figureZoom();
