@@ -1976,10 +1976,23 @@ namespace oc4::render
 				float sx = 0, sy = 0;
 				if (!groundToScreen((float(s.x) + 0.5f) * S, (float(s.y) + 0.5f) * S, 0.4f * S, sx, sy) || s.caption.empty())
 					continue;
+				// The original's plaque (measured in its pictures at 1600x900): the ground seen through
+				// it ~40% darker, a black rim (2 px, the top's lighter), the caption in white, and a
+				// black pointer under its middle (16 px wide, 17 tall) whose tip is on the plot. The
+				// caption is in the theme's size 3 bold (Sylfaen 16; its width matches the original's).
 				const std::wstring text = widen(s.caption);
-				const float w = overlay->width(text, 12, true) + 12;
-				overlay->rect(sx - w / 2, sy - 10, sx + w / 2, sy + 10, { 0.05f, 0.06f, 0.08f }, 0.75f, 4);
-				overlay->text(text, sx, sy - 8, 12, s.color, 1, true, Overlay::Align::Center);
+				constexpr float kHeight = 21, kPad = 10, kTipW = 16, kTipH = 17, kSize = 16;
+				const float w = overlay->width(text, kSize, true) + 2 * kPad;
+				const float x0 = std::round(sx - w / 2), x1 = x0 + std::round(w), y1 = std::round(sy - kTipH), y0 = y1 - kHeight;
+				overlay->rect(x0, y0, x1, y1, { 0, 0, 0 }, 0.38f);
+				overlay->rect(x0, y0, x1, y0 + 2, { 0, 0, 0 }, 0.7f);
+				overlay->rect(x0, y1 - 2, x1, y1, { 0, 0, 0 }, 1);
+				overlay->rect(x0, y0 + 2, x0 + 2, y1 - 2, { 0, 0, 0 }, 1);
+				overlay->rect(x1 - 2, y0 + 2, x1, y1 - 2, { 0, 0, 0 }, 1);
+				const float tx[4] = { sx - kTipW / 2, sx + kTipW / 2, sx, sx }, ty[4] = { y1, y1, y1 + kTipH, y1 + kTipH };
+				overlay->quad(tx, ty, { 0, 0, 0 }, 1);
+				// (its ink 4 px under the top rim and 4-5 over the bottom one, as the original's)
+				overlay->text(text, sx, y0 - 1, kSize, { 0.92f, 0.93f, 0.9f }, 1, true, Overlay::Align::Center);
 			}
 		}
 
