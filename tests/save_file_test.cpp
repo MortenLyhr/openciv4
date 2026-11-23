@@ -1,6 +1,6 @@
-// Round-trips SaveFile through write and read: an empty engine section (OpenCiv4's own saves), one
-// laid out like the original's with a sign and a Great Wall line, and a file with more data after
-// the MD5 string (the reader must find the MD5 by its form, not take the file's last 36 bytes).
+// Round-trips SaveFile through write and read: an empty engine section (OpenCiv4's own saves) and one
+// laid out like the original's with a sign and a Great Wall line. A file cut short anywhere before the
+// end of its MD5 string must throw.
 
 #include "SaveFile.h"
 
@@ -83,15 +83,10 @@ namespace
 		return s;
 	}
 
-	void roundTrip(const std::filesystem::path& file, const std::vector<std::byte>& engine, const std::vector<std::byte>& after, const char* what)
+	void roundTrip(const std::filesystem::path& file, const std::vector<std::byte>& engine, const char* what)
 	{
 		const auto in = sample(engine);
 		in.write(file);
-		if (!after.empty())
-		{
-			std::ofstream out(file, std::ios::binary | std::ios::app);
-			out.write(reinterpret_cast<const char*>(after.data()), std::streamsize(after.size()));
-		}
 		try
 		{
 			const auto s = oc4::host::SaveFile::read(file);
@@ -110,22 +105,36 @@ namespace
 			++failures;
 		}
 	}
+
+	// The file written with `engine`, cut `cut` bytes short of its end: read must throw.
+	void truncated(const std::filesystem::path& file, const std::vector<std::byte>& engine, size_t cut, const char* what)
+	{
+		sample(engine).write(file);
+		std::filesystem::resize_file(file, std::filesystem::file_size(file) - cut);
+		try
+		{
+			oc4::host::SaveFile::read(file);
+			std::printf("FAILED: %s (cut %zu bytes): read did not throw\n", what, cut);
+			++failures;
+		}
+		catch (const std::runtime_error& e)
+		{
+			std::printf("%s (cut %zu bytes): %s\n", what, cut, e.what());
+		}
+	}
 }
 
 int main()
 {
 	const auto file = std::filesystem::temp_directory_path() / "oc4_save_file_test.CivBeyondSwordSave";
-	std::vector<std::byte> wallBlock;
-	put(wallBlock, 0x4C415747); // "GWAL"
-	put(wallBlock, 12);
-	put(wallBlock, 32);
-	put(wallBlock, 1);
-	put(wallBlock, 2);
-
-	roundTrip(file, {}, {}, "empty engine section");
-	roundTrip(file, originalEngineSection(), {}, "original engine section");
-	roundTrip(file, {}, wallBlock, "empty section, Great Wall block after the MD5");
-	roundTrip(file, originalEngineSection(), wallBlock, "original section, Great Wall block after the MD5");
+	roundTrip(file, {}, "empty engine section");
+	roundTrip(file, originalEngineSection(), "original engine section");
+	// The MD5 string is the last 36 bytes: int 32, 32 hex digits.
+	for (const size_t cut : { size_t(1), size_t(20), size_t(32), size_t(36), size_t(37), size_t(50) })
+	{
+		truncated(file, {}, cut, "empty engine section, truncated");
+		truncated(file, originalEngineSection(), cut, "original engine section, truncated");
+	}
 	std::filesystem::remove(file);
 	if (failures == 0)
 		std::printf("save_file_test: all passed\n");

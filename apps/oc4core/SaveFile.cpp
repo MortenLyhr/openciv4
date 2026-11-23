@@ -194,8 +194,8 @@ namespace oc4::host
 		}
 		s.gameData = inflateStream(compressed);
 		s.pythonData = r.str();
-		// The engine's own section runs up to the MD5 string (int 32, then 32 hex digits). That isn't
-		// always the end of the file (OpenCiv4 may keep blocks of its own after it), so look for it.
+		// The engine's own section runs up to the MD5 string (int 32, then 32 hex digits), the save's
+		// last field. Its size isn't stored, so the reader finds the string by its form.
 		const size_t md5At = findMd5(file, r.p);
 		if (md5At == std::string::npos)
 			throw std::runtime_error("save file truncated");
