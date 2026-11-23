@@ -17,11 +17,14 @@
 ## screens; a click on a row of a table or a list box selects it (Ctrl adds or takes one,
 ## Shift a range) and the script hears NOTIFY_LISTBOX_ITEM_SELECTED.
 
+import re
 import time
 import oc4host
 import CvPythonExtensions as _cpe
 
 _FONT_LEFT, _FONT_RIGHT, _FONT_CENTER = 1 << 0, 1 << 1, 1 << 2
+_SORT_UP, _SORT_DOWN = 1 << 8, 1 << 9  # (a header's flags: its table is sorted by it, up or down)
+_markup = re.compile(u'<[^<>]*>')
 
 _version = [1]          # bumped on every change the display list shows
 _screens = {}           # python file id -> _Screen
@@ -116,7 +119,8 @@ class _Widget(object):
 		'wt', 'd1', 'd2', 'opt', 'flags', 'font', 'shown', 'enabled', 'state', 'hittest', 'seq', 'vertical', 'scroll', 'clipRect', 'children',
 		'bars', 'lists', 'columns', 'rows', 'headers', 'iconw', 'iconh', 'items', 'selected', 'color', 'size', 'defw', 'defh', 'points',
 		'offset', 'extent', 'picked', 'hoffset', 'hextent', 'cells', 'sort', 'inset', 'maxChars',
-		'allowed', 'minimum', 'maximum', 'value', 'upright', 'fill', 'grow', 'grid', 'helpWidget')
+		'allowed', 'minimum', 'maximum', 'value', 'upright', 'fill', 'grow', 'grid', 'helpWidget',
+		'selectable')
 
 	def __init__(self, name, kind):
 		self.name = name
@@ -166,6 +170,7 @@ class _Widget(object):
 		self.points = None     # lines
 		self.cells = None      # tables: {(row, column): the name of the control attached there}
 		self.sort = None       # tables that sort: (column, descending) the rows are shown by, or (-1, False)
+		self.selectable = False  # tables: enableSelect(True): with no row selected, the first shown has the selected look
 		self.inset = 0         # scroll panels (addScrollPanel): where what is placed in them (attach...At) starts
 		self.grow = 0          # panels in a vertical panel's flow: higher by this, their share of its free height
 
@@ -1185,9 +1190,10 @@ class CyGInterfaceScreen(object):
 		self.setTableText(szName, iColumn, iRow, text, szIcon, eWidgetType, iData1, iData2, iJustify)
 
 	def getTableText(self, szName, iColumn, iRow):
+		# (the cell's text without its markup, as the original gives it back: BUG's red "-1" is "-1")
 		w = self._s.get(szName)
 		try:
-			return w.rows[int(iRow)][int(iColumn)][0]
+			return _markup.sub(u'', w.rows[int(iRow)][int(iColumn)][0])
 		except (AttributeError, IndexError, KeyError, TypeError):
 			return u''
 
@@ -1206,7 +1212,11 @@ class CyGInterfaceScreen(object):
 		if w is not None and w.rows is not None and w.sort is None:
 			w.sort = (-1, False)
 			_changed()
-	def enableSelect(self, szName, bSelect): pass
+	def enableSelect(self, szName, bSelect):
+		w = self._s.get(szName)
+		if w is not None and w.rows is not None and w.selectable != bool(bSelect):
+			w.selectable = bool(bSelect)
+			_changed()
 	def enableGridlines(self, *args): pass
 
 	def selectRow(self, szName, iRow, bSelected):
@@ -1521,7 +1531,24 @@ _LIST_ROW = 20   # a step of the wheel in what scrolls by pixels
 _LIST_GAP = 2    # between a multi list's buttons, across and down (the original's)
 _DROP_ROW = 22   # a row of a pull down's open list
 _heights = {}    # (text, width, font) -> how high it is
-_tableRows = {}  # a table style -> (least row height, room above, room below a cell's content), the theme's
+_tableRows = {}  # a table style -> (least row height, room above, room below a cell's content, header height), the theme's
+
+
+def _tableRow(style):
+	row = _tableRows.get(style)
+	if row is None:
+		try:
+			row = tuple(oc4host.ui_table_row(style))
+		except Exception:
+			row = (24, 2, 2, 22)
+		_tableRows[style] = row
+	return row
+
+
+def _headerHeight(style, rowHeight):
+	"""A table's header row: the theme's Size_Header (22), a row's height if the theme has none."""
+	row = _tableRow(style)
+	return int(row[3]) if len(row) > 3 and row[3] > 0 else rowHeight
 
 
 def _rowHeight(style, size, least=0):
@@ -1529,13 +1556,7 @@ def _rowHeight(style, size, least=0):
 	taller for a line of its text (font size: a table's 2, a list box's 3) and the room the style
 	leaves above and below it (Size_CellContentMargin: BUG's Table_StandardCiv_Style 1 and 2, its
 	military advisor's list 25 high), or for its pictures."""
-	row = _tableRows.get(style)
-	if row is None:
-		try:
-			row = tuple(oc4host.ui_table_row(style))
-		except Exception:
-			row = (24, 2, 2)
-		_tableRows[style] = row
+	row = _tableRow(style)
 	line = _textHeight(u'<font=%d>Ag</font>' % size, 4096)
 	return int(max(row[0], least, line + row[1] + row[2]))
 
@@ -1756,16 +1777,20 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 		rowHeight = _rowHeight(style, 2, w.iconh if pictures else 0)
 		# (its rows scroll under its headers, in its box)
 		box = _clipTo(clip, (x, y, x + width, y + height)) if height else clip
-		_tableInner(base, x, y, width, height or (len(w.rows) + (1 if w.headers else 0)) * rowHeight, box, style, w, out)
+		headerHeight = _headerHeight(style, rowHeight) if w.headers else 0
+		_tableInner(base, x, y, width, height or len(w.rows) * rowHeight + headerHeight, box, style, w, out)
 		top = y
 		if w.headers:
 			cx = x
 			for ci, c in enumerate(w.columns):
 				# (a table that sorts: each header a part of its own, -100 - column, that a click sorts by)
-				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + rowHeight, box, w.style, c[0], '', '', 2, _FONT_RIGHT if c[2] else _FONT_LEFT,
+				sortFlags = 0
+				if w.sort is not None and w.sort[0] == ci:
+					sortFlags = _SORT_DOWN if w.sort[1] else _SORT_UP
+				out.append((base + (-100 - ci if w.sort is not None else -1,), 'header', cx, top, cx + c[1], top + headerHeight, box, style, c[0], '', '', 2, (_FONT_RIGHT if c[2] else _FONT_LEFT) | sortFlags,
 					False, True, 0, None, -1, -1, -1, False, w.z, w.seq))
 				cx += c[1]
-			top += rowHeight
+			top += headerHeight
 		body = _clipTo(box, (x, top, x + width, y + height)) if height else box
 		w.extent = len(w.rows) * rowHeight
 		_scrolls(w, x, top, x + width, y + height if height else top + w.extent, s.id, rowHeight, out)
@@ -1781,7 +1806,10 @@ def _display_widget(s, w, ox, oy, clip, flow, out, cell=None):
 				continue
 			# (the row's look under its cells: every other one the theme's Alt_, selected; as wide
 			# as its columns, as in the original: BUG's domestic advisor's rows end with its last)
-			out.append((base + (-200 - ri,), 'row', x, cy, x + (sum(c[1] for c in w.columns) or width), cy + rowHeight, body, style, u'', '', '', 0, at & 1, ri in w.picked, True, 0, None,
+			# (a table one selects rows of shows its first row selected while none is, as the original's
+			# GTable its current row: BUG's Domestic Advisor opens with its first city lit)
+			lit = ri in w.picked or (w.selectable and not w.picked and at == 0)
+			out.append((base + (-200 - ri,), 'row', x, cy, x + (sum(c[1] for c in w.columns) or width), cy + rowHeight, body, style, u'', '', '', 0, at & 1, lit, True, 0, None,
 				-1, -1, -1, False, w.z, w.seq))
 			cx = x
 			for ci, c in enumerate(w.columns):
