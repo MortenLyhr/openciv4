@@ -1681,6 +1681,9 @@ namespace oc4::render
 			// (beyond the map: black as the ground not seen, until the team's map is centred)
 			renderer->beginFrame(camera, view->seenBounds() ? Vec3{ 0, 0, 0 } : Vec3{ 0.05f, 0.07f, 0.10f });
 			view->options.cityScreen = cityView;
+			// (the main interface's bottom middle panel, InterfaceCenterBackgroundWidget in
+			// CvMainInterface.py: yResolution - 133 to the bottom)
+			view->options.bottomPanel = ui.active() && !cityView ? 133.0f : 0.0f;
 			view->draw();
 			renderer->endFrame();
 			syncHeads();
