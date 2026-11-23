@@ -40,6 +40,7 @@ namespace oc4::host
 		{
 			m_selection.clear();
 			selectionChanged();
+			leaveInterfaceMode();
 		}
 		void insertIntoSelectionList(CvUnit* pUnit, bool bClear, bool bToggle, bool bGroup, bool bSound, bool bMinimalChange) override;
 		CLLNode<IDInfo>* deleteSelectionListNode(CLLNode<IDInfo>* pNode) override { return m_selection.deleteNode(pNode); }
@@ -94,6 +95,14 @@ namespace oc4::host
 				m_dirty[SelectionButtons_DIRTY_BIT] = true;
 		}
 		InterfaceModeTypes getInterfaceMode() override { return m_interfaceMode; }
+		// The selection changed (a unit selected, even the same one again, one let go, the list
+		// cleared, a city selected): out of the interface mode, as the original's Go To, Route To,
+		// Ping, ... end when W selects the next unit or the unit bar another.
+		void leaveInterfaceMode()
+		{
+			if (m_interfaceMode != INTERFACEMODE_SELECTION)
+				setInterfaceMode(INTERFACEMODE_SELECTION);
+		}
 
 		// Popups as the original's interface runs them: the DLL queues them (addPopup, or the
 		// player's own list the host pulls with CvPlayer::popFrontPopup); the next one is launched
