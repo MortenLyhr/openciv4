@@ -1303,7 +1303,7 @@ if _walls:
 			m_hovered = hovered;
 			const std::string text = hovered >= 0 && size_t(hovered) < m_items.size() ? help(m_items[size_t(hovered)]) : std::string();
 			float x = 7, y = float(height) - 172, w = 300;
-			bool right = true, down = false, framed = false, fit = false;
+			bool right = true, down = false, framed = false, fit = false, floating = false;
 			try
 			{
 				// (a tooltip at the widget where the original shows one: the World Builder's)
@@ -1333,13 +1333,14 @@ if _walls:
 					right = t[4].cast<bool>();
 					down = t[5].cast<bool>();
 					framed = t.size() > 6 && t[6].cast<bool>();
+					floating = t.size() > 7 && t[7].cast<bool>();
 				}
 			}
 			catch (py::error_already_set& e)
 			{
 				printPythonError(e);
 			}
-			window.setUiHelp(text, x, y, w, right, down, framed, fit);
+			window.setUiHelp(text, x, y, w, right, down, framed, fit, floating);
 		}
 	}
 

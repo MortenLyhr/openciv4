@@ -187,7 +187,7 @@ class _Screen(object):
 		self.shown = False
 		self.main = False
 		self.dims = None
-		self.helpArea = None   # (x, y, width, minWidth, expandRight, expandDown, framed)
+		self.helpArea = None   # (x, y, width, minWidth, expandRight, expandDown, framed, floating)
 		self.helpText = u''
 		self.minimap = None
 		self.mm = None         # its own minimap's layers (not the main interface's): see _Minimap
@@ -1010,8 +1010,9 @@ class CyGInterfaceScreen(object):
 			_set(w, 'shown', False)
 
 	def setHelpTextArea(self, fWidth, eFont, fX, fY, fZ, bFloating, szArtFile, bExpandRight, bExpandDown, uiFlags, iMinWidth):
-		# (with art, the city screen's, it is framed; without, the main interface's, see-through)
-		self._s.helpArea = (int(fX), int(fY), int(fWidth), int(iMinWidth), bool(bExpandRight), bool(bExpandDown), bool(szArtFile))
+		# (with art, the city screen's, it is framed; without, the main interface's, see-through;
+		# floating, the city screen's, it goes beside the widget under the mouse, not at x, y)
+		self._s.helpArea = (int(fX), int(fY), int(fWidth), int(iMinWidth), bool(bExpandRight), bool(bExpandDown), bool(szArtFile), bool(bFloating))
 
 	def setHelpTextString(self, szString):
 		self._s.helpText = _text(szString)

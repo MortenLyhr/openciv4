@@ -404,7 +404,7 @@ namespace oc4::render
 		std::pair<int, int> mousePosition() const;
 		// The help for what is under the mouse, in the screens' help area.
 		// fit: a tooltip as wide as its text (up to width), not the help area's width.
-		void setUiHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed = false, bool fit = false);
+		void setUiHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed = false, bool fit = false, bool floating = false);
 
 		// The text shown when the mouse rests on a plot (lines; the game's plot help).
 		void setPlotHelp(std::function<std::string(int x, int y)> help);
