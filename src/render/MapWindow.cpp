@@ -2104,11 +2104,17 @@ namespace oc4::render
 						// (the original's plot symbols, CvPlot::getSymbolSize and updateSymbolDisplay: on
 						// the map 0.8 of their size and 0.6 opaque, a worked plot's 1.2 and 0.8; on the
 						// city's screen, its plots' (isShowCitySymbols) 1.2 and 0.8, a worked one's 1.6
-						// and opaque. 64 * zoom is an unworked plot's size, as seen in Wine on the map and
-						// on the city's screen; a worked one's is larger by the same ratio.)
-						const float symbol = cityView ? (p.worked ? 1.6f / 1.2f : 1) : (p.worked ? 1.2f / 0.8f : 1);
+						// and opaque. They are drawn at a size on the ground: seen in Wine at zooms 0.15 to
+						// 0.45 and on the city's screen, a commerce coin is 0.105 of the plot's width on
+						// the screen times that size, so its icon 0.26.)
+						const float symbol = cityView ? (p.worked ? 1.6f : 1.2f) : (p.worked ? 1.2f : 0.8f);
 						const float alpha = cityView ? (p.worked ? 1.0f : 0.8f) : (p.worked ? 0.8f : 0.6f);
-						const float size = 64 * zoom * symbol, step = size * 0.7f;
+						// (the next plot's centre may be off the screen; toScreen still gives its point
+						// unless it is behind the eye)
+						float ex = -1e9f, ey = -1e9f;
+						toScreen((float(x) + 1.5f) * plot(), (float(y) + 0.5f) * plot(), 0, ex, ey);
+						const float across = ex > -1e8f ? std::hypot(ex - sx, ey - sy) : 64 * zoom / 0.21f;
+						const float size = 0.26f * across * symbol, step = size * 0.7f;
 						const int stackSize = std::max(map.maxYieldStack, 1);
 						int groups = 0;
 						for (int k = 0; k < 3; ++k)
