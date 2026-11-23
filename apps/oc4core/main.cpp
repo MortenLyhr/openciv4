@@ -30,8 +30,8 @@
 // interface is the game's own (CvMainInterface.py and its city screen: a click on your city
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
-// one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "<x,y:x2,y2>" drags from one to the other with the left button, "#n" picks the n-th button of the popup up (OK if it has none), a
+// one hold Ctrl, Alt and Shift ('&' Cmd, as the option Mac keys has it), '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
+// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t", "%b", "%h" and "%i" type an arrow, Return, Tab, Backspace, Home or Insert into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "<x,y:x2,y2>" drags from one to the other with the left button, "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -69,6 +69,7 @@
 #include "core/AssetResolver.h"
 #include "core/FileUtil.h"
 #include "render/Input.h"
+#include "render/KeyMap.h"
 #include "render/MapWindow.h"
 
 #include "CvGameCoreDLL.h"
@@ -393,6 +394,8 @@ namespace
 		case 'e': return render::key::Return;
 		case 't': return render::key::Tab;
 		case 'b': return render::key::Back;
+		case 'h': return render::key::Home;
+		case 'i': return render::key::Insert;
 		default: return 0;
 		}
 	}
@@ -428,6 +431,7 @@ namespace
 		case render::key::Insert: return FInputDevice::KB_INSERT;
 		case render::key::Delete: return FInputDevice::KB_DELETE;
 		case render::key::End: return FInputDevice::KB_END;
+		case render::key::Home: return FInputDevice::KB_HOME; // (Next City; Fn+Left on a Mac)
 		case render::key::Prior: return FInputDevice::KB_PGUP;
 		case render::key::Next: return FInputDevice::KB_PGDN;
 		case render::key::Up: return FInputDevice::KB_UP;
@@ -1348,23 +1352,28 @@ namespace
 				{
 					// '>' ends the turn whatever is left (Shift+Enter), '~' is Esc, '.' waits; '^', '@'
 					// and '+' before a key hold Ctrl, Alt and Shift.
+					// ('&' holds Cmd: the option Mac keys makes it Ctrl or another key, KeyMap.h's macKey)
 					size_t n = 0;
-					bool shift = false, ctrl = false, alt = false;
-					for (; n < script.size() && (script[n] == '^' || script[n] == '@' || script[n] == '+'); ++n)
-						(script[n] == '^' ? ctrl : script[n] == '@' ? alt : shift) = true;
+					bool shift = false, ctrl = false, alt = false, cmd = false;
+					for (; n < script.size() && (script[n] == '^' || script[n] == '@' || script[n] == '+' || script[n] == '&'); ++n)
+						(script[n] == '^' ? ctrl : script[n] == '@' ? alt : script[n] == '&' ? cmd : shift) = true;
+					const auto typed = [&](unsigned k) {
+						if (const auto m = render::macKey({ k, shift, ctrl, alt }, cmd, utility.macKeys()))
+							press({ m->key, m->shift, m->ctrl, m->alt });
+					};
 					const char c = n < script.size() ? script[n] : '.';
 					if (c == '>')
 						press({ render::key::Return, true, false, false });
 					else if (c == '~')
 						press({ render::key::Escape, false, false, false });
 					else if (std::isalnum(static_cast<unsigned char>(c)) || c == ' ')
-						press({ unsigned(std::toupper(static_cast<unsigned char>(c))), shift, ctrl, alt });
+						typed(unsigned(std::toupper(static_cast<unsigned char>(c))));
 					else if (c == '%' && n + 1 < script.size())
 					{
 						// ("^%l": an arrow, Return or Tab with Ctrl held, as the game's hotkeys have them:
 						// Ctrl+Left turns the camera)
 						if (const unsigned k = scriptedKey(script[n + 1]))
-							press({ k, shift, ctrl, alt });
+							typed(k);
 						++n;
 					}
 					script.erase(0, std::min(n + 1, script.size()));

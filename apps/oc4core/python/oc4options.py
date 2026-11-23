@@ -16,6 +16,7 @@
 ## icon layers are not kept (nor in the original).
 
 import os
+import sys
 import time
 import CvPythonExtensions as _cpe
 import oc4host
@@ -74,6 +75,7 @@ def _fresh():
 		'graphicsLevel': 0, 'renderQuality': 0, 'globeView': 0, 'movieQuality': 0, 'mainMenu': 0, 'antiAliasing': 0, 'uiScale': 0,
 		'speakers': '', 'musicPath': '', 'voice': False, 'captureVolume': 67, 'playbackVolume': 67,
 		'wasdPan': False, 'autoEndTurn': False, 'edgeScroll': True, 'cityOneClick': False, 'keepAttacker': False, 'quickEnemyMoves': False,
+		'macKeys': sys.platform == 'darwin', # (the option Mac keys: on by default on macOS)
 		'grid': False, 'map': False, 'yields': False, 'scores': True,
 	}
 	for k in _INI_FLAGS:
@@ -159,7 +161,7 @@ _DEFAULTS_ON = (0, 1, 2)
 # the minimap's toggles). profile.ini keeps the rest, the same whichever profile is loaded:
 # UserProfile=<name> and OpenCiv4's own options (the keys in _GLOBAL; the ini's settings too). A
 # profile.ini from before (every option in it) is the profile "openciv4"'s first file.
-_GLOBAL = ('UserProfile', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _INI_FLAGS + tuple(k for k, v in _INI_NUMBERS)
+_GLOBAL = ('UserProfile', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves', 'macKeys') + _INI_FLAGS + tuple(k for k, v in _INI_NUMBERS)
 _DEFAULT_NAME = 'openciv4'
 _BAD = '\\/:*?"<>|'
 
@@ -255,7 +257,7 @@ def _read(path, which, others=False):
 					_profile['nosound'][parts[1]] = value == '1'
 				elif parts[0] in ('graphic', 'player'):
 					_profile[parts[0]][int(parts[1])] = value == '1'
-				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _TOGGLES:
+				elif parts[0] in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves', 'macKeys') + _TOGGLES:
 					_profile[parts[0]] = value == '1'
 				elif parts[0] in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 					_profile[parts[0]] = int(value)
@@ -312,7 +314,7 @@ def _lines():
 	lines = []
 	for key in ('name', 'speakers', 'musicPath'):
 		lines.append('%s=%s' % (key, _profile[key]))
-	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves') + _TOGGLES:
+	for key in ('clock', 'hours24', 'voice', 'wasdPan', 'autoEndTurn', 'edgeScroll', 'cityOneClick', 'keepAttacker', 'quickEnemyMoves', 'macKeys') + _TOGGLES:
 		lines.append('%s=%d' % (key, 1 if _profile[key] else 0))
 	for key in ('graphicsLevel', 'renderQuality', 'globeView', 'movieQuality', 'mainMenu', 'antiAliasing', 'uiScale', 'captureVolume', 'playbackVolume'):
 		lines.append('%s=%d' % (key, _profile[key]))
@@ -345,6 +347,10 @@ def _applyGraphics():
 		oc4host.set_city_one_click(_profile['cityOneClick'])
 		oc4host.set_keep_attacker(_profile['keepAttacker'])
 		oc4host.set_quick_enemy_moves(_profile['quickEnemyMoves'])
+	except Exception:
+		pass
+	try:
+		oc4host.set_mac_keys(_profile['macKeys']) # (on its own: a host without one of the above still gets it)
 	except Exception:
 		pass
 
@@ -531,6 +537,44 @@ def _quickEnemyMovesOn():
 		return bool(oc4host.quick_enemy_moves())
 	except Exception:
 		return _profile['quickEnemyMoves']
+
+
+# Mac keys (openciv4's own option, on by default on macOS): the game's keys macOS takes first or a Mac
+# keyboard has not, moved to keys a Mac sends (src/render/KeyMap.h). Its tab, Mac keys, shows only on
+# macOS: the check box, and those keys with what to press instead.
+MAC_KEYS_FORM = 'Oc4MacKeysForm'
+MAC_KEYS_CHECKBOX = 'Oc4MacKeysCheckBox'
+# (the game's key, what it does, what to press on a Mac, and why; True: only with the option on)
+MAC_KEYS = (
+	(u'F11', u'globe view', u'Cmd+Shift+G', u'macOS has F11 for Show Desktop', True),
+	(u'Ctrl+Left / Right', u'turn the camera', u'Cmd+Left / Right', u'macOS has them for Spaces', True),
+	(u'Ctrl+key', u'save, World Builder, ...', u'Cmd or Ctrl', u'Cmd+Q, H and M stay macOS\'s', True),
+	(u'Insert', u'select the city', u'Cmd+I', u'A Mac has no Insert key', True),
+	(u'Numpad 8 2 4 6', u'move the units', u'Option+arrows', u'No diagonals', True),
+	(u'F1 ... F12', u'advisors, Civilopedia', u'Fn+F1 ... F12', u'Without Fn: the media keys', False),
+	(u'Alt+key', u'go to all, BUG\'s dot map, ...', u'Option+key', u'', False),
+	(u'Home / End', u'next / previous city', u'Fn+Left / Fn+Right', u'', False),
+	(u'Delete', u'delete the unit', u'Fn+Delete', u'Delete alone is Backspace: cancel orders', False),
+	(u'/ and \\', u'cycle workers, last unit', u'their US places', u'Danish: - and \'', False),
+)
+
+
+def handleMacKeysClicked(args):
+	on = bool(args[0])
+	_profile['macKeys'] = on
+	_save()
+	try:
+		oc4host.set_mac_keys(on)
+	except Exception:
+		pass
+	return 1
+
+
+def _macKeysOn():
+	try:
+		return bool(oc4host.mac_keys())
+	except Exception:
+		return _profile['macKeys']
 
 
 # CivilizationIV.ini's settings (see _INI_FLAGS): check boxes and number boxes on the OpenCiv4 tab.
@@ -1069,6 +1113,27 @@ class CyGTabCtrl(object):
 			u'units move about twice as fast. The camera still goes to each unit and stays a moment after it arrives. '
 			u'The original has no such option: its Quick Moves speeds up only your own units.')
 		self._attachIniOptions(parent)
+		if sys.platform == 'darwin':
+			self._attachMacKeysTab()
+
+	def _attachMacKeysTab(self):
+		"""The option Mac keys and the keys macOS takes or a Mac has not (MAC_KEYS)."""
+		self.attachTabItem(MAC_KEYS_FORM, u'Mac keys')
+		self.attachVBox(MAC_KEYS_FORM, 'Oc4MacVBox')
+		parent = 'Oc4MacPanel'
+		self.attachPanel('Oc4MacVBox', parent)
+		self.setStyle(parent, 'Panel_Tan15_Style')
+		self.setLayoutFlag(parent, 'LAYOUT_SIZE_HEXPANDING')
+		self.setLayoutFlag(parent, 'LAYOUT_SIZE_VEXPANDING')
+		self.attachCheckBox(parent, MAC_KEYS_CHECKBOX, u'Mac keys: the keys macOS takes first, on keys a Mac sends', 'oc4options',
+			'handleMacKeysClicked', MAC_KEYS_CHECKBOX, _macKeysOn())
+		self.setToolTip(MAC_KEYS_CHECKBOX, u'On, the keys marked * below work as shown, and Cmd is Ctrl too (the others are how a Mac sends the game\'s keys). Off, as in the '
+			u'original game: Cmd does nothing, F11 and Ctrl+Left / Right do not reach the game while macOS has them.')
+		self.attachHSeparator(parent, 'Oc4MacSeparator')
+		for i, (key, does, mac, why, remapped) in enumerate(MAC_KEYS):
+			self.attachLabel(parent, 'Oc4MacKey%d' % i, u'%s%s (%s): %s%s' % (u'* ' if remapped else u'', key, does, mac, u'. ' + why if why else u''))
+		self.attachHSeparator(parent, 'Oc4MacSeparator2')
+		self.attachLabel(parent, 'Oc4MacNote', u'* Only with Mac keys on. The others are how a Mac sends the game\'s keys.')
 
 	def _attachIniOptions(self, parent):
 		"""CivilizationIV.ini's settings the original sets only in its ini (see _INI_FLAGS)."""

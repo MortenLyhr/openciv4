@@ -44,12 +44,19 @@ class Host(Anything):
 		self.states = [0] * 64
 		self.player = {} # (the active player's options, as sendPlayerOption sets them)
 		self.cityOneClick = False
+		self.macKeys = sys.platform == 'darwin' # (Utility's default)
 
 	def set_city_one_click(self, on):
 		self.cityOneClick = bool(on)
 
 	def city_one_click(self):
 		return self.cityOneClick
+
+	def set_mac_keys(self, on):
+		self.macKeys = bool(on)
+
+	def mac_keys(self):
+		return self.macKeys
 
 	def profile_path(self):
 		return self.path
@@ -156,13 +163,27 @@ def main():
 		check(profile.getPlayerOption(2) and not profile.getPlayerOption(6), "no profile: the XML's defaults")
 		check(host.states[:NUM] == [0] * NUM, "no profile: the host has none chosen")
 
-		# The screen's tabs: the game's four, then OpenCiv4's with its four options.
+		# The screen's tabs: the game's four, then OpenCiv4's with its options (and on macOS Mac keys).
+		mac = sys.platform == 'darwin'
 		ctrl = optionsScreen(options)
-		check([label for form, label in ctrl._tabs] == ['Game', 'Graphics', 'Audio', 'Other', 'OpenCiv4'], "tabs: %s" % [l for f, l in ctrl._tabs])
+		check([label for form, label in ctrl._tabs] == ['Game', 'Graphics', 'Audio', 'Other', 'OpenCiv4'] + (['Mac keys'] if mac else []),
+			"tabs: %s" % [l for f, l in ctrl._tabs])
 		oc4 = [n.name for n in ctrl._nodes.values() if n.kind == 'checkbox' and n.name.startswith('Oc4')]
 		check(sorted(oc4) == sorted([options.WASD_PAN_CHECKBOX, options.AUTO_END_TURN_CHECKBOX, options.EDGE_SCROLL_CHECKBOX, options.CITY_ONE_CLICK_CHECKBOX,
 			options.KEEP_ATTACKER_CHECKBOX, options.NO_TECH_SPLASH_CHECKBOX, options.NO_EVENT_MESSAGES_CHECKBOX, options.OPENCIV4_AUTOSAVES_CHECKBOX,
-			options.QUICK_ENEMY_MOVES_CHECKBOX]), "OpenCiv4's options: %s" % oc4)
+			options.QUICK_ENEMY_MOVES_CHECKBOX] + ([options.MAC_KEYS_CHECKBOX] if mac else [])), "OpenCiv4's options: %s" % oc4)
+		if mac:
+			# Mac keys: on by default on macOS, its keys listed (only the ones macOS takes or a Mac has not), kept when off.
+			keys = [n for n in ctrl._byName['Oc4MacPanel'].children if n.kind == 'label' and n.name.startswith('Oc4MacKey')]
+			check(len(keys) == len(options.MAC_KEYS) and any('F11' in n.text and 'Cmd+Shift+G' in n.text for n in keys), "Mac keys listed: %d" % len(keys))
+			check(ctrl._byName[options.MAC_KEYS_CHECKBOX].value is True and host.macKeys, "Mac keys: on by default on macOS")
+			click(options, ctrl, options.MAC_KEYS_CHECKBOX)
+			check(not host.macKeys and 'macKeys=0' in profileLines(folder), "Mac keys: off, kept")
+			host, options = start(folder)
+			check(not host.macKeys, "Mac keys: off after a restart")
+			click(options, optionsScreen(options), options.MAC_KEYS_CHECKBOX)
+			check(host.macKeys and 'macKeys=1' in profileLines(folder), "Mac keys: on again")
+			ctrl = optionsScreen(options)
 		game = [n.name for n in ctrl._byName['GamePanelCenter'].children]
 		check(game == ['GameOptionCheckBox_2', 'GameOptionCheckBox_6', 'LangHBox'], "the Game tab has only the game's: %s" % game)
 

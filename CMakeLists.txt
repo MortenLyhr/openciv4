@@ -373,6 +373,12 @@ target_link_libraries(wasd_pan_test PRIVATE oc4_options)
 add_test(NAME wasd_pan COMMAND wasd_pan_test)
 set_target_properties(wasd_pan_test PROPERTIES FOLDER "tests")
 
+add_executable(key_map_test tests/key_map_test.cpp)
+target_include_directories(key_map_test PRIVATE src)
+target_link_libraries(key_map_test PRIVATE oc4_options)
+add_test(NAME key_map COMMAND key_map_test)
+set_target_properties(key_map_test PROPERTIES FOLDER "tests")
+
 add_executable(edge_scroll_test tests/edge_scroll_test.cpp)
 target_include_directories(edge_scroll_test PRIVATE src)
 add_test(NAME edge_scroll COMMAND edge_scroll_test)

@@ -271,6 +271,9 @@ namespace oc4::host
 		// The other civilizations' shown moves at about half the time (OpenCiv4's own option, off).
 		bool quickEnemyMoves() const { return m_quickEnemyMoves; }
 		void setQuickEnemyMoves(bool on) { m_quickEnemyMoves = on; }
+		// The option Mac keys (render/KeyMap.h; the options' Mac keys tab): on by default on macOS.
+		bool macKeys() const { return m_macKeys; }
+		void setMacKeys(bool on) { m_macKeys = on; }
 		// The mouse at the window's edge scrolls the map (render/EdgeScroll.h; on unless the profile
 		// says off, or --no-edge-scroll / a scripted run for the session until the player chooses).
 		bool edgeScroll() const { return m_edgeScroll.on(); }
@@ -465,6 +468,11 @@ namespace oc4::host
 		bool m_wasdPan = false, m_forcedWasdPan = false;
 		bool m_autoEndTurn = false, m_forcedAutoEndTurn = false;
 		bool m_quickEnemyMoves = false;
+#ifdef __APPLE__
+		bool m_macKeys = true;
+#else
+		bool m_macKeys = false;
+#endif
 		render::EdgeScrollOption m_edgeScroll;
 		bool m_keepAttacker = false;
 		std::array<std::atomic<int8_t>, 64> m_graphicOptions{}; // 0 the XML's default, 1 off, 2 on (set by the window's thread, read by the game's)

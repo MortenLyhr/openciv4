@@ -17,6 +17,7 @@
 #include "render/Renderer.h"
 #include "render/Cursor.h"
 #include "render/Input.h"
+#include "render/KeyMap.h"
 #include "media/Movie.h"
 
 #include <SDL3/SDL_dialog.h>
@@ -1215,10 +1216,11 @@ namespace oc4::render
 			overlay->quad(ix, iy, { 1, 1, 1 }, 1);
 		}
 
-		void onKey(unsigned k)
+		void onKey(unsigned k) { onKey(k, heldModifiers()); }
+		void onKey(unsigned k, Modifiers held)
 		{
 			auto& o = view->options;
-			const auto [shift, ctrl, alt] = heldModifiers();
+			const auto [shift, ctrl, alt] = held;
 			// A popup takes the keys (Esc closes it, Enter is its OK).
 			if (popup.active() && !ctrl)
 			{
@@ -1506,7 +1508,8 @@ namespace oc4::render
 			Vec3 move{};
 			// (once the keyboard chooses in a menu or a popup, the arrows are its, not the map's)
 			// (with Ctrl they turn the camera: the game's CONTROL_ISOMETRIC_CAMERA_LEFT/RIGHT)
-			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose() && !held(key::Control);
+			// (with the option Mac keys, Option+arrows move the units, the numpad's: KeyMap.h)
+			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose() && !held(key::Control) && !(macKeys() && held(key::Menu));
 			if (arrows && held(key::Up))
 				move += forward;
 			if (arrows && held(key::Down))
@@ -2568,9 +2571,15 @@ namespace oc4::render
 			switch (e.type)
 			{
 			case SDL_EVENT_KEY_DOWN:
-				// (Alt+F4 closes, through SDL's close request)
-				if (const unsigned k = keyOfSdl(e.key.key))
-					onKey(k);
+				// (Alt+F4 closes, through SDL's close request; the option Mac keys moves the keys macOS
+				// takes or a Mac has not to ones it sends, KeyMap.h)
+				if (const unsigned k = keyOfSdl(e.key.key, int(e.key.scancode)))
+				{
+					const SDL_Keymod mod = e.key.mod;
+					const Chord pressed{ k, (mod & SDL_KMOD_SHIFT) != 0, (mod & SDL_KMOD_CTRL) != 0, (mod & SDL_KMOD_ALT) != 0 };
+					if (const auto c = macKey(pressed, (mod & SDL_KMOD_GUI) != 0, macKeys()))
+						onKey(c->key, { c->shift, c->ctrl, c->alt });
+				}
 				break;
 			case SDL_EVENT_TEXT_INPUT: // (typed into a popup's edit box, or a screen's)
 				if (popup.active())
