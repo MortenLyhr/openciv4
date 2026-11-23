@@ -506,11 +506,17 @@ def _item(screen, ctrl, item, k, parent, cx, cy):
 	"""One item: its button (on the highlight when chosen), its help as the original's palette
 	shows it under the mouse: the game's help of what it places, else its name as a link."""
 	general = _cpe.WidgetTypes.WIDGET_GENERAL
-	if item[4]:
+	# (the player mode's Technologies: a tech the player knows framed in yellow, as the original's,
+	# seen in Wine; an image check box that is on, as the tool buttons' chosen one)
+	known = item[4] and ctrl.kind == 'player' and ctrl.active == 2
+	if item[4] and not known:
 		screen.attachPanelAt(parent, _add('OC4WBSel%d' % k), u'', u'', False, False, _cpe.PanelStyles.PANEL_STYLE_HUD_HELP, cx - 2, cy - 2, _CELL - 1, _CELL - 1,
 			general, -1, -1)
 	name = 'OC4WBItem%d' % k
-	if item[2]:
+	if known and item[2]:
+		screen.addCheckBoxGFCAt(parent, _add(name, ('item', ctrl, item)), item[2], u'', cx, cy, _ICON, _ICON, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_LABEL)
+		screen.setState(name, True)
+	elif item[2]:
 		screen.setImageButtonAt(_add(name, ('item', ctrl, item)), parent, item[2], cx, cy, _ICON, _ICON, general, -1, -1)
 	else:
 		screen.setTextAt(_add(name, ('item', ctrl, item)), parent, item[3][:6], 0, cx, cy + 8, -0.3, _cpe.FontTypes.SMALL_FONT, general, -1, -1)
