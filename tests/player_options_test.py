@@ -64,6 +64,28 @@ class Host(Anything):
 		return self.states[i]
 
 
+class OlderHost(Host):
+	"""A host without the call for one of OpenCiv4's options (#148's has no city one click: it comes
+	with the city double click); it records what the other options got."""
+
+	def __init__(self, path):
+		Host.__init__(self, path)
+		self.got = {}
+
+	def __getattribute__(self, name):
+		if name in ('set_city_one_click', 'city_one_click'):
+			raise AttributeError(name)
+		if name in ('set_keep_attacker', 'set_quick_enemy_moves', 'set_edge_scroll'):
+			got = object.__getattribute__(self, 'got')
+			return lambda on: got.__setitem__(name, bool(on))
+		return Host.__getattribute__(self, name)
+
+	def __getattr__(self, name):
+		if name in ('set_city_one_click', 'city_one_click'):
+			raise AttributeError(name)
+		return Host.__getattr__(self, name)
+
+
 class Info(object):
 	def __init__(self, i):
 		self.i = i
@@ -91,9 +113,9 @@ def cpe(host):
 	return m
 
 
-def start(folder):
+def start(folder, hostClass=Host):
 	"""The program starting: a new host, oc4options loaded afresh (it reads the profile)."""
-	host = Host(os.path.join(folder, 'profile.ini'))
+	host = hostClass(os.path.join(folder, 'profile.ini'))
 	sys.modules['oc4host'] = host
 	sys.modules['CvPythonExtensions'] = cpe(host)
 	screens = Anything('oc4screens')
@@ -222,6 +244,13 @@ def main():
 		click(options, optionsScreen(options), 'GameOptionCheckBox_2')
 		host, options = start(folder)
 		check(not options._UserProfile().getPlayerOption(2), "after that, off is kept")
+
+		# A host without one option's call: the options after it still reach the host at the start.
+		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
+			f.write('name=openciv4\nedgeScroll=0\ncityOneClick=1\nkeepAttacker=1\nquickEnemyMoves=1\n')
+		host, options = start(folder, OlderHost)
+		check(host.got == {'set_edge_scroll': False, 'set_keep_attacker': True, 'set_quick_enemy_moves': True},
+			"a host without set_city_one_click still gets the rest: %s" % host.got)
 	finally:
 		shutil.rmtree(folder, ignore_errors=True)
 
