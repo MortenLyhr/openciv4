@@ -582,6 +582,33 @@ def _applyFieldOfView():
 		pass
 
 
+# The OpenCiv4 tab's options: its check boxes with their profile keys, then its number boxes'
+# (Oc4Edit<key>), which Restore Defaults on that tab sets back to a new profile's.
+_OC4_TAB_CHECKBOXES = ((WASD_PAN_CHECKBOX, 'wasdPan'), (AUTO_END_TURN_CHECKBOX, 'autoEndTurn'), (EDGE_SCROLL_CHECKBOX, 'edgeScroll'),
+	(CITY_ONE_CLICK_CHECKBOX, 'cityOneClick'), (KEEP_ATTACKER_CHECKBOX, 'keepAttacker'), (QUICK_ENEMY_MOVES_CHECKBOX, 'quickEnemyMoves'),
+	(NO_TECH_SPLASH_CHECKBOX, 'noTechSplash'), (NO_EVENT_MESSAGES_CHECKBOX, 'noEventMessages'), (OPENCIV4_AUTOSAVES_CHECKBOX, 'openciv4AutoSaves'))
+
+
+def handleOc4Reset(args):
+	"""Restore Defaults on the OpenCiv4 tab: OpenCiv4's options as a new profile has them, as the
+	game's button does for its own tab's (CvOptionsScreenCallbackInterface: resetOptions, refresh,
+	saveProfile); the other tabs' are kept."""
+	fresh = _fresh()
+	for name, key in _OC4_TAB_CHECKBOXES:
+		_profile[key] = fresh[key]
+	for key, default in _INI_NUMBERS:
+		_profile[key] = fresh[key]
+	_save()
+	_applyGraphics()
+	ctrl = _state['ctrl']
+	if ctrl is not None:
+		for name, key in _OC4_TAB_CHECKBOXES:
+			ctrl.setValue(name, bool(_profile[key]))
+		for key, default in _INI_NUMBERS:
+			ctrl.setText('Oc4Edit' + key, str(_profile[key]))
+	return 1
+
+
 def handleIniFlagClicked(args):
 	"""One of the ini's check boxes (its argument the profile's key)."""
 	_profile[str(args[1])] = bool(args[0])
@@ -964,6 +991,17 @@ class _Node(object):
 _state = {'ctrl': None, 'dirty': False, 'scrolling': 0}
 
 
+def _translate(key, fallback):
+	"""The game's text for a key (CyTranslator), or the fallback without one."""
+	try:
+		text = _cpe.CyTranslator().getText(key, ())
+		if text and text != key:
+			return text
+	except Exception:
+		pass
+	return fallback
+
+
 def _text(s):
 	try:
 		return oc4screens._text(s)
@@ -1041,8 +1079,13 @@ class CyGTabCtrl(object):
 		wasdPan, autoEndTurn, edgeScroll, cityOneClick, keepAttacker)."""
 		self.attachTabItem(OC4_FORM, u'OpenCiv4')
 		self.attachVBox(OC4_FORM, 'Oc4VBox')
+		# (as the game's tabs: the options in a scroll panel, then a line and Restore Defaults and Exit)
+		self.attachScrollPanel('Oc4VBox', 'Oc4Scroll')
+		self.setLayoutFlag('Oc4Scroll', 'LAYOUT_SIZE_HEXPANDING')
+		self.setLayoutFlag('Oc4Scroll', 'LAYOUT_SIZE_VEXPANDING')
+		self._attachLowerButtons('Oc4VBox', 'Oc4', 'handleOc4Reset')
 		parent = 'Oc4Panel'
-		self.attachPanel('Oc4VBox', parent)
+		self.attachPanel('Oc4Scroll', parent)
 		self.setStyle(parent, 'Panel_Tan15_Style')
 		self.setLayoutFlag(parent, 'LAYOUT_SIZE_HEXPANDING')
 		self.setLayoutFlag(parent, 'LAYOUT_SIZE_VEXPANDING')
@@ -1075,6 +1118,20 @@ class CyGTabCtrl(object):
 			u'units move about twice as fast. The camera still goes to each unit and stays a moment after it arrives. '
 			u'The original has no such option: its Quick Moves speeds up only your own units.')
 		self._attachIniOptions(parent)
+
+	def _attachLowerButtons(self, vbox, prefix, reset):
+		"""A tab's foot as the game's tabs have it (CvOptionsScreen.py): a line, then Restore Defaults
+		(oc4options' reset) and Exit (the game's own handleExitButtonInput) centred under it."""
+		self.attachHSeparator(vbox, prefix + 'ExitSeparator')
+		row = prefix + 'LowerHBox'
+		self.attachHBox(vbox, row)
+		self.setLayoutFlag(row, 'LAYOUT_HCENTER')
+		self.attachButton(row, prefix + 'OptionsResetButton', _translate('TXT_KEY_OPTIONS_RESET', u'Restore Defaults'),
+			'oc4options', reset, prefix + 'OptionsResetButton')
+		name = prefix + 'OptionsExitButton'
+		self.attachButton(row, name, _translate('TXT_KEY_PEDIA_SCREEN_EXIT', u'Exit'),
+			'CvOptionsScreenCallbackInterface', 'handleExitButtonInput', name)
+		self.setLayoutFlag(name, 'LAYOUT_HCENTER')
 
 	def _attachIniOptions(self, parent):
 		"""CivilizationIV.ini's settings the original sets only in its ini (see _INI_FLAGS)."""
@@ -1205,6 +1262,14 @@ class CyGTabCtrl(object):
 		n = self._byName.get(str(name))
 		if n is not None:
 			n.text = _text(text)
+			if n.kind == 'edit':
+				# (the box as shown too: a redraw keeps what was typed into it)
+				try:
+					w = _screen()._s.get('OptW%d' % n.id)
+					if w is not None:
+						w.text = n.text
+				except Exception:
+					pass
 			_schedule()
 
 	def getText(self, name):
