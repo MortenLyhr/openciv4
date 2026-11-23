@@ -909,22 +909,29 @@ namespace
 		// (AutoSaves.h, the options' OpenCiv4 tab); a scripted game is not.
 		if (opt.viewSeconds <= 0)
 			utility.engine().onAutoSave = [&session, &game, &engine = utility.engine()](bool initial) {
-				const host::AutoSaveSettings how = engine.autoSave;
+				const host::AutoSaveSettings how = engine.autoSave.get();
 				const int turn = game.getGameTurn();
 				if (!host::autoSaveDue(how, turn, initial))
 					return;
+				// (no Documents folder: no autosave, rather than one beside the working directory)
+				const fs::path documents = documentsFolder();
+				if (documents.empty())
+				{
+					std::printf("  autosave skipped: no Documents folder\n");
+					return;
+				}
 				const auto save = [&](const fs::path& folder, const fs::path& path) {
 					fs::create_directories(folder);
 					session.saveGame(path);
-					std::printf("  autosaved turn %d: %s\n", turn, path.string().c_str());
+					std::printf("  autosaved turn %d: %s\n", turn, utf8Path(path).c_str());
 				};
 				try
 				{
 					if (how.openciv4)
 					{
 						// (Documents\My Games\openciv4\Saves\auto; the active civilization and the
-						// game's map seed in the name, every 25th turn kept for good)
-						const fs::path folder = documentsFolder() / L"My Games" / L"openciv4" / L"Saves" / L"auto";
+						// game's map seed in the name, one save in 25 turns kept for good)
+						const fs::path folder = documents / L"My Games" / L"openciv4" / L"Saves" / L"auto";
 						std::wstring civ;
 						if (const PlayerTypes active = game.getActivePlayer(); active != NO_PLAYER)
 							for (const wchar_t c : std::wstring(GC.getInitCore().getCivShortDesc(active).GetCString()))
@@ -932,11 +939,11 @@ namespace
 						const std::wstring stem = std::format(L"AutoSave_{}_{:08X}", civ, GC.getInitCore().getMapRandSeed());
 						const fs::path path = folder / host::openciv4AutoSaveName(stem, how, turn);
 						save(folder, path);
-						if (turn % 25 == 0)
+						if (host::openciv4KeepsForGood(how, turn))
 							fs::copy_file(path, folder / std::format(L"{}_turn{}.CivBeyondSwordSave", stem, turn), fs::copy_options::overwrite_existing);
 						return;
 					}
-					const fs::path folder = documentsFolder() / L"My Games" / L"Beyond the Sword" / L"Saves" / L"single" / L"auto";
+					const fs::path folder = documents / L"My Games" / L"Beyond the Sword" / L"Saves" / L"single" / L"auto";
 					// (the year through the scripts' CyGame: the game core does not export getGameTurnYear)
 					int year;
 					{

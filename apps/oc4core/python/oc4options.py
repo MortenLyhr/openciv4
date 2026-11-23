@@ -1078,10 +1078,10 @@ class CyGTabCtrl(object):
 				('autoSavesKept', u'Keep', u'autosaves',
 					u'The oldest autosaves beyond this many are deleted (the ini\'s MaxAutoSaves, 5).')):
 			self._attachNumber(parent, key, before, after, tip)
-		self.attachCheckBox(parent, OPENCIV4_AUTOSAVES_CHECKBOX, u'OpenCiv4\'s autosaves: each game its own, every 25th turn kept',
+		self.attachCheckBox(parent, OPENCIV4_AUTOSAVES_CHECKBOX, u'OpenCiv4\'s autosaves: each game its own, one in 25 turns kept',
 			'oc4options', 'handleIniFlagClicked', 'openciv4AutoSaves', _profile['openciv4AutoSaves'])
 		self.setToolTip(OPENCIV4_AUTOSAVES_CHECKBOX, u'Autosaves go to My Games\\openciv4\\Saves\\auto, named by the civilization '
-			u'and the map, the kept ones in turn, and every 25th turn\'s is kept for good. Autosave every 1 turn and keep 10 '
+			u'and the map, the kept ones in turn, and one save in each 25 turns is kept for good. Autosave every 1 turn and keep 10 '
 			u'is how OpenCiv4 saved before.')
 		for key, before, after, tip in (
 				('fieldOfView', u'Field of view', u'degrees (0: the game\'s, 42)',

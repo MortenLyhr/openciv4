@@ -42,6 +42,16 @@ int main()
 	check(openciv4AutoSaveName(L"AutoSave_Rome_1", { 1, 10, true }, 23) == L"AutoSave_Rome_1_3.CivBeyondSwordSave", "openciv4's, slot 3");
 	check(openciv4AutoSaveName(L"AutoSave_Rome_1", { 4, 5, true }, 24) == L"AutoSave_Rome_1_1.CivBeyondSwordSave", "openciv4's, every 4th, 5 kept");
 
+	// openciv4's own kept for good: one save in each 25 turns, whatever the interval.
+	check(openciv4KeepsForGood({ 1, 10, true }, 25) && !openciv4KeepsForGood({ 1, 10, true }, 24) && !openciv4KeepsForGood({ 1, 10, true }, 26),
+		"every turn: turn 25 kept");
+	check(openciv4KeepsForGood({ 5, 5, true }, 50) && !openciv4KeepsForGood({ 5, 5, true }, 45) && !openciv4KeepsForGood({ 5, 5, true }, 55),
+		"every 5th: turn 50 kept");
+	check(openciv4KeepsForGood({ 4, 5, true }, 28) && !openciv4KeepsForGood({ 4, 5, true }, 24) && !openciv4KeepsForGood({ 4, 5, true }, 32)
+			&& openciv4KeepsForGood({ 4, 5, true }, 52) && openciv4KeepsForGood({ 4, 5, true }, 100),
+		"every 4th: 28, 52, 76, 100 kept (the first after each 25th)");
+	check(!openciv4KeepsForGood({ 4, 5, true }, 0), "not the game's first turn");
+
 	// The oldest AutoSave_<year> beyond the kept go; the initial save and other files stay (as seen:
 	// with 3 kept, the 4th AutoSave_<year> takes the oldest, AutoSave_Initial_ stays).
 	const fs::path folder = fs::temp_directory_path() / "oc4_auto_saves_test";
