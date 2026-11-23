@@ -379,6 +379,11 @@ namespace
 	// The game's code (FInputDevice::KB_..., as its hotkeys have it) of a Windows key; -1 none.
 	unsigned scriptedKey(char c)
 	{
+		// ("%1" ... "%9", "%0", "%=": F1 ... F10, F12, the advisors' keys)
+		if (c >= '1' && c <= '9')
+			return render::key::F1 + unsigned(c - '1');
+		if (c == '0' || c == '=')
+			return render::key::F1 + (c == '0' ? 9u : 11u);
 		switch (c)
 		{
 		case 'u': return render::key::Up;
@@ -452,6 +457,29 @@ namespace
 
 	// Of the game's controls, those the host can do: all but the multiplayer game's (chat,
 	// pings, its administration) and the map's signs.
+	// The controls that open a screen of the game's: the advisors, the Civilopedia, Victory, Info.
+	bool screenControl(int control)
+	{
+		switch (control)
+		{
+		case CONTROL_DOMESTIC_SCREEN:
+		case CONTROL_FINANCIAL_SCREEN:
+		case CONTROL_CIVICS_SCREEN:
+		case CONTROL_FOREIGN_SCREEN:
+		case CONTROL_MILITARY_SCREEN:
+		case CONTROL_TECH_CHOOSER:
+		case CONTROL_RELIGION_SCREEN:
+		case CONTROL_CORPORATION_SCREEN:
+		case CONTROL_ESPIONAGE_SCREEN:
+		case CONTROL_VICTORY_SCREEN:
+		case CONTROL_INFO:
+		case CONTROL_CIVILOPEDIA:
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	bool playableControl(int control)
 	{
 		switch (control)
@@ -761,7 +789,40 @@ namespace
 		};
 		// A key: the action it is the hotkey of that can be done now (the highest priority of
 		// them); Esc leaves the interface mode, the city screen or the screen on top.
+		// The action a key is the hotkey of that can be done now (the highest priority of them), -1
+		// none; only the screens' (the advisors, the Civilopedia) when asked.
+		const auto hotkeyAction = [&](const render::MapWindow::KeyPress& k, int code, bool screensOnly) {
+			int best = -1, bestPriority = 0;
+			utility.setModifierKeys(k.shift, k.ctrl, k.alt);
+			for (int i = 0; code >= 0 && i < GC.getNumActionInfos(); ++i)
+			{
+				const CvActionInfo& a = GC.getActionInfo(i);
+				if (screensOnly && !screenControl(a.getControlType()))
+					continue;
+				const bool first = a.getHotKeyVal() == code && a.isShiftDown() == k.shift && a.isCtrlDown() == k.ctrl && a.isAltDown() == k.alt;
+				const bool second = a.getHotKeyValAlt() == code && a.isShiftDownAlt() == k.shift && a.isCtrlDownAlt() == k.ctrl && a.isAltDownAlt() == k.alt;
+				const int priority = first ? a.getHotKeyPriority() : a.getHotKeyPriorityAlt();
+				if ((first || second) && (best < 0 || priority > bestPriority) && usable(i))
+				{
+					best = i;
+					bestPriority = priority;
+				}
+			}
+			utility.setModifierKeys(false, false, false);
+			return best;
+		};
 		const auto press = [&](const render::MapWindow::KeyPress& k) {
+			// In a talk the advisors' and the Civilopedia's keys still open them, over it, as the
+			// original's do (seen in Wine: F1, F5, F6, F8, F9, F12 from an AI's talk); the talk
+			// stays under them and has its keys back when they close.
+			if (utility.diplomacy().active() && k.key != render::key::Escape && k.key != render::key::Return)
+				if (const int a = hotkeyAction(k, gameKey(k.key), true); a >= 0)
+				{
+					if (log)
+						std::printf("  key %u: screen action %d in a talk\n", k.key, a);
+					act(a, k.shift, k.ctrl, k.alt);
+					return;
+				}
 			if (screens.diploKey(k.key))
 				return;
 			if (k.key == render::key::Escape)
@@ -804,21 +865,7 @@ namespace
 					}
 					return;
 				}
-			int best = -1, bestPriority = 0;
-			utility.setModifierKeys(k.shift, k.ctrl, k.alt);
-			for (int i = 0; code >= 0 && i < GC.getNumActionInfos(); ++i)
-			{
-				const CvActionInfo& a = GC.getActionInfo(i);
-				const bool first = a.getHotKeyVal() == code && a.isShiftDown() == k.shift && a.isCtrlDown() == k.ctrl && a.isAltDown() == k.alt;
-				const bool second = a.getHotKeyValAlt() == code && a.isShiftDownAlt() == k.shift && a.isCtrlDownAlt() == k.ctrl && a.isAltDownAlt() == k.alt;
-				const int priority = first ? a.getHotKeyPriority() : a.getHotKeyPriorityAlt();
-				if ((first || second) && (best < 0 || priority > bestPriority) && usable(i))
-				{
-					best = i;
-					bestPriority = priority;
-				}
-			}
-			utility.setModifierKeys(false, false, false);
+			const int best = hotkeyAction(k, code, false);
 			if (log)
 				std::printf("  key %u%s%s%s: action %d %s\n", k.key, k.shift ? "+shift" : "", k.ctrl ? "+ctrl" : "", k.alt ? "+alt" : "", best,
 					best >= 0 ? host::gameText(GC.getActionInfo(best).getDescription()).c_str() : "(none)");
