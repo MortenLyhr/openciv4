@@ -2834,7 +2834,7 @@ class CyEngine(object):
 
 	# (the Alt forms: a colour by its name, at the alpha given, which stands in for the colour's own,
 	# as the original's: BUG's dot map draws a city not yet given a colour in COLOR_CLEAR, white of
-	# alpha 0, at alpha 1, and the Wine game shows it white, full (backlog #68))
+	# alpha 0, at alpha 1, and the Wine game shows it white, full)
 	def addColoredPlotAlt(self, iX, iY, ePlotStyle, eLayer, szColor, fAlpha):
 		c = _namedColor(szColor)
 		if c is not None:

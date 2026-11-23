@@ -749,8 +749,8 @@ def widgetClicked(widget, iData1, iData2):
 
 def widgetHelp(widget, iData1, iData2):
 	"""The help the original shows for the WorldBuilder's own buttons (WIDGET_WB_...); u'' for any
-	other widget. Each was seen in the running original under Wine (2026-11-22: every button hovered)
-	and is the game's text that says exactly that. Where two keys say the same in English (Save,
+	other widget. Each was seen in the running original under Wine (every button hovered) and is the
+	game's text that says exactly that. Where two keys say the same in English (Save,
 	Load, Player Mode, Map Mode) the one named for the button or its action is used; the screen
 	can't tell them apart."""
 	W = _cpe.WidgetTypes

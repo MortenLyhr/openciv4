@@ -1449,7 +1449,7 @@ namespace
 			// bHighlightPlot: Python's pick plot, ping, sign, the air missions), in the game core's
 			// colour for it (CvGame::getNewHighlightPlot, getPlotHighlightColor: green; dark grey where
 			// the units can't go; none where it isn't known or the script can't pick it), as the
-			// WorldBuilder's brush (Wine: BUG's dot map editor, a green plot under the mouse, backlog #68).
+			// WorldBuilder's brush (Wine: BUG's dot map editor, a green plot under the mouse).
 			// Asked again only when the mode or the plot changes (pick plot asks the scripts).
 			if (ui.worldBuilder())
 				highlighted = { -2, -2, -2 }; // (the WorldBuilder's brush is drawn in that layer meanwhile)
@@ -1692,7 +1692,7 @@ namespace
 				pathHead && pathHead->getOwner() == me);
 			// None while a script picks a plot (BUG's dot map editor, whose right button takes a city
 			// away): there the original shows no way to it, neither with the button held nor for a
-			// press begun in that mode and still held after the mode ends (backlog #68).
+			// press begun in that mode and still held after the mode ends.
 			std::optional<std::pair<int, int>> pointed = playing ? window.pathTarget() : std::nullopt;
 			if (!pointed)
 				pickPress = false;
