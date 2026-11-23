@@ -228,6 +228,7 @@ namespace oc4::render
 		MapWindow::PlotMarks plotMarks;
 		std::array<std::wstring, 3> yieldSymbols;
 		bool pathing = false;     // the right button held while playing: the way to the plot under the mouse
+		bool pathCancelled = false; // ... let go of with Esc: the button's release is no order
 		bool goingTo = false;     // the go-to mode (G) while playing: the same, without the button
 		MapWindow::PathView path; // that way, as the host found it
 		std::vector<uint8_t> screenPixels;
@@ -1264,6 +1265,14 @@ namespace oc4::render
 			}
 			if (k != key::Shift && k != key::Control && k != key::Menu)
 				++inputs;
+			// Esc with the right button held: the way shown is let go, and the button's release orders nothing (as the original's).
+			if (k == key::Escape && pathing)
+			{
+				pathing = false;
+				pathCancelled = true;
+				path = {};
+				return;
+			}
 			if (uiTakesKeys && !ctrl && !alt && uiKey(k, shift))
 				return;
 			// (W A S D panning: the press is the map's, not the game's hotkey)
@@ -1350,6 +1359,7 @@ namespace oc4::render
 				downX = x;
 				downY = y;
 				downLeft = left;
+				pathCancelled = false;
 			}
 			// On a popup: its buttons (the map around it still pans).
 			if (down && popup.contains(x, y))
@@ -1415,6 +1425,12 @@ namespace oc4::render
 				return;
 			}
 			// The right button held while playing shows the way there; let go, the units go there.
+			if (!down && std::exchange(pathCancelled, false))
+			{
+				SDL_CaptureMouse(false);
+				panning = orbiting = minimapDrag = false;
+				return;
+			}
 			if (!down && std::exchange(pathing, false))
 			{
 				SDL_CaptureMouse(false);
@@ -2910,6 +2926,14 @@ namespace oc4::render
 		for (int i = 1; i <= steps; ++i)
 			m->onMouseMove(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps);
 		m->onButton(true, false, x1, y1);
+	}
+
+	void MapWindow::mouseMove(int x, int y) { m->onMouseMove(x, y); }
+
+	void MapWindow::mouseButton(int x, int y, bool left, bool down)
+	{
+		m->onMouseMove(x, y);
+		m->onButton(left && down, down, x, y); // (as SDL's: a button let go says not which)
 	}
 
 	std::optional<MapWindow::PlotClick> MapWindow::clickAt(int x, int y, bool right) const
