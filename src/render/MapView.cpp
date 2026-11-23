@@ -3600,8 +3600,10 @@ float4 PSWater(WaterOut i) : SV_Target
 
 		// The plots' yield symbols as the original's (Art/Interface/Symbols/*.nif, from
 		// CIV4YieldInfos.xml's SymbolPaths): a quad facing the camera in the scene, its bottom on
-		// the ground, so a unit standing in front of it hides it and it stands over a city's low
-		// houses (seen in Wine). Its size: CvPlot::getSymbolSize (on the map 0.8, a worked plot's
+		// the ground. Seen in Wine: a unit standing in front of it hides it, but it stands whole
+		// over a hill's slope, a mine, a cottage and a city's houses. So it is drawn after the
+		// ground, the improvements and the cities, over them, and before the units, which then
+		// cover it. Its size: CvPlot::getSymbolSize (on the map 0.8, a worked plot's
 		// 1.2; on a city's screen, its plots' 1.2 and a worked one's 1.6) times 0.26 of a plot (seen
 		// in Wine at zooms 0.15 to 0.45: a coin 0.105 of a plot times that size); its opacity
 		// CvPlot::updateSymbolDisplay's. Each yield's stacks side by side, centred on the plot.
@@ -3626,7 +3628,11 @@ float4 PSWater(WaterOut i) : SV_Target
 			quad.material.lightingMode = 0;
 			quad.material.emissive = { 1, 1, 1 };
 			quad.material.alphaBlend = true;
+			// (over the ground, the improvements and the cities, under the units: drawn when
+			// it comes, between them; see drawYieldSymbols)
+			quad.material.zTest = false;
 			quad.material.zWrite = false;
+			quad.material.blendUnsorted = true;
 			quad.material.cull = scene::Cull::None;
 			m.items.push_back(std::move(quad));
 			return m;
@@ -3645,6 +3651,9 @@ float4 PSWater(WaterOut i) : SV_Target
 			const Vec3 right{ -toward.y, toward.x, 0 }, up = camera.up(), facing = cross(up, right);
 			const int stackSize = std::max(map.maxYieldStack, 1);
 			std::vector<scene::Material> material(1);
+			// (the cities' and improvements' blended pieces first, which would otherwise come at
+			// the frame's end, over the symbols)
+			renderer.drawBlendedNow();
 			for (int y = 0; y < map.height; ++y)
 				for (int x = 0; x < map.width; ++x)
 				{
@@ -5033,6 +5042,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		if (options.cities)
 			m->drawInstances(m->cities, frustum);
 		m->drawGroundCircles(frustum);
+		m->drawYieldSymbols(frustum, options);
 		m->figureHits.clear();
 		m->flagDraws.clear();
 		if (options.units && !options.cityScreen)
@@ -5047,7 +5057,6 @@ float4 PSWater(WaterOut i) : SV_Target
 				m->renderer.camera().distance < 22 * m->S())
 				m->drawHealthBars(frustum);
 		}
-		m->drawYieldSymbols(frustum, options);
 		m->drawBursts(frustum);
 		// (the particles of what is no longer drawn: gone)
 		std::erase_if(m->effects, [&](const auto& e) { return e.second.drawn != m->effectFrame; });
