@@ -820,7 +820,8 @@ namespace oc4::render
 				o.line(x0, y0, x1, y1, it.hasColor ? it.color : kEdge, it.alpha, 1);
 				break;
 			case Kind::Separator:
-				o.line(x0, y0 + h / 2, x1, y0 + h / 2, kEdge, 0.5f);
+				// (nothing: the theme's GSeparator is transparent with no inner fill,
+				// Civ4Theme_Separator.thm; it only takes its room in the flow)
 				break;
 			case Kind::Slider:
 			{
