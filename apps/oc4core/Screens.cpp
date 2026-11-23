@@ -1261,7 +1261,7 @@ if _walls:
 			m_hovered = hovered;
 			const std::string text = hovered >= 0 && size_t(hovered) < m_items.size() ? help(m_items[size_t(hovered)]) : std::string();
 			float x = 7, y = float(height) - 172, w = 300;
-			bool right = true, down = false, framed = false;
+			bool right = true, down = false, framed = false, floating = false;
 			try
 			{
 				if (py::object area = py::module_::import("oc4screens").attr("helpArea")(); !area.is_none())
@@ -1276,13 +1276,14 @@ if _walls:
 					right = t[4].cast<bool>();
 					down = t[5].cast<bool>();
 					framed = t.size() > 6 && t[6].cast<bool>();
+					floating = t.size() > 7 && t[7].cast<bool>();
 				}
 			}
 			catch (py::error_already_set& e)
 			{
 				printPythonError(e);
 			}
-			window.setUiHelp(text, x, y, w, right, down, framed);
+			window.setUiHelp(text, x, y, w, right, down, framed, floating);
 		}
 	}
 

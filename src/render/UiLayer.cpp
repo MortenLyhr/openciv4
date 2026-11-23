@@ -332,8 +332,24 @@ namespace oc4::render
 			w = std::min(w * 1.5f, widest);
 			h = o.richHeight(text, w - 2 * inX, m_sizes[2], false) + 2 * inY;
 		}
-		const float x = m_helpRight ? m_helpX : m_helpX - w;
-		const float y = std::clamp(m_helpDown ? m_helpY : m_helpY - h, 0.0f, std::max(sh - h, 0.0f));
+		float x = m_helpRight ? m_helpX : m_helpX - w;
+		float y = std::clamp(m_helpDown ? m_helpY : m_helpY - h, 0.0f, std::max(sh - h, 0.0f));
+		if (m_helpFloating && m_hover >= 0 && size_t(m_hover) < m_items.size())
+		{
+			// A floating help area (the city screen's, setHelpTextArea's bFloating): the help beside
+			// the widget under the mouse, as the original (BUG + BULL in Wine, Roma's screen at
+			// 1600x900): its right edge at the widget's left (on its right when there is no room),
+			// its top at the widget's top, or its bottom at the widget's bottom when it would run off
+			// the screen below (the hurry buttons); as wide as its widest line, wrapped at 240.
+			const Item& it = m_items[size_t(m_hover)];
+			const float ix0 = std::min(it.x0, it.x1), ix1 = std::max(it.x0, it.x1);
+			constexpr float kWrap = 240;
+			w = std::min(std::ceil(o.richWidth(text, m_sizes[2], false)) + 2 * inX + 2, kWrap + 2 * inX);
+			h = o.richHeight(text, w - 2 * inX, m_sizes[2], false) + 2 * inY;
+			x = ix0 - w >= 0 ? ix0 - w : std::min(ix1, std::max(sw - w, 0.0f));
+			y = it.y0 + h <= sh ? it.y0 : it.y1 - h;
+			y = std::clamp(y, 0.0f, std::max(sh - h, 0.0f));
+		}
 		if (see)
 			Theme::draw(o, m_hudHelp, x, y, x + w, y + h);
 		else if (!m_tooltip.empty())
@@ -399,9 +415,10 @@ namespace oc4::render
 		return MapWindow::UiClick{ pressed, m_pressedRight, shift, ctrl, alt };
 	}
 
-	void UiLayer::setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed)
+	void UiLayer::setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed, bool floating)
 	{
 		m_helpFramed = framed;
+		m_helpFloating = floating;
 		m_help = widen(text);
 		m_helpX = x;
 		m_helpY = y;
