@@ -472,7 +472,8 @@ def _draw():
 			# (the cut one's skin narrowed to the room left, its end showing; its word cut there)
 			screen.addPanel(tab, u'', u'', True, False, x, _WY + _TAB_Y, cut - x if part else tw, _TAB_H, _cpe.PanelStyles.PANEL_STYLE_MAIN)
 			_style(screen, tab, _TAB_SKIN + ('Select' if i == ctrl.active else 'Default'))
-			word = _add('OC4WBTab%d' % i, ('tab', ctrl, i))
+			# (clicking the cut one also moves the strip a tab on, as seen in Wine: Terrains then whole)
+			word = _add('OC4WBTab%d' % i, ('tab', ctrl, i, part))
 			screen.setText(word, 'Background', dark + name + u'</color>', 1 << 2, x + tw / 2, _WY + _TAB_Y + 4, -0.3,
 				_cpe.FontTypes.GAME_FONT, general, -1, -1)
 			w = screen._s.get(word)
@@ -686,6 +687,8 @@ def handleInput(argsList):
 	what = choice[0]
 	if what == 'tab':
 		choice[1].active = choice[2]
+		if len(choice) > 3 and choice[3]:
+			choice[1].tabFirst = getattr(choice[1], 'tabFirst', 0) + 1
 	elif what == 'tabscroll':
 		ctrl = choice[1]
 		ctrl.tabFirst = max(0, min(choice[3] - 1, getattr(ctrl, 'tabFirst', 0) + choice[2]))
