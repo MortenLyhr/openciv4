@@ -870,6 +870,11 @@ namespace
 			if (!k.shift && !k.ctrl && !k.alt && k.key > render::key::Numpad0 && k.key <= render::key::Numpad9 && k.key != render::key::Numpad0 + 5)
 				if (CvUnit* unit = ui.getHeadSelectedUnit())
 				{
+					// (not under the city screen: the units stay selected there but take no orders, as
+					// the original's, seen in Wine; the game core refuses their actions while a city is
+					// selected, CvGame::canHandleAction, and this move is the host's own)
+					if (ui.isCityScreenUp())
+						return;
 					const int d = int(k.key - render::key::Numpad0) - 1;
 					if (CvPlot* to = plotXY(unit->getX(), unit->getY(), d % 3 - 1, d / 3 - 1))
 					{
