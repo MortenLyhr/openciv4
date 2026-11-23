@@ -85,6 +85,7 @@ namespace oc4::render
 		m_items.clear();
 		m_answered = false;
 		m_scroll = 0;
+		m_gripHeld = false;
 		m_hover = -1;
 		m_helpItem = -2;
 		m_hoverOk = false;
@@ -202,6 +203,21 @@ namespace oc4::render
 		m_scroll = std::clamp(m_scroll - float(delta) / 120 * 3 * 36, 0.0f, m_scrollMax);
 		hover(x, y);
 		return true;
+	}
+
+	bool PopupPanel::pressGrip(int x, int y)
+	{
+		m_gripHeld = active() && m_scrollMax > 0 && m_grip.contains(float(x), float(y));
+		m_gripGrab = float(y) - m_grip.y0;
+		return m_gripHeld;
+	}
+
+	void PopupPanel::dragGrip(int y)
+	{
+		const float room = (m_track.y1 - m_track.y0) - (m_grip.y1 - m_grip.y0);
+		if (!m_gripHeld || room <= 0)
+			return;
+		m_scroll = std::clamp((float(y) - m_gripGrab - m_track.y0) / room, 0.0f, 1.0f) * m_scrollMax;
 	}
 
 	bool PopupPanel::key(unsigned virtualKey)
@@ -531,22 +547,27 @@ namespace oc4::render
 			o.frame(r.x0 - 2, r.y0 + 1, r.x1 + 2, r.y1 - 1, kKeyChoice, 1, 3, 2);
 		}
 		o.unclip();
+		m_grip = {};
 		if (m_scrollMax > 0)
 		{
 			// Where the list is: the theme's scroll bar, as the original's (14 wide, 20 from the
 			// window's right edge, from 21 under its top to 21 over its bottom when the title scrolls
-			// too); else a thin grip.
-			const float track = m_list.y1 - m_list.y0, thumb = std::max(24.0f, track * listHeight / scrolled);
-			const float ty = m_list.y0 + (track - thumb) * (m_scroll / m_scrollMax);
-			if (!m_shaft.empty() && !m_gripSkin.empty())
+			// too); else a thin grip. (its grip can be taken a few pixels either side)
+			const float thumb = std::max(24.0f, (m_list.y1 - m_list.y0) * listHeight / scrolled);
+			const bool themed = !m_shaft.empty() && !m_gripSkin.empty();
+			m_track = themed ? Rect{ x0 + w - 34, titleScrolls ? y0 + 21 : m_list.y0, x0 + w - 20, titleScrolls ? y0 + h - 21 : m_list.y1 } : m_list;
+			const float ty = m_track.y0 + (m_track.y1 - m_track.y0 - thumb) * (m_scroll / m_scrollMax);
+			if (themed)
 			{
-				const float bx0 = x0 + w - 34, bx1 = bx0 + 14, by0 = titleScrolls ? y0 + 21 : m_list.y0, by1 = titleScrolls ? y0 + h - 21 : m_list.y1;
-				const float gy = by0 + (by1 - by0 - thumb) * (m_scroll / m_scrollMax);
-				Theme::draw(o, m_shaft, bx0, by0, bx1, by1);
-				Theme::draw(o, m_gripSkin, bx0, gy, bx1, gy + thumb);
+				Theme::draw(o, m_shaft, m_track.x0, m_track.y0, m_track.x1, m_track.y1);
+				Theme::draw(o, m_gripSkin, m_track.x0, ty, m_track.x1, ty + thumb);
+				m_grip = { m_track.x0 - 3, ty, m_track.x1 + 3, ty + thumb };
 			}
 			else
-				o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, 0.6f, 2);
+			{
+				o.rect(x0 + w - kPadX - 4, ty, x0 + w - kPadX + 1, ty + thumb, kEdge, m_gripHeld ? 0.9f : 0.6f, 2);
+				m_grip = { x0 + w - kPadX - 8, ty, x0 + w - kPadX + 5, ty + thumb };
+			}
 		}
 		m_ok = {};
 		if (m_view->okButton)

@@ -36,6 +36,11 @@ namespace oc4::render
 		void release();
 		bool click(int x, int y);
 		bool wheel(int x, int y, int delta, bool anywhere = false); // (anywhere: not only over it)
+		// Its list's grip pressed (whether it was): the list follows the mouse until let go.
+		bool pressGrip(int x, int y);
+		void dragGrip(int y);
+		void releaseGrip() { m_gripHeld = false; }
+		bool gripHeld() const { return m_gripHeld; }
 		bool key(unsigned virtualKey);
 		// A character typed (WM_CHAR): into the edit box that has the focus.
 		bool character(wchar_t c);
@@ -75,6 +80,10 @@ namespace oc4::render
 		std::optional<MapWindow::PopupAnswer> m_answer;
 		bool m_answered = false;
 		float m_scroll = 0, m_scrollMax = 0;
+		Rect m_grip;               // where the list's grip was drawn (empty: none)
+		Rect m_track;              // the bar it moves along
+		bool m_gripHeld = false;
+		float m_gripGrab = 0;      // (where on it it was taken)
 		Rect m_panel, m_list, m_ok;
 		std::vector<Rect> m_items; // where each item was drawn (empty: not shown)
 		int m_hover = -1, m_helpItem = -2;

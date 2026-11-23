@@ -1332,6 +1332,10 @@ namespace oc4::render
 				if (const int item = ui.pressed(); item >= 0)
 					uiClicks.push_back({ item, false, false, false, false, x, y });
 			}
+			else if (ui.barHeld())
+				ui.holdBar(x, y);
+			else if (popup.gripHeld())
+				popup.dragGrip(y);
 			else if (minimapDrag)
 				jumpFromMinimap(std::clamp(x, int(minimapRect[0]), int(minimapRect[2])), std::clamp(y, int(minimapRect[1]), int(minimapRect[3])));
 			else if (panning)
@@ -1370,9 +1374,21 @@ namespace oc4::render
 			// On a popup: its buttons.
 			if (down && popup.contains(x, y))
 			{
-				downOnPopup = true;
-				if (left)
-					popup.press(x, y); // (a choice shows pressed while held)
+				// (its list's grip follows the mouse while held)
+				if (left && popup.pressGrip(x, y))
+					SDL_CaptureMouse(true);
+				else
+				{
+					downOnPopup = true;
+					if (left)
+						popup.press(x, y); // (a choice shows pressed while held)
+				}
+				return;
+			}
+			if (!down && popup.gripHeld())
+			{
+				SDL_CaptureMouse(false);
+				popup.releaseGrip();
 				return;
 			}
 			// Elsewhere a popup leaves nothing a press, as the original's (Wine, the plain game and BUG
@@ -1404,11 +1420,19 @@ namespace oc4::render
 					SDL_CaptureMouse(true);
 					uiClicks.push_back({ item, false, mods.shift, mods.ctrl, mods.alt, x, y });
 				}
+				// (a scroll bar is held: its arrows and shaft step, its grip follows the mouse, until let go)
+				else if (left)
+				{
+					ui.pressBar(x, y);
+					if (ui.barHeld())
+						SDL_CaptureMouse(true);
+				}
 				return;
 			}
-			if (!down && std::exchange(sliderDrag, false))
+			if (!down && (std::exchange(sliderDrag, false) || ui.barHeld()))
 			{
 				SDL_CaptureMouse(false);
+				ui.releaseBar();
 				downOnUi = false;
 				ui.release(x, y, mods.shift, mods.ctrl, mods.alt);
 				return;
@@ -2657,6 +2681,8 @@ namespace oc4::render
 				frameStats.add(std::chrono::duration<double>(now - lastFrame).count());
 			lastFrame = now;
 			clock += dt;
+			if (ui.barHeld())
+				ui.holdBar(mouseX, mouseY);
 			handlePad(dt);
 			handleHeldKeys(dt);
 			easeZoom(dt);
@@ -3128,7 +3154,13 @@ namespace oc4::render
 	void MapWindow::pressKey(unsigned key) { m->onKey(key); }
 	MapWindow::UiDisplay MapWindow::uiDisplay() const { return { m->renderer->width(), m->renderer->height(), m->windowDensity() }; }
 	bool MapWindow::uiActive() const { return m->ui.active(); }
-	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks() { return std::exchange(m->uiClicks, {}); }
+	std::vector<MapWindow::UiClick> MapWindow::takeUiClicks()
+	{
+		// (a scroll bar held: its latest, for the item as the screens have it now)
+		if (const auto bar = m->ui.takeBarClick())
+			m->uiClicks.push_back(*bar);
+		return std::exchange(m->uiClicks, {});
+	}
 	void MapWindow::chooseFolder(const std::string& start)
 	{
 		SDL_ShowOpenFolderDialog(

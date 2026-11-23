@@ -34,7 +34,7 @@ _logged = set()
 _citySelection = [()]   # the cities a table's rows selected last
 _drop = [None, 0]       # the pull down whose list is open (file id, name), and how far that list is scrolled
 _areas = []             # what scrolls under the mouse, back to front: (x0, y0, x1, y1, file id, name, step, down, sideways)
-_bars = {}              # the scroll bars: (file id, name, part) -> (x0, y0, x1, y1)
+_bars = {}              # the scroll bars: (file id, name, part) -> (x0, y0, x1, y1, a line's step)
 _sliders = {}           # the sliders: (file id, name) -> (x0, y0, x1, y1)
 _dropRects = {}         # where each pull down is: (file id, name) -> (x0, y0, x1, y1)
 _editFocus = [None]     # the edit box typed into: (file id, name), or None
@@ -1535,6 +1535,7 @@ def version():
 _LIST_ROW = 20   # a step of the wheel in what scrolls by pixels
 _LIST_GAP = 2    # between a multi list's buttons, across and down (the original's)
 _DROP_ROW = 22   # a row of a pull down's open list
+_DROP_BAR = 18   # its scroll bar's width (the combo box's: a 7 wide rail in the middle)
 _heights = {}    # (text, width, font) -> how high it is
 _tableRows = {}  # a table style -> (least row height, room above, room below a cell's content, header height), the theme's
 
@@ -1622,12 +1623,12 @@ def _scrolls(w, x0, y0, x1, y1, fileId, step, out, sideways=False):
 		_areas.append((x0, y0, x1, y1, fileId, w.name, step, down, across))
 	# (over what the widget holds: nearer than anything of its screen)
 	if down:
-		_bars[(fileId, w.name, -2)] = (x1 - _BAR, y0, x1, y1)
+		_bars[(fileId, w.name, -2)] = (x1 - _BAR, y0, x1, y1, step)
 		out.append(((fileId, w.name, -2), 'scrollbar', x1 - _BAR, y0, x1, y1, None, '', u'', '', '', 0, 0, False, True, 0, None, -1, -1, -1, False,
 			-1000.0, w.seq, float(offset) / w.extent, float(high) / w.extent))
 	if across:
 		right = x1 - (_BAR if down else 0)
-		_bars[(fileId, w.name, -3)] = (x0, y1 - _BAR, right, y1)
+		_bars[(fileId, w.name, -3)] = (x0, y1 - _BAR, right, y1, step)
 		out.append(((fileId, w.name, -3), 'scrollbar', x0, y1 - _BAR, right, y1, None, '', u'', '', '', 0, 0, False, True, 0, None, -1, -1, -1, False,
 			-1000.0, w.seq, float(hoffset) / w.hextent, float(wide) / w.hextent))
 
@@ -2029,11 +2030,12 @@ def _dropList(out):
 		_drop[0] = None
 		return
 	n = len(w.items)
-	width = r[2] - r[0]
-	for item in w.items:
-		width = max(width, _textWidth(item[0]) + 24)
 	below, above = _resolution[1] - r[3] - 12, r[1] - 12
 	rows = min(n, max(1, max(below, above) // _DROP_ROW))
+	bar = _DROP_BAR if n > rows else 0
+	width = r[2] - r[0]
+	for item in w.items:
+		width = max(width, _textWidth(item[0]) + 24 + bar)
 	height = rows * _DROP_ROW + 8
 	y0 = r[3] if below >= height or below >= above else r[1] - height
 	x0 = max(0, min(r[0], _resolution[0] - width))
@@ -2047,9 +2049,14 @@ def _dropList(out):
 	cy = top - _drop[1]
 	for i, item in enumerate(w.items):
 		if cy + _DROP_ROW > top and cy < box[3]:
-			out.append(((s.id, w.name, i), 'option', x0, cy, x0 + width, cy + _DROP_ROW, box, '__option', item[0], '', '', 2, _FONT_LEFT, i == w.selected,
-				True, 0, None, -1, -1, -1, False, 0, 0))
+			out.append(((s.id, w.name, i), 'option', x0, cy, x0 + width - bar, cy + _DROP_ROW, box, '__option', item[0], '', '', 2, _FONT_LEFT,
+				i == w.selected, True, 0, None, -1, -1, -1, False, 0, 0))
 		cy += _DROP_ROW
+	if bar:
+		# (its scroll bar, the combo box's own: inside the list on its right, as the original's)
+		whole = n * _DROP_ROW
+		out.append(((s.id, w.name, -4), 'scrollbar', x0 + width - bar, top, x0 + width, box[3], None, '__combo', u'', '', '', 0, 0, False, True, 0,
+			None, -1, -1, -1, False, 0, 0, float(_drop[1]) / whole, float(rows * _DROP_ROW) / whole))
 
 
 _widths = {}    # (text, font) -> how wide it is
@@ -2123,6 +2130,40 @@ def sliderTo(fileId, name, x, y):
 		return None
 	_set(w, 'value', stop)
 	return stop
+
+
+def scrollBar(fileId, name, part, to, step):
+	"""A scroll bar held: what it scrolls is put where its grip was dragged (`to`, how far along,
+	as a part of all it holds), or moved a line (`step` -1 back, 1 on: its arrows) or a page (-2,
+	2: its shaft). Part -4 is the open pull down list's bar; any other closes that list."""
+	fileId, name, part, to, step = int(fileId), _str(name), int(part), float(to), int(step)
+	if part == -4:
+		s = _screens.get(fileId)
+		w = s.get(name) if s is not None else None
+		r = [a for a in _areas if a[4] == -1]
+		if w is None or _drop[0] != (fileId, name) or not r:
+			return
+		shown = r[0][3] - r[0][1]
+		whole = len(w.items) * _DROP_ROW
+		at = to * whole if to >= 0 else _drop[1] + (_DROP_ROW if abs(step) == 1 else shown) * (1 if step > 0 else -1)
+		_drop[1] = int(max(0, min(whole - shown, round(at))))
+		_changed()
+		return
+	closeDropdown()
+	r = _bars.get((fileId, name, part))
+	s = _screens.get(fileId)
+	w = s.get(name) if s is not None else None
+	if r is None or w is None:
+		return
+	if part == -2:
+		key, shown, whole = 'offset', r[3] - r[1], w.extent
+	else:
+		key, shown, whole = 'hoffset', r[2] - r[0], w.hextent
+	if to >= 0:
+		at = to * whole
+	else:
+		at = getattr(w, key) + (r[4] if abs(step) == 1 else shown) * (1 if step > 0 else -1)
+	_set(w, key, int(max(0, min(whole - shown, round(at)))))
 
 
 def openDropdown(fileId, name):

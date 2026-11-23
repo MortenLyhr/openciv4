@@ -139,14 +139,28 @@ namespace oc4::render
 			// (its sides' fill left out: the list's inner skin is drawn under the whole border here)
 			std::erase_if(m_dropBorder, [](const Theme::Layer& l) { return l.sidesFill && !l.image; });
 			m_dropSelect = m_theme.skin(combo, "GFC_CtrlTheme_Bitmap_Control_ComboBox_Skin_PopupItem_Select");
-			constexpr std::string_view scroll = "GFC_Control_StandardScroll_Style";
-			m_shaft = { m_theme.skin(scroll, "GFC_CtrlTheme_Bitmap_Control_Scroll_Skin_VShaft_Default"),
-				m_theme.skin(scroll, "GFC_CtrlTheme_Bitmap_Control_Scroll_Skin_HShaft_Default") };
-			for (size_t d = 0; d < 2; ++d)
+			// The scroll bars: the standard one (GFC_Control_StandardScroll_Style) and the pull down
+			// list's (the combo box's), each with its arrows, shaft and grip.
+			constexpr std::string_view bs = "GFC_CtrlTheme_Bitmap_Control_Button_Skin_";
+			const auto barSkin = [&](std::string_view style, std::string_view state) { return m_theme.skin(style, std::string(bs) + std::string(state)); };
+			constexpr std::array<std::string_view, 3> states{ "Default", "Rollover", "Press" };
+			for (size_t look = 0; look < 2; ++look)
 			{
-				const std::string_view grip = d == 0 ? "SF_CtrlTheme_Civ4_Control_Scroll_VGripButton_Style" : "SF_CtrlTheme_Civ4_Control_Scroll_HGripButton_Style";
-				m_grip[d] = { m_theme.skin(grip, "GFC_CtrlTheme_Bitmap_Control_Button_Skin_Default"),
-					m_theme.skin(grip, "GFC_CtrlTheme_Bitmap_Control_Button_Skin_Rollover") };
+				BarLook& b = m_bar[look];
+				const std::string prefix = look == 0 ? "SF_CtrlTheme_Civ4_Control_Scroll_" : "SF_CtrlTheme_Civ4_Control_ComboBox_Standard_Scroll_";
+				const std::string_view scroll = look == 0 ? "GFC_Control_StandardScroll_Style" : "SF_CtrlTheme_Civ4_Control_ComboBox_Standard_Scroll_Style";
+				for (size_t d = 0; d < 2; ++d)
+				{
+					const std::string shaft = std::string("GFC_CtrlTheme_Bitmap_Control_Scroll_Skin_") + (d == 0 ? "VShaft_" : "HShaft_");
+					b.shaft[d] = { m_theme.skin(scroll, shaft + "Default"), m_theme.skin(scroll, shaft + "Press") };
+					const std::string grip = prefix + (d == 0 ? "VGrip" : "HGrip") + (look == 0 ? "Button_Style" : "_Style");
+					for (size_t k = 0; k < 3; ++k)
+						b.grip[d][k] = barSkin(grip, states[k]);
+				}
+				constexpr std::array<std::string_view, 4> arrows{ "UpButton", "DownButton", "LeftButton", "RightButton" };
+				for (size_t a = 0; a < 4; ++a)
+					for (size_t k = 0; k < 3; ++k)
+						b.arrow[a][k] = barSkin(prefix + std::string(arrows[a]) + "_Style", states[k]);
 			}
 			constexpr std::string_view slider = "GFC_Control_StandardSlider_Style";
 			for (size_t d = 0; d < 2; ++d)
@@ -175,6 +189,13 @@ namespace oc4::render
 					m_pressedItem = it;
 					break;
 				}
+		}
+		if (m_barClick)
+		{
+			if (m_pressed >= 0)
+				m_barClick->item = m_pressed;
+			else
+				m_barClick.reset();
 		}
 		m_hover = m_mouseX >= 0 ? hit(m_mouseX, m_mouseY) : m_hover < int(m_items.size()) ? m_hover : -1;
 		// (the keyboard's choice: the same item, or what is now nearest it)
@@ -432,6 +453,89 @@ namespace oc4::render
 		if (pressed < 0 || hit(x, y) != pressed || !m_items[size_t(pressed)].enabled)
 			return std::nullopt;
 		return MapWindow::UiClick{ pressed, m_pressedRight, shift, ctrl, alt };
+	}
+
+	UiLayer::BarParts UiLayer::barParts(const Item& it)
+	{
+		// (the standard bar's arrows are as long as it is wide, 16, its grip at least 16; the
+		// pull down list's arrows 22, its grip at least 7: as the original draws them)
+		BarParts p;
+		p.down = it.y1 - it.y0 >= it.x1 - it.x0;
+		p.a0 = p.down ? it.y0 : it.x0;
+		p.a1 = p.down ? it.y1 : it.x1;
+		const bool combo = it.style == "__combo";
+		const float length = p.a1 - p.a0, minGrip = combo ? 7.0f : 16.0f;
+		const float arrow = std::clamp((length - minGrip) / 2, 0.0f, combo ? 22.0f : (p.down ? it.x1 - it.x0 : it.y1 - it.y0));
+		p.t0 = p.a0 + arrow;
+		p.t1 = p.a1 - arrow;
+		const float track = p.t1 - p.t0, shown = std::clamp(it.barPercent, 0.0f, 1.0f);
+		const float grip = std::min(track, std::max(minGrip, track * shown));
+		const float at = shown < 1 ? std::clamp(it.barStart / (1 - shown), 0.0f, 1.0f) : 0.0f;
+		p.g0 = p.t0 + (track - grip) * at;
+		p.g1 = p.g0 + grip;
+		return p;
+	}
+
+	UiLayer::BarPart UiLayer::barPartAt(const Item& it, int x, int y) const
+	{
+		if (!inside(it, x, y))
+			return BarPart::None;
+		const BarParts p = barParts(it);
+		const float a = float(p.down ? y : x);
+		return a < p.t0 ? BarPart::Back : a >= p.t1 ? BarPart::Forward : a < p.g0 ? BarPart::PageBack : a >= p.g1 ? BarPart::PageForward : BarPart::Grip;
+	}
+
+	void UiLayer::pressBar(int x, int y)
+	{
+		m_barPart = BarPart::None;
+		m_barClick.reset();
+		if (m_pressed < 0 || m_pressedRight || m_items[size_t(m_pressed)].kind != Kind::Scrollbar || !m_items[size_t(m_pressed)].enabled)
+			return;
+		const Item& it = m_items[size_t(m_pressed)];
+		m_barPart = barPartAt(it, x, y);
+		if (m_barPart == BarPart::Grip)
+		{
+			const BarParts p = barParts(it);
+			m_barGrab = float(p.down ? y : x) - p.g0;
+			return;
+		}
+		m_barNext = std::chrono::steady_clock::now() + std::chrono::milliseconds(250);
+		barStep(x, y);
+	}
+
+	void UiLayer::barStep(int x, int y)
+	{
+		// (an arrow steps while the mouse is on it; the shaft pages until the grip is under the mouse)
+		if (barPartAt(m_items[size_t(m_pressed)], x, y) != m_barPart)
+			return;
+		m_barClick = MapWindow::UiClick{ m_pressed };
+		m_barClick->barStep = m_barPart == BarPart::Back ? -1 : m_barPart == BarPart::Forward ? 1 : m_barPart == BarPart::PageBack ? -2 : 2;
+	}
+
+	void UiLayer::holdBar(int x, int y)
+	{
+		if (!barHeld() || m_pressed < 0)
+			return;
+		const Item& it = m_items[size_t(m_pressed)];
+		if (m_barPart == BarPart::Grip)
+		{
+			// (the grip's start where the mouse has it, as a part of the way it can go, as a part of
+			// all that is scrolled)
+			const BarParts p = barParts(it);
+			const float room = (p.t1 - p.t0) - (p.g1 - p.g0), shown = std::clamp(it.barPercent, 0.0f, 1.0f);
+			const float at = room > 0 ? std::clamp((float(p.down ? y : x) - m_barGrab - p.t0) / room, 0.0f, 1.0f) : 0.0f;
+			const float to = at * (1 - shown);
+			if (std::abs(to - std::clamp(it.barStart, 0.0f, 1.0f)) < 1e-4f)
+				return;
+			m_barClick = MapWindow::UiClick{ m_pressed };
+			m_barClick->barTo = to;
+			return;
+		}
+		const auto now = std::chrono::steady_clock::now();
+		if (now < m_barNext)
+			return;
+		m_barNext = now + std::chrono::milliseconds(90);
+		barStep(x, y);
 	}
 
 	void UiLayer::setHelp(const std::string& text, float x, float y, float width, bool expandRight, bool expandDown, bool framed, bool fit)
@@ -877,21 +981,44 @@ namespace oc4::render
 				break;
 			case Kind::Scrollbar:
 			{
-				// A scroll bar on the edge of what scrolls: its shaft, and its grip as long as the part
-				// shown and where it is (the theme's look, or a dark track with a light grip).
-				const bool down = h >= w;
-				const size_t d = down ? 0 : 1;
-				const float length = down ? h : w, grip = std::max(20.0f, length * std::clamp(it.barPercent, 0.0f, 1.0f));
-				const float at = std::clamp(it.barStart, 0.0f, 1.0f) * length, from = std::min(at, length - grip);
-				const float gx0 = down ? x0 : x0 + from, gy0 = down ? y0 + from : y0, gx1 = down ? x1 : gx0 + grip, gy1 = down ? gy0 + grip : y1;
-				if (!m_shaft[d].empty())
-					Theme::draw(o, m_shaft[d], x0, y0, x1, y1);
+				// A scroll bar on the edge of what scrolls: its shaft, an arrow at each end, and its
+				// grip as long as the part shown and where it is (the theme's look, or a dark track
+				// with a light grip); pressed, held or under the mouse as the mouse has them.
+				const BarParts p = barParts(it);
+				const size_t d = p.down ? 0 : 1;
+				const BarLook& look = m_bar[it.style == "__combo" ? 1 : 0];
+				const bool held = int(i) == m_pressed && barHeld();
+				const BarPart under = hot && !barHeld() ? barPartAt(it, m_mouseX, m_mouseY) : BarPart::None;
+				const auto along = [&](float a, float b, float& rx0, float& ry0, float& rx1, float& ry1) {
+					rx0 = p.down ? x0 : a, ry0 = p.down ? a : y0, rx1 = p.down ? x1 : b, ry1 = p.down ? b : y1;
+				};
+				const auto state = [&](BarPart part) { return held && m_barPart == part ? 2 : under == part ? 1 : 0; };
+				const auto skin = [](const auto& states, int k) -> const Theme::Skin& {
+					return !states[size_t(k)].empty() ? states[size_t(k)] : states[0];
+				};
+				float rx0, ry0, rx1, ry1;
+				along(p.t0, p.t1, rx0, ry0, rx1, ry1);
+				const bool paging = held && (m_barPart == BarPart::PageBack || m_barPart == BarPart::PageForward);
+				if (!look.shaft[d][0].empty())
+					Theme::draw(o, skin(look.shaft[d], paging ? 1 : 0), rx0, ry0, rx1, ry1);
 				else
 					o.rect(x0, y0, x1, y1, { 0.05f, 0.06f, 0.09f }, 0.6f, 3);
-				if (!m_grip[d][0].empty())
-					Theme::draw(o, m_grip[d][hot && !m_grip[d][1].empty() ? 1 : 0], gx0, gy0, gx1, gy1);
+				for (int end = 0; end < 2 && p.t0 > p.a0; ++end)
+				{
+					const BarPart part = end == 0 ? BarPart::Back : BarPart::Forward;
+					const auto& arrow = look.arrow[d * 2 + size_t(end)];
+					if (end == 0)
+						along(p.a0, p.t0, rx0, ry0, rx1, ry1);
+					else
+						along(p.t1, p.a1, rx0, ry0, rx1, ry1);
+					if (!arrow[0].empty())
+						Theme::draw(o, skin(arrow, state(part)), rx0, ry0, rx1, ry1);
+				}
+				along(p.g0, p.g1, rx0, ry0, rx1, ry1);
+				if (!look.grip[d][0].empty())
+					Theme::draw(o, skin(look.grip[d], state(BarPart::Grip)), rx0, ry0, rx1, ry1);
 				else
-					o.rect(gx0 + 2, gy0 + 2, gx1 - 2, gy1 - 2, hot ? kHot : kEdge, 0.8f, 3);
+					o.rect(rx0 + 2, ry0 + 2, rx1 - 2, ry1 - 2, state(BarPart::Grip) ? kHot : kEdge, 0.8f, 3);
 				break;
 			}
 			case Kind::Flag:
