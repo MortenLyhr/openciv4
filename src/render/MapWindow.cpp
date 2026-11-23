@@ -1681,6 +1681,7 @@ namespace oc4::render
 			// (beyond the map: black as the ground not seen, until the team's map is centred)
 			renderer->beginFrame(camera, view->seenBounds() ? Vec3{ 0, 0, 0 } : Vec3{ 0.05f, 0.07f, 0.10f });
 			view->options.cityScreen = cityView;
+			view->options.yields = cityView || layers.yields;
 			view->draw();
 			renderer->endFrame();
 			syncHeads();
@@ -2127,9 +2128,8 @@ namespace oc4::render
 								const int count = std::min(left, stackSize);
 								const auto& icons = map.yieldIcons[size_t(k)];
 								const ButtonArt::Icon* ic = size_t(count) <= icons.size() ? art.icon(icons[size_t(count - 1)]) : nullptr;
-								if (ic)
-									overlay->image(ic->key, ic->bgra, ic->width, ic->height, 1, gx - size / 2, sy - size / 2, gx + size / 2, sy + size / 2, alpha);
-								else // a mod without stack artwork: overlap its game-font symbols instead
+								// (the symbols themselves are drawn in the scene, MapView::drawYieldSymbols)
+								if (!ic) // a mod without stack artwork: overlap its game-font symbols instead
 									for (int i = 0; i < count; ++i)
 										overlay->richText(yieldSymbols[size_t(k)], gx + (float(i) - float(count - 1) / 2) * size * 0.12f,
 											sy - size * 0.4f + float(i) * size * 0.1f, size * 0.65f, false, { 1, 1, 1 }, alpha, Overlay::Align::Center);

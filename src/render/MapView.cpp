@@ -3598,6 +3598,110 @@ float4 PSWater(WaterOut i) : SV_Target
 			}
 		}
 
+		// The plots' yield symbols as the original's (Art/Interface/Symbols/*.nif, from
+		// CIV4YieldInfos.xml's SymbolPaths): a quad facing the camera in the scene, its bottom on
+		// the ground, so a unit standing in front of it hides it and it stands over a city's low
+		// houses (seen in Wine). Its size: CvPlot::getSymbolSize (on the map 0.8, a worked plot's
+		// 1.2; on a city's screen, its plots' 1.2 and a worked one's 1.6) times 0.26 of a plot (seen
+		// in Wine at zooms 0.15 to 0.45: a coin 0.105 of a plot times that size); its opacity
+		// CvPlot::updateSymbolDisplay's. Each yield's stacks side by side, centred on the plot.
+		struct Symbol { std::unique_ptr<GpuModel> gpu; scene::Material material; };
+		std::unordered_map<std::string, Symbol> symbolGpu;
+		scene::Model symbolModel(const std::string& texture) const
+		{
+			scene::Model m;
+			m.nodes.push_back({ "Symbol" });
+			scene::DrawItem quad;
+			quad.node = 0;
+			// (x across, z up, facing -y; its bottom middle at its origin)
+			for (const auto [x, z, u, v] : { std::array{ -0.5f, 0.0f, 0.0f, 1.0f }, { 0.5f, 0.0f, 1.0f, 1.0f }, { 0.5f, 1.0f, 1.0f, 0.0f }, { -0.5f, 1.0f, 0.0f, 0.0f } })
+			{
+				scene::Vertex vertex{ { x, 0, z }, { 0, -1, 0 } };
+				vertex.uv = { u, v };
+				quad.vertices.push_back(vertex);
+			}
+			quad.indices = { 0, 1, 2, 0, 2, 3 };
+			quad.material.baseTexture = texture;
+			quad.material.baseClamp = scene::TexClamp::ClampClamp;
+			quad.material.lightingMode = 0;
+			quad.material.emissive = { 1, 1, 1 };
+			quad.material.alphaBlend = true;
+			quad.material.zWrite = false;
+			quad.material.cull = scene::Cull::None;
+			m.items.push_back(std::move(quad));
+			return m;
+		}
+
+		void drawYieldSymbols(const Frustum& frustum, const MapView::Options& options)
+		{
+			// (only near the ground: none from 32 plots away, as the original's beyond zoom 0.5)
+			if (!options.yields || renderer.camera().distance > 32 * S())
+				return;
+			const Camera& camera = renderer.camera();
+			const Vec3 eye = camera.eye();
+			Vec3 toward{ eye.x - camera.target.x, eye.y - camera.target.y, 0 };
+			const float length = std::sqrt(toward.x * toward.x + toward.y * toward.y);
+			toward = length > 1e-3f ? toward * (1 / length) : Vec3{ 0, -1, 0 };
+			const Vec3 right{ -toward.y, toward.x, 0 }, up = camera.up(), facing = cross(up, right);
+			const int stackSize = std::max(map.maxYieldStack, 1);
+			std::vector<scene::Material> material(1);
+			for (int y = 0; y < map.height; ++y)
+				for (int x = 0; x < map.width; ++x)
+				{
+					const PlotView& p = map.plots[size_t(x) + size_t(y) * size_t(map.width)];
+					if ((options.cityScreen && !p.cityWorkable) || (fog && !p.revealed))
+						continue;
+					int groups = 0;
+					for (int k = 0; k < 3; ++k)
+						groups += (int(p.yields[k]) + stackSize - 1) / stackSize;
+					if (groups == 0)
+						continue;
+					const float symbol = options.cityScreen ? (p.worked ? 1.6f : 1.2f) : (p.worked ? 1.2f : 0.8f);
+					const float alpha = options.cityScreen ? (p.worked ? 1.0f : 0.8f) : (p.worked ? 0.8f : 0.6f);
+					const float size = 0.26f * S() * symbol, step = size * 0.7f;
+					Vec3 centre{ (float(x) + 0.5f) * S(), (float(y) + 0.5f) * S(), 0 };
+					centre.x += wrapOffset(centre.x);
+					if (!frustum.sphere(centre, S()))
+						continue;
+					float along = -step * float(groups - 1) / 2;
+					for (int k = 0; k < 3; ++k)
+						for (int left = p.yields[k]; left > 0; left -= stackSize, along += step)
+						{
+							const int count = std::min(left, stackSize);
+							const auto& icons = map.yieldIcons[size_t(k)];
+							if (size_t(count) > icons.size() || icons[size_t(count - 1)].empty())
+								continue;
+							const std::string& texture = icons[size_t(count - 1)];
+							auto& sym = symbolGpu[texture];
+							if (!sym.gpu)
+							{
+								const scene::Model m = symbolModel(texture);
+								sym.material = m.items[0].material;
+								sym.gpu = renderer.upload(m, assets, AssetLocation{});
+							}
+							if (!sym.gpu)
+								continue;
+							// (CvPlot::getSymbolOffsetY: 40 of the original's units south of the plot's
+							// middle; the NIF's quad stands 1 unit over the ground, or over the water)
+							Vec3 at = centre + right * along + Vec3{ 0, -40 * S() / 180, 0 };
+							at.z = std::max(ground(at.x, at.y), 0.012f * S()) + S() / 180;
+							Affine place;
+							place.translation = at;
+							for (int r = 0; r < 3; ++r)
+							{
+								place.rotation.m[size_t(r)][0] = (r == 0 ? right.x : r == 1 ? right.y : right.z) * size;
+								place.rotation.m[size_t(r)][1] = r == 0 ? facing.x : r == 1 ? facing.y : facing.z;
+								place.rotation.m[size_t(r)][2] = (r == 0 ? up.x : r == 1 ? up.y : up.z) * size;
+							}
+							material[0] = sym.material;
+							material[0].alpha = alpha;
+							const Affine world[] = { place };
+							const uint8_t visible[] = { 1 };
+							renderer.draw(*sym.gpu, world, visible, material);
+						}
+				}
+		}
+
 		void drawFlags(const Frustum& frustum)
 		{
 			flagDraws.clear();
@@ -4929,6 +5033,7 @@ float4 PSWater(WaterOut i) : SV_Target
 				m->renderer.camera().distance < 22 * m->S())
 				m->drawHealthBars(frustum);
 		}
+		m->drawYieldSymbols(frustum, options);
 		m->drawBursts(frustum);
 		// (the particles of what is no longer drawn: gone)
 		std::erase_if(m->effects, [&](const auto& e) { return e.second.drawn != m->effectFrame; });
