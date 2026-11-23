@@ -31,7 +31,7 @@
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
 // one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window, "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
+// "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -433,6 +433,23 @@ namespace
 		}
 	}
 
+	// The other civilizations' moves shown (Show Enemy Moves / Show Friendly Moves): a group whose
+	// move ends where the player sees it gets a mission timer (CvSelectionGroup::updateMissionTimer,
+	// 4 game updates and one more a plot moved), the camera is told to look at it, and its owner
+	// moves nothing else while it is busy (CvPlayerAI::AI_unitUpdate waits for !hasBusyUnit): one
+	// group at a time, a stack as one. The timer counts game updates, so these run a slice of time
+	// apart while one is on, as the original's engine does; with nothing shown they run flat out.
+	// (Measured in the original under Wine: a game update every 0.26 s, a shown move every 4 updates.)
+	constexpr std::chrono::milliseconds kShownMoveSlice{ 250 };
+	bool shownMoveOn()
+	{
+		for (int p = 0; p < MAX_PLAYERS; ++p)
+			if (const CvPlayerAI& player = CvPlayerAI::getPlayerNonInl(static_cast<PlayerTypes>(p));
+				player.isAlive() && player.isTurnActive() && !player.isHuman() && player.hasBusyUnit())
+				return true;
+		return false;
+	}
+
 	// Of the game's controls, those the host can do: all but the multiplayer game's (chat,
 	// pings, its administration) and the map's signs.
 	bool playableControl(int control)
@@ -449,7 +466,6 @@ namespace
 		case CONTROL_CYCLE_CAMERA_FLYING_MODES:
 		case CONTROL_FLYING_CAMERA:
 		case CONTROL_MOUSE_FLYING_CAMERA:
-		case CONTROL_TOP_DOWN_CAMERA:
 			return false;
 		default:
 			return true;
@@ -540,7 +556,7 @@ namespace
 		const auto hear = [&] {
 			const auto look = window.look();
 			const float closeness = std::clamp((cameraTop - look.distance) / (cameraTop - cameraNearest), 0.0f, 1.0f);
-			sounds.update({ look.x, look.y, look.distance, closeness }, era);
+			sounds.update({ look.x, look.y, look.distance, closeness, look.eyeX, look.eyeY, look.eyeZ }, era);
 			std::vector<std::pair<std::string, float>> lines;
 			// (none over a talk: the leader's face is where they are; the turn log keeps them)
 			if (!utility.diplomacy().active())
@@ -692,6 +708,15 @@ namespace
 			return p && i >= 0 && size_t(i) < popupItems.size() ? capture.popupHelp(*p, popupItems[size_t(i)]) : std::string();
 		});
 		auto last = Clock::now(), captured = last, ticked = last, typed = last;
+		// (the option Keep the camera on a unit after it attacks: the unit, the window's inputs then,
+		// whether the camera went to it after the battle)
+		struct KeptAttacker
+		{
+			IDInfo unit;
+			unsigned inputs = 0;
+			bool looked = false;
+		};
+		std::optional<KeptAttacker> keptAttacker;
 		host::AutoEndTurn autoEndTurn; // (the option: idle turns end by themselves)
 		const auto start = last;
 		long long frames = 0;
@@ -713,6 +738,7 @@ namespace
 		std::pair<const void*, int> pathFrom{};        // (the unit it starts from and its plot: the gamepad's plot cursor shows it all the while)
 		std::tuple<const void*, const void*, int, int> coloredFor{}; // what was selected when the plots were last coloured
 		uint64_t marksShown = ~0ull; // the marks the window has
+		uint64_t cameraShown = 0;     // the game's camera turn and tilt the window has (engine.cameraVersion)
 		uint64_t globeShown = 0;      // ... and the globe's state it shows (engine.globeVersion)
 		int globeTurn = -1;
 		std::vector<render::MapWindow::PlotMarks::Mark> globeMarks;
@@ -826,6 +852,8 @@ namespace
 		// it was and stays live (the camera moves, the figures move), and nothing here touches
 		// the game.
 		host::TurnWorker worker;
+		// (the others' next game update while a move of theirs is shown: shownMoveOn)
+		Clock::time_point nextShownMoveUpdate{};
 		// A game played by hand is saved at each turn's start (Documents\My Games\openciv4\Saves\
 		// auto, ten in turn), as the original does; a scripted one is not.
 		if (opt.viewSeconds <= 0)
@@ -993,6 +1021,26 @@ namespace
 				// city); once the units that moved are done, the next one that waits for orders (the
 				// DLL holds it back with the cycle counter); then whether the turn is over (its "press
 				// Enter", or ending it).
+				// OpenCiv4's option (Keep the camera on a unit after it attacks): the active player's
+				// attacker stays selected, and the camera goes to it when the battle is over, until the
+				// player clicks or types; the next unit waits till then. (Off, as the original: the next unit
+				// is chosen as soon as the battle ends, with Combat Zoom or without.)
+				if (const std::optional<IDInfo> attacker = ui.takeFocusAttacker(); attacker && utility.keepAttacker())
+					keptAttacker = KeptAttacker{ *attacker, window.inputCount(), false };
+				if (keptAttacker)
+				{
+					CvUnit* unit = CvPlayerAI::getPlayerNonInl(keptAttacker->unit.eOwner).getUnit(keptAttacker->unit.iID);
+					if (!utility.keepAttacker() || !unit || window.inputCount() != keptAttacker->inputs || ui.isDiploOrPopupWaiting())
+						keptAttacker.reset();
+					else if (!unit->isFighting() && !keptAttacker->looked)
+					{
+						keptAttacker->looked = true;
+						if (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA"))
+							window.centerOn(unit->getX(), unit->getY());
+						if (!ui.isSelected(unit))
+							ui.selectUnit(unit, true, false, false);
+					}
+				}
 				if (const auto now = Clock::now(); now - ticked > std::chrono::milliseconds(150))
 				{
 					ticked = now;
@@ -1000,7 +1048,12 @@ namespace
 						std::exchange(askedResearch, player.getNumCities()) != player.getNumCities())
 						player.chooseTech();
 					ui.updatePopups(me);
-					if (ui.getCycleSelectionCounter() > 0)
+					// (not while a popup waits, as the game core's own calls: a new city's name is
+					// asked with the camera on the city, not on the next unit; nor while the option keeps
+					// the attacker; nor while a city's screen is up: the next unit would take the
+					// selection and close it, as when the turn's "what to build" popup is answered with
+					// Examine City. It comes once the screen is left, after the question the city asks again.)
+					if (ui.getCycleSelectionCounter() > 0 && !ui.isDiploOrPopupWaiting() && !keptAttacker && !ui.isCityScreenUp())
 					{
 						ui.changeCycleSelectionCounter(-1);
 						if (ui.getCycleSelectionCounter() == 0)
@@ -1216,6 +1269,14 @@ namespace
 						press({ render::key::Escape, false, false, false });
 					else if (std::isalnum(static_cast<unsigned char>(c)) || c == ' ')
 						press({ unsigned(std::toupper(static_cast<unsigned char>(c))), shift, ctrl, alt });
+					else if (c == '%' && n + 1 < script.size())
+					{
+						// ("^%l": an arrow, Return or Tab with Ctrl held, as the game's hotkeys have them:
+						// Ctrl+Left turns the camera)
+						if (const unsigned k = scriptedKey(script[n + 1]))
+							press({ k, shift, ctrl, alt });
+						++n;
+					}
 					script.erase(0, std::min(n + 1, script.size()));
 					changed = true;
 				}
@@ -1330,20 +1391,13 @@ namespace
 						ui.selectGroup(own, click.shift, click.ctrl, click.alt);
 					else
 						ui.clearSelectionList();
+					// (as the original's: the camera goes to the plot clicked, a unit there or not;
+					// a scripted game told where to look keeps looking there)
+					if (opt.lookX < 0 || opt.viewSeconds <= 0)
+						window.centerOn(plot->getX(), plot->getY());
 				}
 				else if (ui.getHeadSelectedUnit())
 				{
-					const render::MapWindow::PathView way = findPath(ui, { plot->getX(), plot->getY() });
-					if (way.reachable && way.points.size() > 1)
-					{
-						std::vector<IDInfo> units;
-						for (CLLNode<IDInfo>* node = ui.headSelectionListNode(); node; node = ui.nextSelectionListNode(node))
-							units.push_back(node->m_data);
-						std::vector<std::pair<int, int>> plots;
-						for (size_t i = 1; i < way.points.size(); ++i)
-							plots.emplace_back(way.points[i].x, way.points[i].y);
-						host::Entities::planMovement(units, plots);
-					}
 					utility.setModifierKeys(click.shift, click.ctrl, click.alt);
 					ui.unitSound(ui.getHeadSelectedUnit(), true); // (the order's: moves have none of the DLL's)
 					game.selectionListMove(plot, click.alt, click.shift, click.ctrl);
@@ -1392,21 +1446,31 @@ namespace
 				ui.setDirty(ColoredPlots_DIRTY_BIT, false);
 				game.updateColoredPlots();
 			}
-			// The selected settler's city radius (the founding border), as the engine draws it.
+			// The selected settler's founding border, as the engine draws it: the plots a city
+			// founded there would claim (its own and the eight next to it: CvCity::init's free
+			// culture), in the player's colour.
 			if (engine.foundingDirty.exchange(false) || selected != coloredFor)
 			{
 				engine.clear(AREA_BORDER_LAYER_FOUNDING_BORDER, true);
 				bool founds = false;
 				for (int i = 0; head && head->getOwner() == me && i < GC.getNumActionInfos() && !founds; ++i)
-					founds = GC.getActionInfo(i).getMissionType() == MISSION_FOUND && game.canHandleAction(i, nullptr, true);
+					// (where it can found now: none next to a city, as in the original)
+					founds = GC.getActionInfo(i).getMissionType() == MISSION_FOUND && game.canHandleAction(i, nullptr, false);
 				if (founds)
-					for (int dy = -2; dy <= 2; ++dy)
-						for (int dx = -2; dx <= 2; ++dx)
-							if (std::abs(dx) + std::abs(dy) < 4) // (the fat cross: no corners)
-								if (const CvPlot* p = GC.getMap().plot(head->getX() + dx, head->getY() + dy))
-									engine.mark({ p->getX(), p->getY(), 1, 1, 1, 0.55f, AREA_BORDER_LAYER_FOUNDING_BORDER, true, false });
+				{
+					const NiColorA& c = GC.getColorInfo(static_cast<ColorTypes>(GC.getPlayerColorInfo(CvPlayerAI::getPlayerNonInl(me).getPlayerColor()).getColorTypePrimary())).getColor();
+					for (int dy = -1; dy <= 1; ++dy)
+						for (int dx = -1; dx <= 1; ++dx)
+							if (const CvPlot* p = GC.getMap().plot(head->getX() + dx, head->getY() + dy))
+								engine.mark({ p->getX(), p->getY(), c.r, c.g, c.b, 0.9f, AREA_BORDER_LAYER_FOUNDING_BORDER, true, false });
+				}
 			}
 			coloredFor = selected;
+			if (const uint64_t c = engine.cameraVersion; c != cameraShown)
+			{
+				cameraShown = c;
+				window.setCameraAngles(engine.baseTurn, engine.basePitch, engine.satellite);
+			}
 			// The globe: its view, and its layer's plots coloured (the game core's colours for the
 			// active player, again each turn).
 			if (const uint64_t g = engine.globeVersion; g != globeShown || (engine.globeLayer >= 0 && game.getGameTurn() != globeTurn))
@@ -1453,8 +1517,10 @@ namespace
 				for (const auto& m : marks)
 				{
 					const auto [x, y] = m.core ? host::windowPlot({ m.x, m.y }) : std::pair{ m.x, m.y };
-					// (the WorldBuilder's plot and brush in the original's area border style)
-					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER);
+					// (the WorldBuilder's plot and brush, and a settler's founding border, in the
+					// original's area border style)
+					const bool hatched = m.border && (m.layer == AREA_BORDER_LAYER_HIGHLIGHT_PLOT || m.layer == AREA_BORDER_LAYER_WORLD_BUILDER ||
+						m.layer == AREA_BORDER_LAYER_FOUNDING_BORDER);
 					shownMarks.marks.push_back({ x, y, m.layer, { m.r, m.g, m.b }, m.a, m.border, false, hatched });
 				}
 				for (const auto& s : signs)
@@ -1519,11 +1585,28 @@ namespace
 			}
 			if (ui.lookAtX >= 0)
 			{
-				// (a scripted game told where to look keeps looking there)
-				if (opt.lookX < 0 || opt.viewSeconds <= 0)
+				// (a scripted game told where to look keeps looking there; development: OC4_FOLLOW_CAMERA=1
+				// lets the game move it, as in play)
+				if (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA"))
 					window.centerOn(ui.lookAtX, ui.lookAtY);
+				if (playLog && !player.isTurnActive())
+					std::printf("  others' move shown: the camera to %d,%d at %.2fs\n", ui.lookAtX, ui.lookAtY,
+						std::chrono::duration<double>(Clock::now() - start).count());
 				ui.lookAtX = ui.lookAtY = -1;
 			}
+			if (ui.lookAtPointX >= 0)
+			{
+				if (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA"))
+				{
+					if (ui.lookAtBattleZoom)
+						window.enterBattleView(ui.lookAtPointX, ui.lookAtPointY, ui.lookAtBattleDirX);
+					else
+						window.centerOnPoint(ui.lookAtPointX, ui.lookAtPointY);
+				}
+				ui.lookAtPointX = ui.lookAtPointY = -1;
+			}
+			if (std::exchange(ui.releaseCamera, false))
+				window.leaveBattleView();
 			const auto now = Clock::now();
 				if (changed || now - captured > std::chrono::milliseconds(200))
 				{
@@ -1570,17 +1653,30 @@ namespace
 			if (!CvPlayerAI::getPlayerNonInl(game.getActivePlayer()).isTurnActive() && game.getGameState() != GAMESTATE_OVER &&
 				!utility.diplomacy().active())
 			{
-				window.setBusy(true);
-				worker.start([&session, &game] {
-					const auto until = Clock::now() + std::chrono::milliseconds(100);
-					do
-						if (host::Entities::battleWait())
-							Sleep(5);
-						else
-							session.update();
-					while (!CvPlayerAI::getPlayerNonInl(game.getActivePlayer()).isTurnActive() && Clock::now() < until &&
-						game.getGameState() != GAMESTATE_OVER);
-				});
+				// (a move shown: the next update a slice after the last, the window live meanwhile)
+				if (Clock::now() >= nextShownMoveUpdate)
+				{
+					window.setBusy(true);
+					worker.start([&session, &game, &nextShownMoveUpdate] {
+						const auto until = Clock::now() + std::chrono::milliseconds(100);
+						do
+							if (host::Entities::battleWait())
+								Sleep(5);
+							else
+							{
+								// (the update that ends a timer too: the next group's move a slice later)
+								const bool wasShown = shownMoveOn();
+								session.update();
+								if (wasShown || shownMoveOn())
+								{
+									nextShownMoveUpdate = Clock::now() + kShownMoveSlice;
+									break;
+								}
+							}
+						while (!CvPlayerAI::getPlayerNonInl(game.getActivePlayer()).isTurnActive() && Clock::now() < until &&
+							game.getGameState() != GAMESTATE_OVER);
+					});
+				}
 			}
 		}
 		// (the game is ours again before anything else looks at it)

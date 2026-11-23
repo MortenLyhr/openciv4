@@ -46,6 +46,13 @@ namespace oc4::render
 		void lookAt(int x, int y, float distanceInPlots = -1);
 		// Moves the camera over the plot, keeping its distance.
 		void centerOn(int x, int y);
+		// The same over a point of the map, in plots (10.5: the middle of the plot 10): a battle's,
+		// between the attacker's plot and the defender's.
+		void centerOnPoint(float x, float y);
+		// Combat Zoom: the camera glides in close over a battle's point (in plots), turned towards the
+		// attack (dirX: its east-west share, -1..1), and back out to where it was at the battle's end.
+		void enterBattleView(float x, float y, float dirX);
+		void leaveBattleView();
 		// The city screen: the camera flies down to look straight down at the city (again for
 		// another city's screen), and back to where it was when the screen closes.
 		void enterCityView(int x, int y);
@@ -192,6 +199,7 @@ namespace oc4::render
 		struct Look
 		{
 			float x = 0, y = 0, distance = 0;
+			float eyeX = 0, eyeY = 0, eyeZ = 0; // where the camera is (plot units, its height too)
 		};
 		Look look() const;
 
@@ -236,6 +244,10 @@ namespace oc4::render
 			// ... or its KFM's clips as layers ("camera=<node>;<event code>:<e|l|o>;...", see
 			// ModelView): the spaceship screen's launch pad.
 			std::string modelLayers;
+			// A player's flag (Flag): its era's flag model and KFM, waving, its cloth the decal
+			// (texture; "opaque:" a white flag's) in the item's colour and this one.
+			std::string flagNif, flagKfm;
+			Color flagSecondary{};
 		};
 		void setUi(std::vector<UiItem> items);
 		// A screen's own minimap (a UiItem::Minimap of style "__screenmap": the military advisor's,
@@ -279,6 +291,10 @@ namespace oc4::render
 		void setFullscreen(bool on);
 		// The globe view: the camera back over the whole map (on), where it was (off).
 		void setGlobeView(bool up);
+		// The game's turn and tilt of the view, in the original's degrees (CyCamera's base turn,
+		// Ctrl+Left/Right; its base pitch, which tilts the view up) and its satellite view (Alt+F:
+		// straight down, north up). The camera glides there.
+		void setCameraAngles(float turnDegrees, float pitchDegrees, bool satellite);
 		void setYieldSymbols(std::array<std::string, 3> symbols);
 		void setWorldBuilder(bool on);
 

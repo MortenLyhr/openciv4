@@ -2,6 +2,7 @@
 
 #include "GameFont.h"
 #include "Interface.h"
+#include "MapCapture.h"
 #include "Utility.h"
 #include "Sounds.h"
 
@@ -280,6 +281,8 @@ namespace oc4::host
 		host.def("set_edge_scroll", [&utility](bool on) { utility.setEdgeScroll(on); });
 		host.def("choose_edge_scroll", [&utility](bool on) { utility.chooseEdgeScroll(on); });
 		host.def("edge_scroll", [&utility] { return utility.edgeScroll(); });
+		host.def("set_keep_attacker", [&utility](bool on) { utility.setKeepAttacker(on); });
+		host.def("keep_attacker", [&utility] { return utility.keepAttacker(); });
 		host.def("ui_size_at", [](int percent) {
 			const float scale = render::uiScaleFor(percent, g_display.density, g_display.width, g_display.height);
 			return std::pair{ render::uiUnits(g_display.width, scale), render::uiUnits(g_display.height, scale) };
@@ -342,6 +345,17 @@ namespace oc4::host
 		});
 		// (CyCamera's looks: a point of the map, as CvPlot::getPoint gives it)
 		host.def("camera_look_at", [&ui](float x, float y) { ui.lookAt(NiPoint3(x, y, 0), CAMERALOOKAT_NORMAL, NiPoint3(0, 0, 0)); });
+		// (CyCamera's base turn and pitch, in degrees: the game's turn and tilt of the view)
+		host.def("camera_base_turn", [&engine] { return float(engine.baseTurn); });
+		host.def("camera_set_base_turn", [&engine](float degrees) { engine.setBaseTurn(degrees); });
+		host.def("camera_move_base_turn", [&engine](float degrees) {
+			if (degrees < 0)
+				engine.MoveBaseTurnLeft(-degrees);
+			else
+				engine.MoveBaseTurnRight(degrees);
+		});
+		host.def("camera_base_pitch", [&engine] { return float(engine.basePitch); });
+		host.def("camera_set_base_pitch", [&engine](float degrees) { engine.setBasePitch(degrees); });
 		host.def("ui_orders", [&ui] {
 			const CvCity* c = ui.getHeadSelectedCity();
 			return c ? c->getNumOrdersQueued() : 0;
@@ -1234,6 +1248,21 @@ if _walls:
 					}
 				}
 				std::sscanf(item.text.c_str(), "%d %d %d", &item.attitude, &item.action, &item.actionSerial);
+				item.text.clear();
+			}
+			if (item.kind == Kind::Flag)
+			{
+				// (the player's: the map's flag model of its era, its colours)
+				const FlagArt flag = flagArt(std::atoi(item.text.c_str()));
+				if (flag.model && flag.model->getNIF())
+				{
+					item.flagNif = flag.model->getNIF();
+					item.flagKfm = flag.model->getKFM() ? flag.model->getKFM() : "";
+					item.texture = (flag.white ? "opaque:" : "") + flag.decal;
+					item.hasColor = true;
+					item.color = flag.primary;
+					item.flagSecondary = flag.secondary;
+				}
 				item.text.clear();
 			}
 			if (item.kind == Kind::Model)

@@ -38,6 +38,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <unordered_map>
 #include <format>
 #include <map>
 #include <numbers>
@@ -99,7 +100,7 @@ namespace oc4::render
 					sizes[size_t(i)] = theme.font(i).size;
 				overlay->setFonts(theme.font(2).family, sizes);
 			}
-			camera.yaw = -std::numbers::pi_v<float> / 2; // from the south, looking north
+			camera.yaw = yaw;
 			if (window)
 				SDL_ShowWindow(window);
 		}
@@ -126,21 +127,45 @@ namespace oc4::render
 		std::unique_ptr<Overlay> overlay;
 		Camera camera;
 		float tilt = 0; // the user's change of the zoom-dependent pitch
+		float yaw = -std::numbers::pi_v<float> / 2; // the user's turn (Q/E, the middle button): from the south, looking north
+		// The game's turn and tilt of the view, in radians (CyCamera's base turn: Ctrl+Left/Right;
+		// its base pitch; 1 for Alt+F's satellite view), and where the camera is on its way to
+		// them (as the original, the rest left shrinks by e^-5.2 a second: a quarter in 0.26 s).
+		float baseTurn = 0, basePitch = 0, satellite = 0;
+		float baseTurnShown = 0, basePitchShown = 0, satelliteShown = 0;
 		float zoomTo = 0; // the distance a zoom glides to (0: none)
-		// A flight of the camera from one view to another (into the city screen and out again).
+		// Where on the screen (0 bottom, 1 top) what the camera looks at is drawn: on the map, the
+		// original's CyCamera().GetDefaultViewPortCenter() (0.5, 0.569), clear of the interface along
+		// the bottom; on the city screen lower, at 0.534 (the original's city screen, measured in
+		// Wine: the city's plot 419 px from the top at 1600x900 and 467 at 1280x1000, the camera
+		// straight above it at CAMERA_CITY_ZOOM_IN_DISTANCE, while GetDefaultViewPortCenter still
+		// says 0.569), which keeps the fat cross's top row clear of the city screen's top panel.
+		static constexpr float kMapCentre = 0.569f, kCityCentre = 0.534f;
 		struct View
 		{
 			Vec3 target;
 			float distance = 0, pitch = 0, yaw = 0, tilt = 0;
+			float turn = 0; // (the turn drawn on top of yaw: the zoom's and the game's)
+			float centre = kMapCentre; // where on the screen the target is drawn (Camera::centreUp)
 		};
+		// A flight of the camera from one view to another (into the city screen and out again).
 		struct Glide
 		{
 			View from, to;
 			float t = 0, seconds = 0;
 		};
 		std::optional<Glide> glide;
+		// Where the game told the camera to look (the next unit, a city, a click on the map), as the
+		// original's: from where it is, the rest of the way shrinking by e^-6 a second (most of
+		// it in the first half second, no easing in), or at once from farther than
+		// CAMERA_MAX_TRAVEL_DISTANCE. Moved by hand meanwhile (a drag, the keys, the minimap), it
+		// stays there.
+		std::optional<Vec3> travelTo;
+		Vec3 travelAt; // (where the travel left the camera last frame)
 		bool cityView = false;      // straight down at a city (its screen is up)
 		std::optional<View> beforeCity; // where the camera was when the city screen came up
+		bool battleView = false;          // close in on a battle (Combat Zoom)
+		std::optional<View> beforeBattle; // the distance and turn to go back to after it
 		bool open = true, running = false, turnRequest = false, framed = false;
 		std::string status, title;
 		int mouseX = -1, mouseY = -1; // (in the interface's units, as the screens are)
@@ -227,6 +252,7 @@ namespace oc4::render
 		// The models the screens show on their own, by art and how they are turned.
 		struct Shown
 		{
+			std::shared_ptr<GpuImage> decal; // (a flag's cloth: outlives its view)
 			std::unique_ptr<ModelView> view;
 			const GpuImage* bitmap = nullptr;
 			bool used = false;
@@ -246,6 +272,9 @@ namespace oc4::render
 		std::vector<std::string> moviesDone;
 		static std::string modelKey(const UiItem& it)
 		{
+			if (it.kind == UiItem::Kind::Flag)
+				return std::format("flag|{}|{}|{}|{},{},{}|{},{},{}", it.flagNif, it.flagKfm, it.texture, it.color.r, it.color.g, it.color.b,
+					it.flagSecondary.r, it.flagSecondary.g, it.flagSecondary.b);
 			return std::format("{}|{}|{}|{}|{}|{}|{}", it.texture, it.texture2, it.modelTilt, it.modelTurn, it.modelScale, it.modelAnimated, it.modelLayers);
 		}
 		std::vector<MapWindow::UiClick> uiClicks;
@@ -273,30 +302,82 @@ namespace oc4::render
 
 		float plot() const { return view->plotSize(); }
 
-		// The game's camera tilts from its lower pitch at the closest zoom to straight down at
-		// CAMERA_SMALLEST_MAX_DISTANCE, evenly with the distance: zooming in, the eye comes down
-		// towards the ground on a curve rather than straight at what it looks at.
+		// The game's camera tilt, as measured in the original (BtS 3.19 defaults, camera position
+		// against the plot it looks at, 19 zoom levels, within 0.15 degrees): level at about
+		// CAMERA_LOWER_PITCH + 1.8 (29.8) up to 1.3 x CAMERA_MIN_DISTANCE (910), then easing in
+		// quadratically with the distance to straight down at 0.86 x CAMERA_SMALLEST_MAX_DISTANCE
+		// (6020). At the start distance (2200) that is 33.6 degrees above the ground; a straight
+		// line from 28 at 700 to 90 at 7000 gave 42.8, looking down far more steeply.
 		void updatePitch()
 		{
 			if (cityView)
 			{
 				camera.pitch = std::numbers::pi_v<float> / 2;
+				camera.yaw = yaw;
+				return;
+			}
+			if (battleView)
+			{
+				camera.pitch = kBattlePitch;
 				return;
 			}
 			const MapSnapshot& m = view->map();
-			const float span = std::max(m.cameraTopDistance - m.cameraMinDistance, 1.0f);
-			const float t = std::clamp((camera.distance - m.cameraMinDistance) / span, 0.0f, 1.0f);
-			const float degrees = m.cameraLowerPitch + (m.cameraUpperPitch - m.cameraLowerPitch) * t;
-			camera.pitch = std::clamp(degrees * 3.14159265f / 180 + tilt, 0.2f, 1.55f);
+			const float from = 1.3f * m.cameraMinDistance, to = std::max(0.86f * m.cameraTopDistance, from + 1);
+			const float t = std::clamp((camera.distance - from) / (to - from), 0.0f, 1.0f);
+			const float low = m.cameraLowerPitch + 1.8f;
+			const float degrees = low + (m.cameraUpperPitch - low) * t * t;
+			// (the game's base pitch tilts it up from there; the satellite view looks straight down)
+			const float pitch = std::clamp(degrees * 3.14159265f / 180 + tilt - basePitchShown, 0.2f, 1.55f);
+			camera.pitch = pitch + (std::numbers::pi_v<float> / 2 - pitch) * satelliteShown;
+			camera.yaw = yaw + turnOffset();
 		}
 
-		// FIELD_OF_VIEW is across the screen: a wide window sees more of the map to the sides, not
-		// a taller slice of it.
+		// The original turns its camera a little: the eye east of south, more the closer it is
+		// (measured with CyCamera().GetCurrentPosition at 13 zooms, within 0.03 degrees; a fit of
+		// the camera to the plot grid in its picture shows it turned towards what it looks at,
+		// not moved aside): 4.17 degrees x s^2, s the share of the way from 0.86 x
+		// CAMERA_SMALLEST_MAX_DISTANCE (6020, none from there out) in to 1.3 x CAMERA_MIN_DISTANCE
+		// (910), where the tilt levels out; it goes on growing closer in (4.5 at 714). That is
+		// 2.3 degrees at the start distance. The game's turn (Ctrl+Left/Right, 45 degrees each
+		// way) adds to it; the satellite view has neither, north up.
+		float zoomTurn() const
+		{
+			const MapSnapshot& m = view->map();
+			const float from = 1.3f * m.cameraMinDistance, to = std::max(0.86f * m.cameraTopDistance, from + 1);
+			const float s = std::max((to - camera.distance) / (to - from), 0.0f);
+			return 4.17f * 3.14159265f / 180 * s * s;
+		}
+
+		float turnOffset() const { return cityView ? 0 : (zoomTurn() + baseTurnShown) * (1 - satelliteShown); }
+
+		// The game's turn and tilt, on their way to where it set them.
+		void easeAngles(float dt)
+		{
+			const float k = 1 - std::exp(-5.2f * dt);
+			bool moved = false;
+			for (auto [shown, to] : { std::pair{ &baseTurnShown, baseTurn }, std::pair{ &basePitchShown, basePitch }, std::pair{ &satelliteShown, satellite } })
+				if (*shown != to)
+				{
+					*shown = std::abs(to - *shown) < 1e-4f ? to : *shown + (to - *shown) * k;
+					moved = true;
+				}
+			if (moved && !glide)
+				updatePitch();
+		}
+
+		// FIELD_OF_VIEW is the angle across the screen's diagonal, as measured in the original: at
+		// the same camera, its plots were 206 pixels apart at 1600x900 and 170 at 1200x900, which
+		// only an angle kept along the diagonal gives (a wide window sees a little more to the
+		// sides and a little less up and down than a 4:3 one).
 		void fitFov()
 		{
-			const float aspect = float(renderer->width()) / std::max(float(renderer->height()), 1.0f);
-			const float across = std::clamp(view->map().cameraFov, 10.0f, 120.0f) * 3.14159265f / 180;
-			camera.fovY = 2 * std::atan(std::tan(across / 2) / std::max(aspect, 0.1f));
+			const float w = float(renderer->width()), h = std::max(float(renderer->height()), 1.0f);
+			const float diagonal = std::clamp(view->map().cameraFov, 10.0f, 120.0f) * 3.14159265f / 180;
+			camera.fovY = 2 * std::atan(std::tan(diagonal / 2) * h / std::hypot(w, h));
+			// (what the camera looks at is drawn above the window's middle: kMapCentre, or the city
+			// screen's kCityCentre; a glide between them moves it along)
+			if (!glide)
+				camera.centreUp = cityView ? kCityCentre : kMapCentre;
 		}
 
 		float closestZoom() const { return std::max(view->map().cameraMinDistance, plot()); }
@@ -312,7 +393,7 @@ namespace oc4::render
 			const Vec3 up = camera.up();
 			const XMMATRIX v = XMMatrixLookAtRH(XMVectorSet(eye.x, eye.y, eye.z, 1), XMVectorSet(camera.target.x, camera.target.y, camera.target.z, 1),
 				XMVectorSet(up.x, up.y, up.z, 0));
-			const XMMATRIX p = XMMatrixPerspectiveFovRH(camera.fovY, float(renderer->width()) / float(renderer->height()),
+			const XMMATRIX p = camera.projection(float(renderer->width()) / float(renderer->height()),
 				std::max(0.01f, camera.distance * 0.01f), camera.distance * 20 + 1000);
 			return v * p;
 		}
@@ -361,7 +442,7 @@ namespace oc4::render
 			camera.target.z = 0;
 		}
 
-		View currentView() const { return { camera.target, camera.distance, camera.pitch, camera.yaw, tilt }; }
+		View currentView() const { return { camera.target, camera.distance, camera.pitch, yaw, tilt, camera.yaw - yaw, camera.centreUp }; }
 
 		// The camera flies to the view: closer or farther evenly by ratio (a zoom), across the
 		// shorter way round a wrapping map, turning the shorter way, easing in and out.
@@ -392,7 +473,9 @@ namespace oc4::render
 			camera.target = { mix(g.from.target.x, g.to.target.x), mix(g.from.target.y, g.to.target.y), 0 };
 			camera.distance = g.from.distance * std::pow(g.to.distance / std::max(g.from.distance, 1.0f), k);
 			camera.pitch = mix(g.from.pitch, g.to.pitch);
-			camera.yaw = mix(g.from.yaw, g.to.yaw);
+			yaw = mix(g.from.yaw, g.to.yaw);
+			camera.yaw = yaw + mix(g.from.turn, g.to.turn);
+			camera.centreUp = mix(g.from.centre, g.to.centre);
 			tilt = g.to.tilt;
 			if (g.t >= 1)
 			{
@@ -410,7 +493,7 @@ namespace oc4::render
 				beforeCity = glide ? glide->to : currentView();
 			cityView = true;
 			View to{ { (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 }, std::max(view->map().cameraCityDistance, 5 * plot()),
-				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0 };
+				std::numbers::pi_v<float> / 2, -std::numbers::pi_v<float> / 2, 0, 0, kCityCentre };
 			glideTo(to);
 		}
 
@@ -423,6 +506,42 @@ namespace oc4::render
 			if (beforeCity)
 				glideTo(*beforeCity);
 			beforeCity.reset();
+		}
+
+		// The original's Combat Zoom (CAMERALOOKAT_BATTLE_ZOOM_IN, measured in Wine): the camera glides
+		// in over the battle's point (x, y in plots) to 913 units from it (5.07 plots of 180), 30 degrees
+		// above the ground, turned 40 degrees towards the side the attack goes (an attack east: the eye
+		// south-west of the battle, so the two sides face across the picture), and stays there.
+		// (Measured for attacks east; the turn is taken as the attack's east-west share.) OpenCiv4's
+		// distances are the original's eye distance / 1.59 (at zoom 0.3: 14.8 plots there, 9.3 here,
+		// the same picture), so 3.2 plots here.
+		static constexpr float kBattleDistance = 913.0f / 180.0f / 1.59f, kBattlePitch = 0.52f, kBattleTurn = 0.698f;
+		void enterBattleView(float x, float y, float dirX)
+		{
+			if (cityView)
+				return;
+			if (!battleView)
+				beforeBattle = glide ? glide->to : currentView();
+			battleView = true;
+			View to{ { x * plot(), y * plot(), 0 }, kBattleDistance * plot(), kBattlePitch, beforeBattle->yaw - kBattleTurn * std::clamp(dirX, -1.0f, 1.0f),
+				beforeBattle->tilt };
+			glideTo(to, 1.0f);
+		}
+
+		// Its end (the game core lets go of the camera, releaseLockedCamera): back out to the distance
+		// and turn from before, over where it is (the next unit's look moves it on).
+		void leaveBattleView()
+		{
+			if (!battleView)
+				return;
+			battleView = false;
+			if (beforeBattle)
+			{
+				View to = *beforeBattle;
+				to.target = glide ? glide->to.target : camera.target;
+				glideTo(to, 1.0f);
+			}
+			beforeBattle.reset();
 		}
 
 		// (distance in plots; below 0: the game's, CAMERA_START_DISTANCE)
@@ -438,6 +557,7 @@ namespace oc4::render
 			}
 			if (cityView)
 				return; // (the city screen's view holds while it is up)
+			travelTo.reset();
 			camera.target = { (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 };
 			camera.distance = distance < 0 ? view->map().cameraStartDistance : distance * plot();
 			zoomTo = 0;
@@ -445,21 +565,70 @@ namespace oc4::render
 			keepOnMap();
 		}
 
-		// The game looks at a plot (a unit selected, a city chosen): the camera moves there and
-		// keeps the distance it is on its way to, so a glide (out of the city screen) or a wheel
-		// zoom in progress still ends where it was going.
-		void centerOn(int x, int y)
+		// The game looks at a plot (a unit selected, a city chosen, a click on the map): the camera
+		// travels there (or jumps, from far) and keeps the distance it is on its way to, so a glide
+		// (out of the city screen) or a wheel zoom in progress still ends where it was going.
+		void centerOn(int x, int y) { centerOnPoint(float(x) + 0.5f, float(y) + 0.5f); }
+
+		// (a point of the map in plots: x 10.5 is the middle of the plot 10)
+		void centerOnPoint(float x, float y)
 		{
 			if (cityView)
 				return; // (the city screen's view holds while it is up)
-			const Vec3 to{ (float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0 };
+			const Vec3 to{ x * plot(), y * plot(), 0 };
 			if (glide)
 			{
 				glide->to.target = to;
 				return;
 			}
-			camera.target = to;
+			const Vec3 way = shortestWay(camera.target, to);
+			const float jumpDistance = view->map().cameraTravelDistance / std::max(view->map().plotSize, 1.0f) * plot();
+			if (std::hypot(way.x, way.y) > jumpDistance)
+			{
+				travelTo.reset();
+				camera.target = to;
+				keepOnMap();
+				return;
+			}
+			travelTo = to;
+			travelAt = camera.target;
+		}
+
+		// From a to b on the ground, the shorter way round a wrapping map.
+		Vec3 shortestWay(Vec3 a, Vec3 b) const
+		{
+			const Vec3 size = view->worldSize();
+			Vec3 d{ b.x - a.x, b.y - a.y, 0 };
+			if (view->map().wrapX && size.x > 0)
+				d.x = std::remainder(d.x, size.x);
+			if (view->map().wrapY && size.y > 0)
+				d.y = std::remainder(d.y, size.y);
+			return d;
+		}
+
+		void easeTravel(float dt)
+		{
+			if (!travelTo)
+				return;
+			// (moved by hand, into a glide or the city screen meanwhile: it stays as it is now)
+			if (glide || cityView || std::abs(camera.target.x - travelAt.x) > 1e-3f || std::abs(camera.target.y - travelAt.y) > 1e-3f)
+			{
+				travelTo.reset();
+				return;
+			}
+			const Vec3 way = shortestWay(camera.target, *travelTo);
+			if (std::hypot(way.x, way.y) < plot() * 0.01f)
+			{
+				camera.target = { camera.target.x + way.x, camera.target.y + way.y, camera.target.z };
+				travelTo.reset();
+			}
+			else
+			{
+				const float k = 1 - std::exp(-6.0f * dt);
+				camera.target = { camera.target.x + way.x * k, camera.target.y + way.y * k, camera.target.z };
+			}
 			keepOnMap();
+			travelAt = camera.target;
 		}
 
 		void showWholeMap()
@@ -512,7 +681,12 @@ namespace oc4::render
 			// (the plot cursor's own plot: the mouse is put on its middle, which a hill's side may give to its neighbour)
 			if (padMode == PadMode::Cursor && mouseX >= 0 && padPlotX >= 0)
 				return { padPlotX, padPlotY };
-			return mouseX < 0 ? std::pair{ -1, -1 } : plotUnder(mouseX, mouseY);
+			if (mouseX < 0)
+				return { -1, -1 };
+			// (a city's bar stands for the city, as the original's)
+			if (const auto bar = view->cityBarAt(float(mouseX), float(mouseY)))
+				return *bar;
+			return plotUnder(mouseX, mouseY);
 		}
 
 		std::pair<int, int> plotUnder(int x, int y) const
@@ -1140,7 +1314,7 @@ namespace oc4::render
 			}
 			else if (orbiting)
 			{
-				camera.yaw -= float(x - lastX) * 0.005f;
+				yaw -= float(x - lastX) * 0.005f;
 				tilt += float(y - lastY) * 0.005f;
 				updatePitch();
 			}
@@ -1226,7 +1400,8 @@ namespace oc4::render
 				// A click, not a drag: the plot under it is the host's.
 				mouseX = x;
 				mouseY = y;
-				const auto figure = figureUnder(x, y);
+				// (a city's bar is over the figures: a click on it is on its city)
+				const auto figure = view->cityBarAt(float(x), float(y)) ? std::nullopt : figureUnder(x, y);
 				if (const auto p = figure ? *figure : hoveredPlot(); p.first >= 0)
 					clicks.push_back({ p.first, p.second, !downLeft, mods.shift, mods.ctrl, mods.alt, figure.has_value() });
 			}
@@ -1301,7 +1476,8 @@ namespace oc4::render
 			const Vec3 forward{ -std::cos(camera.yaw), -std::sin(camera.yaw), 0 }, right{ -std::sin(camera.yaw), std::cos(camera.yaw), 0 };
 			Vec3 move{};
 			// (once the keyboard chooses in a menu or a popup, the arrows are its, not the map's)
-			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose();
+			// (with Ctrl they turn the camera: the game's CONTROL_ISOMETRIC_CAMERA_LEFT/RIGHT)
+			const bool arrows = !(popup.active() && popup.keyboardChoice()) && !uiKeysChoose() && !held(key::Control);
 			if (arrows && held(key::Up))
 				move += forward;
 			if (arrows && held(key::Down))
@@ -1340,10 +1516,11 @@ namespace oc4::render
 			}
 			if (playing && !held(key::Control)) // (the letters are orders then)
 				return;
-			if (held('Q'))
-				camera.yaw += dt * 1.2f;
-			if (held('E'))
-				camera.yaw -= dt * 1.2f;
+			if (const int turn = int(held('Q')) - int(held('E')))
+			{
+				yaw += float(turn) * dt * 1.2f;
+				updatePitch();
+			}
 		}
 
 		// The heads of the screens' items: made for those new, gone with their items; the
@@ -1376,6 +1553,24 @@ namespace oc4::render
 				m.used = false;
 			for (const auto& it : ui.items())
 			{
+				if (it.kind == UiItem::Kind::Flag && !it.flagNif.empty())
+				{
+					// A player's flag: its era's flag model waving, its cloth the decal in the
+					// player's colours (as the map's flags).
+					Shown& m = models[modelKey(it)];
+					if (!m.view)
+					{
+						const bool white = it.texture.starts_with("opaque:");
+						if (const ButtonArt::Icon* cloth = art.flag(white ? it.texture.substr(7) : it.texture, it.color, it.flagSecondary, white))
+						{
+							m.decal = renderer->createMipmapped(cloth->width, cloth->height, cloth->bgra);
+						}
+						m.view = std::make_unique<ModelView>(*renderer, resolver, it.flagNif, it.flagKfm, 0.0f, 0.0f, 1.0f, true, std::string(), m.decal.get());
+						m.view->frameAsFlag();
+					}
+					m.used = true;
+					continue;
+				}
 				if (it.kind != UiItem::Kind::Model || it.texture.empty())
 					continue;
 				Shown& m = models[modelKey(it)];
@@ -1450,7 +1645,7 @@ namespace oc4::render
 			for (auto& [key, m] : models)
 				m.bitmap = nullptr;
 			for (const auto& it : ui.items())
-				if (it.kind == UiItem::Kind::Model)
+				if (it.kind == UiItem::Kind::Model || (it.kind == UiItem::Kind::Flag && !it.flagNif.empty()))
 					if (const auto at = models.find(modelKey(it)); at != models.end() && at->second.view->loaded() && !at->second.bitmap)
 						at->second.bitmap = at->second.view->render(uint32_t(std::max(1.0f, (it.x1 - it.x0) * overlay->scale())), uint32_t(std::max(1.0f, (it.y1 - it.y0) * overlay->scale())));
 		}
@@ -1462,7 +1657,7 @@ namespace oc4::render
 				drawMovie(it);
 				return true;
 			}
-			if (it.kind == UiItem::Kind::Model)
+			if (it.kind == UiItem::Kind::Model || it.kind == UiItem::Kind::Flag)
 			{
 				const auto m = models.find(modelKey(it));
 				if (m == models.end() || !m->second.bitmap)
@@ -1485,6 +1680,7 @@ namespace oc4::render
 			fitFov();
 			// (beyond the map: black as the ground not seen, until the team's map is centred)
 			renderer->beginFrame(camera, view->seenBounds() ? Vec3{ 0, 0, 0 } : Vec3{ 0.05f, 0.07f, 0.10f });
+			view->options.cityScreen = cityView;
 			view->draw();
 			renderer->endFrame();
 			syncHeads();
@@ -1787,14 +1983,84 @@ namespace oc4::render
 			}
 		}
 
+		// A resource's bubble, as the original's plot picker draws it: the resource's button in a
+		// black disc with a bevelled rim, on a pin whose tip is the plot. The bubble keeps its size
+		// at every zoom and stands up and away from the middle of the screen: left of the plot on
+		// the left half, right of it on the right half (side: -1 left, 1 right).
+		void drawResourceBubble(float tipX, float tipY, const ButtonArt::Icon& icon, float side)
+		{
+			constexpr float r = 25.5f, offX = 29, offY = 31;
+			const float cx = tipX + side * offX, cy = tipY - offY;
+			// The pin: from the disc's lower edge down to the plot.
+			const float px[4] = { cx - side * 2.5f, cx - side * 24, tipX, tipX };
+			const float py[4] = { cy + 25, cy + 11, tipY, tipY };
+			overlay->quad(px, py, { 0.86f, 0.86f, 0.9f }, 0.9f);
+			overlay->line(px[1], py[1], tipX, tipY, { 0.2f, 0.2f, 0.22f }, 0.7f, 1);
+			overlay->line(px[0], py[0], tipX, tipY, { 0.2f, 0.2f, 0.22f }, 0.7f, 1);
+			overlay->circle(cx, cy, r, { 0, 0, 0 }, 1);
+			// (the button's middle fills the disc: its margin is cut away with the corners)
+			const ButtonArt::Icon& round = roundIcon(icon);
+			const float ir = (r - 2) / kRoundIconCut;
+			overlay->image(round.key, round.bgra, round.width, round.height, 1, cx - ir, cy - ir, cx + ir, cy + ir);
+			overlay->ellipse(cx, cy, r - 1.5f, r - 1.5f, { 0.78f, 0.78f, 0.8f }, 1, 3);
+			overlay->ellipse(cx, cy, r, r, { 0.1f, 0.1f, 0.1f }, 0.8f, 1);
+		}
+
+		// A button cut to a circle around its middle, made once per button.
+		static constexpr float kRoundIconCut = 0.8f;
+		const ButtonArt::Icon& roundIcon(const ButtonArt::Icon& icon)
+		{
+			auto [it, added] = roundIcons.try_emplace(icon.key);
+			ButtonArt::Icon& round = it->second;
+			if (added)
+			{
+				round = icon;
+				round.key = icon.key ^ 0x5265736f75726365ull; // (its own texture)
+				const float hw = float(icon.width) / 2, hh = float(icon.height) / 2, radius = std::min(hw, hh) * kRoundIconCut;
+				for (uint32_t y = 0; y < icon.height; ++y)
+					for (uint32_t x = 0; x < icon.width; ++x)
+					{
+						const float d = std::hypot(float(x) + 0.5f - hw, float(y) + 0.5f - hh);
+						const float cover = std::clamp(radius - d, 0.0f, 1.0f);
+						uint8_t* px = &round.bgra[(size_t(y) * icon.width + x) * 4];
+						for (int c = 0; c < 4; ++c) // (premultiplied: every channel)
+							px[c] = uint8_t(float(px[c]) * cover + 0.5f);
+					}
+			}
+			return round;
+		}
+		std::unordered_map<uint64_t, ButtonArt::Icon> roundIcons;
+
+		// The side of the screen's middle each plot's bubble stands on (-1 left, 1 right, 0 not yet
+		// chosen), kept from frame to frame. A bubble keeps its side until its plot is clearly over
+		// the middle (kBubbleDeadZone of the screen's width past it): a plot at the very middle, as
+		// when the camera glides out of a city's screen centred on the city, would otherwise swap
+		// sides with every frame's rounding.
+		static constexpr float kBubbleDeadZone = 0.02f;
+		std::vector<int8_t> bubbleSides;
+		float bubbleSide(size_t plotIndex, float tipX)
+		{
+			const float half = overlay->screenWidth() / 2, dead = kBubbleDeadZone * overlay->screenWidth();
+			int8_t& side = bubbleSides[plotIndex];
+			if (side == 0)
+				side = tipX < half ? -1 : 1;
+			else if (side < 0 && tipX > half + dead)
+				side = 1;
+			else if (side > 0 && tipX < half - dead)
+				side = -1;
+			return float(side);
+		}
+
 		// The game's layers over the plots near the camera: the yields (as many symbols as the
-		// plot gives, a row each), the resources' icons, the units' icons over their stacks.
+		// plot gives, a row each), the resources' bubbles, the units' icons over their stacks.
 		void drawLayers()
 		{
 			if (!layers.yields && !layers.resources && !layers.units)
 				return;
 			const auto& map = view->map();
-			if (map.width <= 0 || camera.distance > 32 * plot())
+			// (the yields and unit icons only near the ground; the resources' bubbles at every height)
+			const bool low = camera.distance <= 32 * plot();
+			if (map.width <= 0 || (!low && !layers.resources))
 				return;
 			const XMMATRIX vp = viewProjection();
 			const auto toScreen = [&](float wx, float wy, float lift, float& sx, float& sy) {
@@ -1810,6 +2076,10 @@ namespace oc4::render
 				return sx > -40 && sy > -40 && sx < overlay->screenWidth() + 40 && sy < overlay->screenHeight() + 40;
 			};
 			const float zoom = std::clamp(12 * plot() / camera.distance, 0.6f, 1.4f);
+			struct Bubble { float x, y; const ButtonArt::Icon* icon; float side; };
+			std::vector<Bubble> bubbles;
+			if (bubbleSides.size() != map.plots.size())
+				bubbleSides.assign(map.plots.size(), 0);
 			for (int y = 0; y < map.height; ++y)
 				for (int x = 0; x < map.width; ++x)
 				{
@@ -1819,14 +2089,11 @@ namespace oc4::render
 					float sx = 0, sy = 0;
 					if (!toScreen((float(x) + 0.5f) * plot(), (float(y) + 0.5f) * plot(), 0, sx, sy))
 						continue;
-					if (layers.resources && p.bonus >= 0 && size_t(p.bonus) < map.bonusButtons.size())
+					// (on a city's screen the original shows no resources' bubbles, nor units' icons)
+					if (layers.resources && !cityView && p.bonus >= 0 && size_t(p.bonus) < map.bonusButtons.size())
 						if (const ButtonArt::Icon* ic = art.icon(map.bonusButtons[size_t(p.bonus)]))
-						{
-							const float r = 13 * zoom;
-							overlay->rect(sx - r - 2, sy - r - 2 - 18 * zoom, sx + r + 2, sy + r + 2 - 18 * zoom, { 0, 0, 0 }, 0.55f, 4);
-							overlay->image(ic->key, ic->bgra, ic->width, ic->height, 1, sx - r, sy - r - 18 * zoom, sx + r, sy + r - 18 * zoom);
-						}
-					if (layers.yields)
+							bubbles.push_back({ sx, sy, ic, bubbleSide(size_t(x) + size_t(y) * size_t(map.width), sx) });
+					if (low && layers.yields)
 					{
 						// (a row a yield, as many of its symbol as it gives: five and more as a number)
 						const float size = 11 * zoom;
@@ -1849,7 +2116,11 @@ namespace oc4::render
 						}
 					}
 				}
-			if (layers.units)
+			// (in the plots' order, south to north and west to east, as the original draws them: where
+			// bubbles crowd, the farther and the more easterly one covers its neighbour)
+			for (const Bubble& b : bubbles)
+				drawResourceBubble(b.x, b.y, *b.icon, b.side);
+			if (low && layers.units && !cityView)
 				for (const UnitView& u : map.units)
 				{
 					if (u.button.empty() || (view->options.fog && !map.plots[size_t(u.x) + size_t(u.y) * size_t(map.width)].visible))
@@ -2222,6 +2493,8 @@ namespace oc4::render
 			handleHeldKeys(dt);
 			easeZoom(dt);
 			easeGlide(dt);
+			easeAngles(dt);
+			easeTravel(dt);
 			view->update(dt);
 			for (auto& [nif, h] : heads)
 				h.head->update(dt);
@@ -2296,7 +2569,11 @@ namespace oc4::render
 					orbiting = down;
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)
+				{
+					if (down)
+						++inputs; // (a click is the player's too: inputCount)
 					onButton(down && e.button.button == SDL_BUTTON_LEFT, down, x, y);
+				}
 				break;
 			}
 			case SDL_EVENT_MOUSE_WHEEL:
@@ -2362,6 +2639,9 @@ namespace oc4::render
 		if (m->padMode == PadMode::Cursor)
 			m->padPlotX = x, m->padPlotY = y;
 	}
+	void MapWindow::centerOnPoint(float x, float y) { m->centerOnPoint(x, y); }
+	void MapWindow::enterBattleView(float x, float y, float dirX) { m->enterBattleView(x, y, dirX); }
+	void MapWindow::leaveBattleView() { m->leaveBattleView(); }
 	void MapWindow::frame(float dt) { m->frame(dt); }
 	void MapWindow::saveScreenshot(const std::filesystem::path& png) { m->saveScreenshot(png); }
 	void MapWindow::setScreenshotFolder(const std::filesystem::path& folder) { m->screenshotFolder = folder; }
@@ -2442,6 +2722,13 @@ namespace oc4::render
 		if (layers.bare != m->layersApplied.bare)
 			m->view->options.units = m->view->options.improvements = !layers.bare;
 		m->layersApplied = layers;
+	}
+
+	void MapWindow::setCameraAngles(float turnDegrees, float pitchDegrees, bool satellite)
+	{
+		m->baseTurn = turnDegrees * 3.14159265f / 180;
+		m->basePitch = pitchDegrees * 3.14159265f / 180;
+		m->satellite = satellite ? 1.0f : 0.0f;
 	}
 
 	void MapWindow::setGlobeView(bool up)
@@ -2538,8 +2825,10 @@ namespace oc4::render
 
 	std::optional<MapWindow::PlotClick> MapWindow::clickAt(int x, int y, bool right) const
 	{
-		const auto figure = m->figureUnder(x, y);
-		const auto p = figure ? *figure : m->plotUnder(x, y);
+		// (a city's bar stands for the city, as the original's: its screen opens)
+		const auto bar = m->view->cityBarAt(float(x), float(y));
+		const auto figure = bar ? std::nullopt : m->figureUnder(x, y);
+		const auto p = bar ? *bar : figure ? *figure : m->plotUnder(x, y);
 		if (p.first < 0)
 			return std::nullopt;
 		PlotClick c;
@@ -2576,7 +2865,8 @@ namespace oc4::render
 	MapWindow::Look MapWindow::look() const
 	{
 		const float p = m->view ? m->view->plotSize() : 1;
-		return { m->camera.target.x / p, m->camera.target.y / p, m->camera.distance / p };
+		const Vec3 eye = m->camera.eye();
+		return { m->camera.target.x / p, m->camera.target.y / p, m->camera.distance / p, eye.x / p, eye.y / p, eye.z / p };
 	}
 	std::vector<uint32_t> MapWindow::terrainColors() const { return m->view ? m->view->terrainColors() : std::vector<uint32_t>{}; }
 	void MapWindow::setPopupHelp(std::function<std::string(int item)> help) { m->popupHelp = std::move(help); }
