@@ -839,17 +839,6 @@ namespace oc4::host
 				if (CvCity* c = cityOf(id); c && c->getOwner() == id.eOwner)
 					c->updateSelectedCity(true);
 			m_citiesShown.clear();
-			// The units selected before the screen opened are selected again (those still there and
-			// the player's), as the original keeps them; the game core picks the next one only if
-			// none is left.
-			if (m_selection.getLength() == 0)
-				for (const IDInfo& id : m_selectionUnderCity)
-					if (CvUnit* u = unitOf(id); u && u->getOwner() == GC.getGame().getActivePlayer() && !selected(u))
-					{
-						m_selection.insertAtEnd(id);
-						m_lastSelected = u;
-					}
-			m_selectionUnderCity.clear();
 		}
 		// (the coloured plots too: the city's worked plots are circled only while its screen is up,
 		// and the city may have been selected already, by the first click of a double click on its
@@ -868,15 +857,10 @@ namespace oc4::host
 		if (pNewValue)
 		{
 			leaveInterfaceMode(); // (as the original's: a city selected ends Go To)
-			// A city's screen and selected units go not together: the units are let go (as
-			// CvGame::selectUnit lets go of the cities), and selected again when the screen closes.
-			if (!wasUp)
-			{
-				m_selectionUnderCity.clear();
-				for (CLLNode<IDInfo>* n = m_selection.head(); n; n = m_selection.next(n))
-					m_selectionUnderCity.push_back(n->m_data);
-			}
-			m_selection.clear();
+			// The selected units stay selected under the city's screen, as the original's (seen in
+			// Wine: CyInterface().selectCity with a warrior selected, its head still the warrior).
+			// They take no orders there: CvGame::canHandleAction refuses a unit's action while a
+			// city is selected, and the screen's clicks are the city's (main.cpp).
 			m_cities.insertAtEnd(pNewValue->getIDInfo());
 			m_cityScreen = true;
 			lookAtX = pNewValue->getX();
