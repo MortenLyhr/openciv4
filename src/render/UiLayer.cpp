@@ -718,7 +718,7 @@ namespace oc4::render
 				break;
 			}
 			case Kind::Line:
-				// (a pixel wide, as the original's addLineGFC: the foreign advisor's relations)
+				// (a pixel wide, as the original's addLineGFC: the foreign advisor's relations; a table's grid)
 				o.line(x0, y0, x1, y1, it.hasColor ? it.color : kEdge, it.alpha, 1);
 				break;
 			case Kind::Separator:
