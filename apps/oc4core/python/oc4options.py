@@ -336,14 +336,20 @@ def _applyGraphics():
 		oc4host.reset_graphic_options()
 		for i, on in _profile['graphic'].items():
 			oc4host.set_graphic_option(int(i), bool(on))
-		oc4host.set_ui_scale(_profile['uiScale'])
-		oc4host.set_graphic_levels(_profile['movieQuality'], _AA_SAMPLES[min(max(_profile['antiAliasing'], 0), len(_AA_SAMPLES) - 1)])
-		_applyPlayerOptions()
-		oc4host.set_wasd_pan(_profile['wasdPan'])
-		oc4host.set_auto_end_turn(_profile['autoEndTurn'])
-		oc4host.set_edge_scroll(_profile['edgeScroll'])
-		oc4host.set_city_one_click(_profile['cityOneClick'])
-		oc4host.set_keep_attacker(_profile['keepAttacker'])
+	except Exception:
+		pass
+	_applyPlayerOptions()
+	# (each on its own: a host without one of them, or one that fails, still gets the rest)
+	for call, args in (('set_ui_scale', (_profile['uiScale'],)),
+			('set_graphic_levels', (_profile['movieQuality'], _AA_SAMPLES[min(max(_profile['antiAliasing'], 0), len(_AA_SAMPLES) - 1)])),
+			('set_wasd_pan', (_profile['wasdPan'],)), ('set_auto_end_turn', (_profile['autoEndTurn'],)),
+			('set_edge_scroll', (_profile['edgeScroll'],)), ('set_city_one_click', (_profile['cityOneClick'],)),
+			('set_keep_attacker', (_profile['keepAttacker'],))):
+		try:
+			getattr(oc4host, call)(*args)
+		except Exception:
+			pass
+	try:
 		oc4host.set_quick_enemy_moves(_profile['quickEnemyMoves'])
 	except Exception:
 		pass
