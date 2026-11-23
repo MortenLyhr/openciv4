@@ -34,7 +34,7 @@
 // "[x,y]" left clicks it, "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
-// the mouse on it); a '!' before one types it at once, while the others move too; with
+// the mouse on it); a '&' before one types it at once, while the others move too; with
 // --screenshot and --view-seconds that game is played offscreen. OC4_PLAY_LOG=1 prints the
 // popups as they come, the actions the keys run and the widgets clicked; OC4_UI_DUMP=<file>
 // writes the interface's widgets there when they change.
@@ -1207,12 +1207,12 @@ namespace
 			// (a scripted game answers what it does not expect with the popup's first button)
 			if (!script.empty() && script.front() != '#' && script.front() != '\'' && script.front() != '%' && ui.shownPopup() && Clock::now() - typed > std::chrono::milliseconds(1500))
 				script.insert(0, "#0");
-			if (const auto now = Clock::now(); (player.isTurnActive() || (script.starts_with('!') && script.size() > 1)) && !script.empty() &&
+			if (const auto now = Clock::now(); (player.isTurnActive() || (script.starts_with('&') && script.size() > 1)) && !script.empty() &&
 				now - typed > std::chrono::milliseconds(400) &&
-				(script.front() == '#' || script.front() == '\'' || script.front() == '%' || script.front() == '!' || !ui.shownPopup())) // (the rest waits for the popup's answer)
+				(script.front() == '#' || script.front() == '\'' || script.front() == '%' || script.front() == '&' || !ui.shownPopup())) // (the rest waits for the popup's answer)
 			{
 				typed = now;
-				if (script.front() == '!')
+				if (script.front() == '&')
 					script.erase(0, 1); // (typed at once, the others moving or not)
 				render::MapWindow::PlotClick click;
 				int button = -1;
