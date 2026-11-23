@@ -71,6 +71,28 @@ class Host(Anything):
 		return self.states[i]
 
 
+class OlderHost(Host):
+	"""A host without the call for one of OpenCiv4's options (#148's has no city one click: it comes
+	with the city double click); it records what the other options got."""
+
+	def __init__(self, path):
+		Host.__init__(self, path)
+		self.got = {}
+
+	def __getattribute__(self, name):
+		if name in ('set_city_one_click', 'city_one_click'):
+			raise AttributeError(name)
+		if name in ('set_keep_attacker', 'set_quick_enemy_moves', 'set_edge_scroll'):
+			got = object.__getattribute__(self, 'got')
+			return lambda on: got.__setitem__(name, bool(on))
+		return Host.__getattribute__(self, name)
+
+	def __getattr__(self, name):
+		if name in ('set_city_one_click', 'city_one_click'):
+			raise AttributeError(name)
+		return Host.__getattr__(self, name)
+
+
 class Info(object):
 	def __init__(self, i):
 		self.i = i
@@ -98,9 +120,9 @@ def cpe(host):
 	return m
 
 
-def start(folder):
+def start(folder, hostClass=Host):
 	"""The program starting: a new host, oc4options loaded afresh (it reads the profile)."""
-	host = Host(os.path.join(folder, 'profile.ini'))
+	host = hostClass(os.path.join(folder, 'profile.ini'))
 	sys.modules['oc4host'] = host
 	sys.modules['CvPythonExtensions'] = cpe(host)
 	screens = Anything('oc4screens')
@@ -243,6 +265,37 @@ def main():
 		click(options, optionsScreen(options), 'GameOptionCheckBox_2')
 		host, options = start(folder)
 		check(not options._UserProfile().getPlayerOption(2), "after that, off is kept")
+
+		# A host without one option's call: the options after it still reach the host at the start.
+		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
+			f.write('name=openciv4\nedgeScroll=0\ncityOneClick=1\nkeepAttacker=1\nquickEnemyMoves=1\n')
+		host, options = start(folder, OlderHost)
+		check(host.got == {'set_edge_scroll': False, 'set_keep_attacker': True, 'set_quick_enemy_moves': True},
+			"a host without set_city_one_click still gets the rest: %s" % host.got)
+
+		# The OpenCiv4 tab's foot as the game's tabs': its options scroll above a line, Restore Defaults and Exit.
+		host, options = start(folder)
+		ctrl = optionsScreen(options)
+		vbox = [(n.kind, n.name) for n in ctrl._byName['Oc4VBox'].children]
+		check(vbox == [('scroll', 'Oc4Scroll'), ('hsep', 'Oc4ExitSeparator'), ('hbox', 'Oc4LowerHBox')], "the OpenCiv4 tab's foot: %s" % vbox)
+		buttons = [(n.name, n.callback[:2]) for n in ctrl._byName['Oc4LowerHBox'].children]
+		check(buttons == [('Oc4OptionsResetButton', ('oc4options', 'handleOc4Reset')),
+			('Oc4OptionsExitButton', ('CvOptionsScreenCallbackInterface', 'handleExitButtonInput'))], "Restore Defaults and Exit: %s" % buttons)
+		check([n.name for n in ctrl._byName['Oc4Scroll'].children] == ['Oc4Panel'], "the options in the scroll panel")
+		# Restore Defaults there: OpenCiv4's options as a new profile's, the other tabs' kept.
+		click(options, ctrl, options.KEEP_ATTACKER_CHECKBOX)
+		click(options, ctrl, options.EDGE_SCROLL_CHECKBOX)
+		click(options, ctrl, options.NO_TECH_SPLASH_CHECKBOX)
+		options.handleIniNumberTyped((u'9', 'autoSaveInterval'))
+		click(options, ctrl, 'GameOptionCheckBox_6')
+		quick = options._UserProfile().getPlayerOption(6)
+		options._call(ctrl._byName['Oc4OptionsResetButton'], ('Oc4OptionsResetButton',))
+		p = options._profile
+		check(not p['keepAttacker'] and p['edgeScroll'] and not p['noTechSplash'] and p['autoSaveInterval'] == 4, "Restore Defaults: OpenCiv4's options")
+		check(ctrl._byName[options.KEEP_ATTACKER_CHECKBOX].value is False and ctrl._byName[options.EDGE_SCROLL_CHECKBOX].value is True
+			and ctrl._byName['Oc4EditautoSaveInterval'].text == u'4', "... shown on the tab")
+		check(options._UserProfile().getPlayerOption(6) == quick, "... the Game tab's kept")
+		check({'keepAttacker=0', 'edgeScroll=1', 'autoSaveInterval=4'} <= profileLines(folder), "... and saved")
 	finally:
 		shutil.rmtree(folder, ignore_errors=True)
 
