@@ -507,14 +507,16 @@ def _item(screen, ctrl, item, k, parent, cx, cy):
 	shows it under the mouse: the game's help of what it places, else its name as a link."""
 	general = _cpe.WidgetTypes.WIDGET_GENERAL
 	# (the player mode's Technologies: a tech the player knows framed in yellow, as the original's,
-	# seen in Wine; an image check box that is on, as the tool buttons' chosen one)
+	# seen in Wine; an image check box that is on with the highlight BUTTON_HILITE_SQUARE
+	# (Button_SELECT.dds), the art CvWorldBuilderScreen.py gives its tool buttons' check boxes)
 	known = item[4] and ctrl.kind == 'player' and ctrl.active == 2
 	if item[4] and not known:
 		screen.attachPanelAt(parent, _add('OC4WBSel%d' % k), u'', u'', False, False, _cpe.PanelStyles.PANEL_STYLE_HUD_HELP, cx - 2, cy - 2, _CELL - 1, _CELL - 1,
 			general, -1, -1)
 	name = 'OC4WBItem%d' % k
 	if known and item[2]:
-		screen.addCheckBoxGFCAt(parent, _add(name, ('item', ctrl, item)), item[2], u'', cx, cy, _ICON, _ICON, general, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_LABEL)
+		screen.addCheckBoxGFCAt(parent, _add(name, ('item', ctrl, item)), item[2], _art('BUTTON_HILITE_SQUARE'), cx, cy, _ICON, _ICON, general, -1, -1,
+			_cpe.ButtonStyles.BUTTON_STYLE_LABEL)
 		screen.setState(name, True)
 	elif item[2]:
 		screen.setImageButtonAt(_add(name, ('item', ctrl, item)), parent, item[2], cx, cy, _ICON, _ICON, general, -1, -1)
