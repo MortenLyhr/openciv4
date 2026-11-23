@@ -1382,6 +1382,14 @@ namespace
 					std::fprintf(stderr, "[oc4core] world builder: %s\n", e.what());
 				}
 			}
+			// (while the others move, the map takes no clicks, as the original's: no city screen, no
+			// selection and no orders then, seen in Wine)
+			if (!player.isTurnActive() && !ui.worldBuilder() && !clicks.empty())
+			{
+				if (log)
+					std::printf("  %zu map click(s) while the others move: dropped\n", clicks.size());
+				clicks.clear();
+			}
 			for (auto click : clicks)
 			{
 				CvPlot* plot = GC.getMap().plot(click.x, click.y);
@@ -1470,6 +1478,14 @@ namespace
 				// others move)
 				else if (key.key == render::key::Escape)
 					screens.escape();
+				// (and the advisors' and the Civilopedia's keys still open them, as the original's: F1
+				// while the others move, seen in Wine; the map's and the units' keys do nothing)
+				else if (const int a = hotkeyAction(key, gameKey(key.key), true); a >= 0)
+				{
+					if (log)
+						std::printf("  key %u: screen action %d while the others move\n", key.key, a);
+					act(a, key.shift, key.ctrl, key.alt);
+				}
 				changed = true;
 			}
 			if (const auto a = window.takeActionClick(); a && size_t(*a) < actionIds.size())
