@@ -77,6 +77,7 @@
 
 #include "CvGameCoreDLL.h"
 #include "CvArtFileMgr.h"
+#include "CvEventReporter.h"
 #include "CvGameAI.h"
 #include "CvPopupInfo.h"
 #include "CvGameTextMgr.h"
@@ -1558,16 +1559,24 @@ namespace
 					click.right = ui.getInterfaceMode() == INTERFACEMODE_SELECTION && head && !own;
 				}
 				// The interface mode wants a plot: its mission there (a right click leaves it).
-				// Python's pick plot is the script's: it reads the mouse itself (BUG's dot map editor
-				// places a city with the left button, takes one away with the right), so a left click
-				// leaves it on and the selected units get no order, as the original's (Wine, backlog #68).
+				// Python's pick plot is the scripts': a left click on a plot they can pick (the game
+				// core's highlight colour for it: revealed, CvGameInterface.canPickPlot) ends the mode
+				// and gives them the plot (CvEventReporter::plotPicked, their onPlotPicked), as the
+				// shipped mods' scripts expect (Gods of Old's prophets set the mode and never end it);
+				// the selected units get no order. BUG's dot map editor reads the mouse itself (a city
+				// placed with the left button, taken away with the right) and sets the mode again
+				// after each click, later in the frame (its screen's update), so it stays on there, as
+				// in the original under Wine.
 				if (const InterfaceModeTypes mode = ui.getInterfaceMode(); mode == INTERFACEMODE_PYTHON_PICK_PLOT)
 				{
+					const bool pick = !click.right && game.getPlotHighlightColor(plot) != NO_COLOR;
 					if (log)
 						std::printf("  %s at %d,%d: %s\n", GC.getInterfaceModeInfo(mode).getType(), plot->getX(), plot->getY(),
-							click.right ? "cancelled" : "the script's");
-					if (click.right)
+							click.right ? "cancelled" : pick ? "picked" : "not to be picked");
+					if (click.right || pick)
 						ui.setInterfaceMode(INTERFACEMODE_SELECTION);
+					if (pick)
+						CvEventReporter::getInstance().plotPicked(plot);
 					continue;
 				}
 				else if (mode != INTERFACEMODE_SELECTION)
