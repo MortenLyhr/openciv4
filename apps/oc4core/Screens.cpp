@@ -505,8 +505,10 @@ namespace oc4::host
 		// actions
 		host.def("ui_interface_mode", [&ui] { return int(ui.getInterfaceMode()); });
 		host.def("ui_set_interface_mode", [&ui](int m) { ui.setInterfaceMode(static_cast<InterfaceModeTypes>(m)); });
-		host.def("ui_can_handle_action", [](int action, bool visible) {
-			return action >= 0 && action < GC.getNumActionInfos() && GC.getGame().canHandleAction(action, nullptr, visible);
+		// (with the right button held, the actions are those for the goto plot, as the original's: a
+		// worker's buttons there are that plot's builds; CvGame::canHandleAction takes the plot)
+		host.def("ui_can_handle_action", [&ui](int action, bool visible) {
+			return action >= 0 && action < GC.getNumActionInfos() && GC.getGame().canHandleAction(action, ui.getGotoPlot(), visible);
 		});
 		host.def("ui_actions_to_show", [&ui] {
 			// What the selected units can do, as the action buttons show it: in the game's order.
@@ -515,7 +517,7 @@ namespace oc4::host
 				for (int i = 0; i < GC.getNumActionInfos(); ++i)
 				{
 					const CvActionInfo& a = GC.getActionInfo(i);
-					if (a.isVisible() && a.getControlType() == NO_CONTROL && GC.getGame().canHandleAction(i, nullptr, true))
+					if (a.isVisible() && a.getControlType() == NO_CONTROL && GC.getGame().canHandleAction(i, ui.getGotoPlot(), true))
 						order.push_back({ a.getOrderPriority(), i });
 				}
 			std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
