@@ -4851,7 +4851,8 @@ float4 PSWater(WaterOut i) : SV_Target
 		{
 			const PlotView& p = snapshot.plots[i];
 			shape[i] = uint8_t((p.water ? 1 : 0) | (p.hills ? 2 : 0) | (p.peak ? 4 : 0) | (p.riverSouth ? 8 : 0) | (p.riverEast ? 16 : 0));
-			featureKey[i] = int32_t(p.feature) << 8 | p.featureVariety;
+			// (the feature as unsigned: no feature, -1, would set every high bit, the city's bit 30 among them)
+			featureKey[i] = int32_t(uint16_t(p.feature)) << 8 | p.featureVariety;
 			// (the route's 8 bits and the layout's 16: two of them 256 or 65536 apart on a plot would look unchanged)
 			decorKey[i] = uint64_t(uint16_t(p.improvement)) | uint64_t(uint16_t(p.bonus)) << 16 | uint64_t(uint8_t(p.route)) << 32 |
 				uint64_t(p.riverSouth) << 40 | uint64_t(p.riverEast) << 41 | uint64_t(uint16_t(p.layout + 1)) << 42 |
