@@ -1337,10 +1337,19 @@ namespace oc4::host
 			// tech that reveals it (iron without Iron Working is not there, in anyone's land), though
 			// an improvement on it shows (a mine on flat land). The WorldBuilder (and the debug
 			// mode) shows the plot as it is: every resource, improvement, road and border.
+			bool workedByActive = false;
 			{
 				ImprovementTypes shown = NO_IMPROVEMENT;
 				bool worked = false;
 				plot->getVisibleImprovementState(shown, worked);
+				// (CvPlot::isVisibleWorked, which the DLL doesn't export: worked, and the plot's team
+				// is the active team. getVisibleImprovementState's worked is "being worked and the
+				// active team sees it", and a team always sees the plots it owns (CvPlot::updateSight).
+				// In the debug mode the original also marks other teams' worked plots; here only
+				// those the active team sees.)
+				const PlayerTypes owner = plot->getOwner();
+				workedByActive = worked && owner != NO_PLAYER &&
+					(CvPlayerAI::getPlayerNonInl(owner).getTeam() == active || GC.getGame().isDebugMode());
 				if (everything)
 				{
 					// (on a worked plot without one, the worked look, as the original's)
@@ -1367,7 +1376,7 @@ namespace oc4::host
 			v.revealed = active == NO_TEAM || plot->isRevealed(active, false);
 			v.visible = active == NO_TEAM || plot->isVisible(active, false);
 			v.cityWorkable = cityWorkable[size_t(plot->getX()) + size_t(plot->getY()) * size_t(s.width)];
-			v.worked = plot->isVisibleWorked();
+			v.worked = workedByActive;
 			if (v.revealed)
 				shownYields(*plot, i, everything, active, v.yields);
 
