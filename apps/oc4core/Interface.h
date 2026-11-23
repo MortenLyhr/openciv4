@@ -60,6 +60,9 @@ namespace oc4::host
 		void selectCity(CvCity* pNewValue, bool bTestProduction) override;
 		void addSelectedCity(CvCity* pNewValue, bool bToggle) override;
 		void clearSelectedCities() override;
+		// Next/previous city (Home, End, BUG's arrows by the minimap) with no city selected: the
+		// active player's city nearest the plot the camera looks at.
+		void selectLookAtCity(bool bAdd) override;
 		bool isCitySelected(CvCity* pCity) override;
 		CvCity* getHeadSelectedCity() override;
 		bool isCitySelection() override { return getHeadSelectedCity() != nullptr; }
@@ -70,6 +73,8 @@ namespace oc4::host
 		// Where the DLL asked the camera to go (lookAtSelectionPlot, lookAtCityOffset), for the
 		// window; -1 none.
 		int lookAtX = -1, lookAtY = -1;
+		// The plot the camera looks at now (the window's, each frame); -1 none.
+		int cameraX = -1, cameraY = -1;
 		// The same for a point between plots (lookAt with a point of the map: a battle's, half way
 		// from the attacker's plot to the defender's), in plots (10.5 the middle of the plot 10).
 		float lookAtPointX = -1, lookAtPointY = -1;
@@ -266,7 +271,7 @@ namespace oc4::host
 		// splash; the messages not shown on the screen (still in the turn log, their sound played).
 		bool noTechSplashOption = false, noEventMessages = false;
 		bool isInAdvancedStart() const override { return false; }
-		CvPlot* getLookAtPlot() override { return nullptr; }
+		CvPlot* getLookAtPlot() override;
 		CvPlot* getGotoPlot() override { return m_gotoPlot; }
 		// Where the right button held would send the selection (the game core's plot help then gives the odds of an attack there).
 		// (the action buttons again: the main interface's recommend what to do there, CvUnit::isActionRecommended)
