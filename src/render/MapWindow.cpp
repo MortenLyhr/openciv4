@@ -2151,7 +2151,7 @@ namespace oc4::render
 		// alone where they cannot go; a green ring without a number at the end of a worker's road (Route To).
 		void drawPath()
 		{
-			if ((!pathing && !goingTo && !padShowsPath()) || path.points.empty())
+			if ((!pathing && !goingTo && !padShowsPath() && !path.mission) || path.points.empty())
 				return;
 			// (sizes in plots; the art is the original's: Art/Units/Selection Effect and its number font)
 			constexpr float kRing = 0.66f, kArrow = 0.13f, kArrowOut = 0.40f, kDot = 0.09f, kDotStep = 0.2f, kDotSpeed = 0.1f;
@@ -2236,11 +2236,15 @@ namespace oc4::render
 			const Vec3 up = camera.up();
 			for (size_t i = 1; i < at.size(); ++i)
 			{
-				const bool last = i + 1 == at.size();
+				// (a queued order's leg ends here: its ring, its arrow along the way there, as at the end)
+				const bool last = i + 1 == at.size() || std::ranges::find(path.legEnds, i) != path.legEnds.end();
+				// (an order queued after the first, turn 0: as Route To, the ring at its end alone,
+				// green, without a number)
+				const bool queued = path.points[i].turn == 0;
 				// (Route To: the ring at its end alone)
-				if (!last && (path.route || path.points[i + 1].turn == path.points[i].turn))
+				if (!last && (path.route || queued || path.points[i + 1].turn == path.points[i].turn))
 					continue;
-				const Color tint = path.route ? green : last && path.attack ? red : white;
+				const Color tint = path.route || queued ? green : last && path.attack ? red : white;
 				const auto& c = at[i];
 				lay(ring, c[0], c[1], kRing, spin, tint);
 				// (the arrow along the way on from here; at the end along the way there)
@@ -2249,7 +2253,7 @@ namespace oc4::render
 				const float angle = std::atan2(b[1] - a[1], b[0] - a[0]);
 				lay(arrow, c[0] + std::cos(angle) * kArrowOut * size, c[1] + std::sin(angle) * kArrowOut * size, kArrow,
 					angle - std::numbers::pi_v<float> / 2, tint);
-				if (path.route || !digits)
+				if (path.route || queued || !digits)
 					continue;
 				// The number upright to the screen, kDigit plots tall where it stands, in the
 				// original's number font (1-5 over 6-0, 64 pixels a row; each digit's ink measured).
