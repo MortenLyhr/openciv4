@@ -3,8 +3,8 @@
 #include <cmath>
 #include <cstdint>
 
-// The mouse's double click on the map, as forgiving as the original's (BtS under Wine, measured
-// 2026-11-21, backlog #46: a second press up to ~480 ms after the first opens one's city, 550 ms
+// The mouse's double click on the map, as forgiving as the original's (BtS under Wine, measured:
+// a second press up to ~480 ms after the first opens one's city, 550 ms
 // does not, as Windows' 500 ms). The time is the presses' own (the system's event times), not
 // when a frame gets round to them, so a slow frame after the first click cannot split a double
 // click. The original lets the mouse move 1 point between the presses; this lets it move a few
