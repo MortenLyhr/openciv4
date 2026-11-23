@@ -3651,23 +3651,37 @@ float4 PSWater(WaterOut i) : SV_Target
 					const PlotView& p = map.plots[size_t(x) + size_t(y) * size_t(map.width)];
 					if ((options.cityScreen && !p.cityWorkable) || (fog && !p.revealed))
 						continue;
-					int groups = 0;
+					// (CvPlot::updateSymbols: a symbol per MAX_YIELD_STACK of the largest yield; each
+					// holds every yield the plot has, up to a stack of it, in its own place)
+					int types = 0, maxYield = 0;
 					for (int k = 0; k < 3; ++k)
-						groups += (int(p.yields[k]) + stackSize - 1) / stackSize;
-					if (groups == 0)
+						if (p.yields[k] > 0)
+							++types, maxYield = std::max(maxYield, int(p.yields[k]));
+					if (types == 0)
 						continue;
+					const int layers = (maxYield + stackSize - 1) / stackSize;
 					const float symbol = options.cityScreen ? (p.worked ? 1.6f : 1.2f) : (p.worked ? 1.2f : 0.8f);
 					const float alpha = options.cityScreen ? (p.worked ? 1.0f : 0.8f) : (p.worked ? 0.8f : 0.6f);
+					// (the yields 0.7 of a symbol apart, as #55 had it: in Wine 0.14 to 0.16 of a plot
+					// at size 0.8, a little more than CvPlot::getSymbolOffsetX's 28 units times the size)
 					const float size = 0.26f * S() * symbol, step = size * 0.7f;
 					Vec3 centre{ (float(x) + 0.5f) * S(), (float(y) + 0.5f) * S(), 0 };
 					centre.x += wrapOffset(centre.x);
 					if (!frustum.sphere(centre, S()))
 						continue;
-					float along = -step * float(groups - 1) / 2;
-					for (int k = 0; k < 3; ++k)
-						for (int left = p.yields[k]; left > 0; left -= stackSize, along += step)
+					// (the yields side by side, centred on the plot; each further symbol drawn over the
+					// one before, a little to the right and nearer the camera: seen in Wine, the slice
+					// of a sixth food in front of the five's loaf, low on it, the single hammer and
+					// coin in front of their piles; about 0.02 of a plot to the right at size 0.8)
+					for (int layer = 0; layer < layers; ++layer)
+						for (int k = 0, slot = 0; k < 3; ++k)
 						{
-							const int count = std::min(left, stackSize);
+							if (p.yields[k] <= 0)
+								continue;
+							const float along = step * (float(slot++) - float(types - 1) / 2) + float(layer) * 5 * symbol * S() / 180;
+							const int count = std::min(int(p.yields[k]) - layer * stackSize, stackSize);
+							if (count <= 0)
+								continue;
 							const auto& icons = map.yieldIcons[size_t(k)];
 							if (size_t(count) > icons.size() || icons[size_t(count - 1)].empty())
 								continue;
@@ -3683,7 +3697,7 @@ float4 PSWater(WaterOut i) : SV_Target
 								continue;
 							// (CvPlot::getSymbolOffsetY: 40 of the original's units south of the plot's
 							// middle; the NIF's quad stands 1 unit over the ground, or over the water)
-							Vec3 at = centre + right * along + Vec3{ 0, -40 * S() / 180, 0 };
+							Vec3 at = centre + right * along + toward * (float(layer) * 12 * symbol * S() / 180) + Vec3{ 0, -40 * S() / 180, 0 };
 							at.z = std::max(ground(at.x, at.y), 0.012f * S()) + S() / 180;
 							Affine place;
 							place.translation = at;
