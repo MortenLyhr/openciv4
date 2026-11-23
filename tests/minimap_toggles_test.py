@@ -122,7 +122,7 @@ def main():
 		# The other options are kept beside them.
 		check({'scores=0', 'edgeScroll=1'} <= profileLines(folder), "the rest of the profile is kept")
 
-		# A profile written before this change (no toggle keys, no profiles folder): the defaults.
+		# A profile with no toggle keys and no profiles folder: the defaults.
 		shutil.rmtree(os.path.join(folder, 'Profiles'), ignore_errors=True)
 		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
 			f.write('name=openciv4\nclock=1\n')

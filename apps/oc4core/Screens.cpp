@@ -554,7 +554,7 @@ namespace oc4::host
 										 bool openciv4AutoSaves, int maxFrameRate) {
 			ui.noTechSplashOption = noTechSplash;
 			ui.noEventMessages = noEventMessages;
-			utility.engine().autoSave = { std::max(0, autoSaveInterval), std::max(1, autoSavesKept), openciv4AutoSaves };
+			utility.engine().autoSave.set({ std::max(0, autoSaveInterval), std::max(1, autoSavesKept), openciv4AutoSaves });
 			utility.engine().maxFrameRate = std::max(0, maxFrameRate);
 		});
 		host.def("movie_playable", [&utility](const std::string& file) {
