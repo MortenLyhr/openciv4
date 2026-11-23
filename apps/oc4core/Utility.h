@@ -214,6 +214,7 @@ namespace oc4::host
 		bool isGameActive() override { return m_gameActive; }
 		int GetLocalNetworkID() override { return -1; }
 		bool IsPitbossHost() const override { return false; }
+		bool IsModem() override { return false; } // (the options screen's network settings: no dial-up)
 		int getChtLvl() override { return 0; }
 		bool GetWorldBuilderMode() override { return m_interface.worldBuilder(); }
 		int getCurrentLanguage() const override { return m_language; }
