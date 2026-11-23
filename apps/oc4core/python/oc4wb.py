@@ -277,8 +277,11 @@ def _items(ctrl):
 			for i in range(gc.getNumBonusInfos()):
 				out.append((0, i, gc.getBonusInfo(i).getButton(), gc.getBonusInfo(i).getDescription(), sel(0, i), (W.WIDGET_PEDIA_JUMP_TO_BONUS, i)))
 		elif tab == 2:
+			# (as the original's list, seen in Wine: without the graphical only terrains, the peak
+			# and the hill, which the plot types place; each list on rows of its own)
 			for i in range(gc.getNumTerrainInfos()):
-				out.append((0, i, gc.getTerrainInfo(i).getButton(), gc.getTerrainInfo(i).getDescription(), sel(0, i), (W.WIDGET_PEDIA_JUMP_TO_TERRAIN, i)))
+				if not gc.getTerrainInfo(i).isGraphicalOnly():
+					out.append((0, i, gc.getTerrainInfo(i).getButton(), gc.getTerrainInfo(i).getDescription(), sel(0, i), (W.WIDGET_PEDIA_JUMP_TO_TERRAIN, i)))
 			# (the plot types and the river with the original's own buttons)
 			for i, (name, art) in enumerate(((u'Peak', 'WORLDBUILDER_PLOT_TYPE_MOUNTAIN'), (u'Hills', 'WORLDBUILDER_PLOT_TYPE_HILL'),
 					(u'Flat', 'WORLDBUILDER_PLOT_TYPE_PLAINS'), (u'Water', 'WORLDBUILDER_PLOT_TYPE_OCEAN'))):
@@ -519,16 +522,31 @@ def _item(screen, ctrl, item, k, parent, cx, cy):
 			w.help = u'<link=literal>' + _u(item[3]) + u'</link>'
 
 
+def _gridPlaces(items, columns):
+	"""Each item's column and row: a section's lists each start a row of their own, as the
+	original's Terrains tab (seen in Wine: the terrains, the plot types, the features, then the
+	routes and the river, each on new rows)."""
+	places, row, col, last = [], 0, 0, None
+	for item in items:
+		if last is not None and (item[0] != last or col >= columns):
+			row, col = row + 1, 0
+		places.append((col, row))
+		col, last = col + 1, item[0]
+	return places
+
+
 def _drawGrid(screen, ctrl, items, x, y, w, h, k0=0):
 	"""Items in a scroll panel: seven to a row beside its scroll bar, or, when they fit without
 	one, as many as fit (the original's: the map mode's improvements eight)."""
 	grid = _add('OC4WBGrid%d' % k0)
 	screen.addScrollPanel(grid, u'', x, y, w, h, _cpe.PanelStyles.PANEL_STYLE_EXTERNAL)
 	columns = max(_COLUMNS, (w - 6) / _CELL)
-	if (len(items) + columns - 1) / columns * _CELL > h - 6:
+	places = _gridPlaces(items, columns)
+	if places and (places[-1][1] + 1) * _CELL > h - 6:
 		columns = _COLUMNS
+		places = _gridPlaces(items, columns)
 	for k, item in enumerate(items):
-		_item(screen, ctrl, item, k0 + k, grid, (k % columns) * _CELL, (k // columns) * _CELL)
+		_item(screen, ctrl, item, k0 + k, grid, places[k][0] * _CELL, places[k][1] * _CELL)
 
 
 # The edit window (a unit's or a city's), as the original's (measured in Wine at 1600 x 900): in
