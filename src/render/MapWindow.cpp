@@ -920,7 +920,8 @@ namespace oc4::render
 					if (padMode == PadMode::Reticle)
 						pan.x += left.x, pan.y += left.y;
 					else
-						for (int i = padFlickSteps(padTileFlick, leftWay, dt, true); i > 0; --i)
+						// (the city screen's camera holds: no plot steps there either)
+					for (int i = padFlickSteps(padTileFlick, leftWay, dt, true); i > 0 && !cityView; --i)
 						{
 							const auto [dx, dy] = padDigitStep(padTileFlick.digit);
 							const auto centred = [&](float v, int d) { return (std::floor(v / plot()) + float(d) + 0.5f) * plot(); };
@@ -1138,7 +1139,7 @@ namespace oc4::render
 					keepOnMap();
 				}
 			}
-			else if (orbiting)
+			else if (orbiting && !cityView) // (the city screen's camera holds)
 			{
 				camera.yaw -= float(x - lastX) * 0.005f;
 				tilt += float(y - lastY) * 0.005f;
@@ -2297,12 +2298,13 @@ namespace oc4::render
 			{
 				const bool down = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN;
 				const int x = px(e.button.x), y = px(e.button.y);
-				// (the middle button held turns the camera, as Ctrl with the right one)
+				// (the middle button held turns the camera, as Ctrl with the right one, but not on the
+				// city screen, whose camera holds)
 				if (e.button.button == SDL_BUTTON_MIDDLE)
 				{
 					SDL_CaptureMouse(down);
 					lastX = x, lastY = y;
-					orbiting = down;
+					orbiting = down && !cityView;
 				}
 				else if (e.button.button == SDL_BUTTON_LEFT || e.button.button == SDL_BUTTON_RIGHT)
 					onButton(down && e.button.button == SDL_BUTTON_LEFT, down, x, y);
