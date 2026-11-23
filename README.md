@@ -209,8 +209,8 @@ edge" on the options' OpenCiv4 tab turns it off (on by default). It is kept in p
 never edge scroll). The rule is `src/render/EdgeScroll.h`, tested by `tests/edge_scroll_test.cpp`.
 
 The player options (Options → Game: Wait at End of Turn, Quick Combat, …) are kept in the player's
-profile, as the original keeps them in its own (`Profiles\<name>.pfl`): a choice is written to
-profile.ini at once (`player.N=`), and every game, new or loaded, starts with the profile's, which
+profile, as the original keeps them in its own (`Profiles\<name>.pfl`): a choice is written at
+once to the profile's file (`Profiles/<name>.ini` beside profile.ini, `player.N=`), and every game, new or loaded, starts with the profile's, which
 the game core sends to the active player (a save's own options are overwritten, as in the original).
 OpenCiv4's own options (W A S D, idle turns, edge scrolling) are on a tab of their own, OpenCiv4,
 after the original's four. Tested by `tests/player_options_test.py`.
