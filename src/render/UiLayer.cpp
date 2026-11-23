@@ -787,10 +787,11 @@ namespace oc4::render
 				break;
 			case Kind::Label:
 			case Kind::Text:
-				// (a text, CyGInterfaceScreen.setText, is in the theme's normal font, size 3, whatever
-				// font it names; a label in the one it names)
+				// (a text, CyGInterfaceScreen.setText, is in the theme's normal font, size 3 and not bold,
+				// whatever font it names, as the original draws it and as determineWidth measures it; a
+				// label in the one it names)
 				// (only a text lights up under the mouse; a label keeps its colour, its help aside)
-				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), fontBold(it.font),
+				label(y0, it.kind == Kind::Text ? m_sizes[3] : fontSize(it.font), it.kind != Kind::Text && fontBold(it.font),
 					it.kind == Kind::Text && it.interactive && hot ? kHot : kText);
 				break;
 			case Kind::EndTurnText:
