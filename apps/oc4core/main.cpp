@@ -446,6 +446,9 @@ namespace
 	// apart while one is on, as the original's engine does; with nothing shown they run flat out.
 	// (Measured in the original under Wine: a game update every 0.26 s, a shown move every 4 updates.)
 	constexpr std::chrono::milliseconds kShownMoveSlice{ 250 };
+	// (OpenCiv4's own option Quick enemy moves: 0.6 s a move instead of 1 s; the camera still goes to
+	// each and the unit's walk ends before the next starts, so the player can follow them)
+	constexpr std::chrono::milliseconds kQuickShownMoveSlice{ 150 };
 	bool shownMoveOn()
 	{
 		for (int p = 0; p < MAX_PLAYERS; ++p)
@@ -1743,7 +1746,8 @@ namespace
 				if (Clock::now() >= nextShownMoveUpdate)
 				{
 					window.setBusy(true);
-					worker.start([&session, &game, &nextShownMoveUpdate] {
+					const auto slice = utility.quickEnemyMoves() ? kQuickShownMoveSlice : kShownMoveSlice;
+					worker.start([&session, &game, &nextShownMoveUpdate, slice] {
 						const auto until = Clock::now() + std::chrono::milliseconds(100);
 						do
 							if (host::Entities::battleWait())
@@ -1755,7 +1759,7 @@ namespace
 								session.update();
 								if (wasShown || shownMoveOn())
 								{
-									nextShownMoveUpdate = Clock::now() + kShownMoveSlice;
+									nextShownMoveUpdate = Clock::now() + slice;
 									break;
 								}
 							}

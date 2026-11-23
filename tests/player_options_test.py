@@ -149,12 +149,13 @@ def main():
 		check(profile.getPlayerOption(2) and not profile.getPlayerOption(6), "no profile: the XML's defaults")
 		check(host.states[:NUM] == [0] * NUM, "no profile: the host has none chosen")
 
-		# The screen's tabs: the game's four, then OpenCiv4's with its three options.
+		# The screen's tabs: the game's four, then OpenCiv4's with its four options.
 		ctrl = optionsScreen(options)
 		check([label for form, label in ctrl._tabs] == ['Game', 'Graphics', 'Audio', 'Other', 'OpenCiv4'], "tabs: %s" % [l for f, l in ctrl._tabs])
 		oc4 = [n.name for n in ctrl._nodes.values() if n.kind == 'checkbox' and n.name.startswith('Oc4')]
 		check(sorted(oc4) == sorted([options.WASD_PAN_CHECKBOX, options.AUTO_END_TURN_CHECKBOX, options.EDGE_SCROLL_CHECKBOX,
-			options.NO_TECH_SPLASH_CHECKBOX, options.NO_EVENT_MESSAGES_CHECKBOX, options.OPENCIV4_AUTOSAVES_CHECKBOX]), "OpenCiv4's options: %s" % oc4)
+			options.NO_TECH_SPLASH_CHECKBOX, options.NO_EVENT_MESSAGES_CHECKBOX, options.OPENCIV4_AUTOSAVES_CHECKBOX,
+			options.QUICK_ENEMY_MOVES_CHECKBOX]), "OpenCiv4's options: %s" % oc4)
 		game = [n.name for n in ctrl._byName['GamePanelCenter'].children]
 		check(game == ['GameOptionCheckBox_2', 'GameOptionCheckBox_6', 'LangHBox'], "the Game tab has only the game's: %s" % game)
 
