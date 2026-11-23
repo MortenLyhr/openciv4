@@ -13,6 +13,8 @@
 //    where the territory ends. An edge is walled where both its plots are land of the city's
 //    landmass (CvPlot::getAreaIdForGreatWall): the coast and the borders across the sea are
 //    left open, so a wall is a closed loop or pieces that end at the coast.
+// OpenCiv4 doesn't keep the wall in its saves (the original keeps it in its own section of the
+// save, in a form not fully known): after a load it is laid again along the borders as they are.
 
 #include <array>
 #include <cstddef>
@@ -36,8 +38,4 @@ namespace oc4::host
 
 	// The wall the engine lays for the city now (its territory as it is).
 	GreatWall traceGreatWall(const CvCity& city);
-
-	// The walls kept with a save (SaveFile::greatWall).
-	std::vector<std::byte> writeGreatWalls(const std::vector<GreatWall>& walls);
-	std::vector<GreatWall> readGreatWalls(const std::vector<std::byte>& data);
 }

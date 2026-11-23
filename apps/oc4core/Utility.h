@@ -153,13 +153,13 @@ namespace oc4::host
 		}
 		std::vector<Effect> effects;
 		// The Great Wall (GreatWall.h): asked for by the game core, laid at the engine's next
-		// update (layGreatWalls: before the map is next captured, or a save), along the borders
+		// update (layGreatWalls: before the map is next captured), along the borders
 		// as they are then, and kept as laid. (A scenario sets its cities' buildings before
 		// their borders are drawn: the original's wall follows the borders it starts with.)
 		void AddGreatWall(CvCity* city) override;
 		void RemoveGreatWall(CvCity* city) override;
-		// The walls of a new game (none) or of a loaded one (its save's; fromWonders: a save
-		// without them, the wall is laid for a city with the wonder).
+		// The walls of a new game (none) or of a loaded one (fromWonders: saves don't keep
+		// OpenCiv4's wall, so it is laid again for a city with the wonder).
 		void resetGreatWalls(std::vector<GreatWall> walls, bool fromWonders);
 		// On the game's thread, while the game core stands still. wonderCities: the cities
 		// with the wonder, game core plots (asked only for a save without walls).
@@ -168,12 +168,6 @@ namespace oc4::host
 		{
 			std::lock_guard lock(greatWallMutex);
 			return m_greatWalls;
-		}
-		// (false while a loaded save's wall waits to be laid from its wonder)
-		bool greatWallsKnown() const
-		{
-			std::lock_guard lock(greatWallMutex);
-			return !m_greatWallFromWonders;
 		}
 		std::atomic<uint64_t> greatWallVersion = 1;
 	private:

@@ -6,8 +6,6 @@
 #include "CvMap.h"
 #include "CvPlot.h"
 #include <algorithm>
-#include <cstring>
-#include <stdexcept>
 #include <utility>
 
 namespace oc4::host
@@ -132,80 +130,6 @@ namespace oc4::host
 			piece->corners.push_back(e.to);
 		}
 		return wall;
-	}
-
-	namespace
-	{
-		constexpr int kVersion = 1;
-		void put(std::vector<std::byte>& out, int v)
-		{
-			const auto* b = reinterpret_cast<const std::byte*>(&v);
-			out.insert(out.end(), b, b + 4);
-		}
-	}
-
-	std::vector<std::byte> writeGreatWalls(const std::vector<GreatWall>& walls)
-	{
-		std::vector<std::byte> out;
-		put(out, kVersion);
-		put(out, int(walls.size()));
-		for (const GreatWall& w : walls)
-		{
-			put(out, w.cityX);
-			put(out, w.cityY);
-			put(out, int(w.chains.size()));
-			for (const GreatWallChain& c : w.chains)
-			{
-				put(out, c.closed ? 1 : 0);
-				put(out, int(c.corners.size()));
-				for (const auto& p : c.corners)
-				{
-					put(out, p[0]);
-					put(out, p[1]);
-				}
-			}
-		}
-		return out;
-	}
-
-	std::vector<GreatWall> readGreatWalls(const std::vector<std::byte>& data)
-	{
-		size_t at = 0;
-		const auto get = [&]() {
-			if (at + 4 > data.size())
-				throw std::runtime_error("the save's Great Wall is cut short");
-			int v;
-			std::memcpy(&v, data.data() + at, 4);
-			at += 4;
-			return v;
-		};
-		const auto count = [&]() {
-			const int n = get();
-			if (n < 0 || size_t(n) > data.size())
-				throw std::runtime_error("the save's Great Wall is damaged");
-			return size_t(n);
-		};
-		std::vector<GreatWall> walls;
-		if (data.empty() || get() != kVersion)
-			return walls;
-		walls.resize(count());
-		for (GreatWall& w : walls)
-		{
-			w.cityX = get();
-			w.cityY = get();
-			w.chains.resize(count());
-			for (GreatWallChain& c : w.chains)
-			{
-				c.closed = get() != 0;
-				c.corners.resize(count());
-				for (auto& p : c.corners)
-				{
-					p[0] = get();
-					p[1] = get();
-				}
-			}
-		}
-		return walls;
 	}
 }
 
