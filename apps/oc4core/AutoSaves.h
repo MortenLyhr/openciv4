@@ -1,7 +1,7 @@
 #pragma once
 // The game's autosaves as the original makes them (CivilizationIV.ini's AutoSaveInterval and
 // MaxAutoSaves; the options' OpenCiv4 tab), as seen in the running original under Wine
-// (2026-11-22: interval 2, 3 kept, Saves\single\auto listed at each of 16 turns): the game's first
+// (interval 2, 3 kept, Saves\single\auto listed at each of 16 turns): the game's first
 // turn as AutoSave_Initial_BC-4000, then at the start of every interval's turn (2, 4, 6, ...)
 // AutoSave_<year> (AutoSave_BC-3920); when one more than the number kept is written, the oldest
 // AutoSave_<year> goes. The initial save doesn't count and stays. Interval 0: none, as the ini's
@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <format>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -22,7 +23,27 @@ namespace oc4::host
 	struct AutoSaveSettings
 	{
 		int interval = 4, kept = 5; // (the ini's defaults; interval 0: no autosaves)
-		bool openciv4 = false;      // openciv4's own (My Games\openciv4\Saves\auto, every 25th turn kept)
+		bool openciv4 = false;      // openciv4's own (My Games\openciv4\Saves\auto, one in 25 turns kept)
+	};
+
+	// The settings as the options' script sets them and the game's thread reads them.
+	class SharedAutoSaveSettings
+	{
+	public:
+		void set(const AutoSaveSettings& how)
+		{
+			std::lock_guard lock(m_mutex);
+			m_how = how;
+		}
+		AutoSaveSettings get() const
+		{
+			std::lock_guard lock(m_mutex);
+			return m_how;
+		}
+
+	private:
+		mutable std::mutex m_mutex;
+		AutoSaveSettings m_how;
 	};
 
 	// Whether the game saves at this turn's start (the game's first: its initial save).
@@ -42,6 +63,14 @@ namespace oc4::host
 	inline std::wstring openciv4AutoSaveName(const std::wstring& stem, const AutoSaveSettings& how, int turn)
 	{
 		return std::format(L"{}_{}.CivBeyondSwordSave", stem, turn / std::max(1, how.interval) % std::max(1, how.kept));
+	}
+
+	// openciv4's own: whether this turn's save is also kept for good, the first save in each 25 turns
+	// (turn 25, 50, ... when the interval divides it; else the first save after each).
+	inline bool openciv4KeepsForGood(const AutoSaveSettings& how, int turn)
+	{
+		const int every = std::max(1, how.interval);
+		return turn > 0 && turn / 25 != (turn - every) / 25;
 	}
 
 	// The AutoSave_<year> saves in the folder beyond the newest kept ones (the oldest first to go);

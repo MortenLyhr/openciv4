@@ -920,22 +920,29 @@ namespace
 		// (AutoSaves.h, the options' OpenCiv4 tab); a scripted game is not.
 		if (opt.viewSeconds <= 0)
 			utility.engine().onAutoSave = [&session, &game, &engine = utility.engine()](bool initial) {
-				const host::AutoSaveSettings how = engine.autoSave;
+				const host::AutoSaveSettings how = engine.autoSave.get();
 				const int turn = game.getGameTurn();
 				if (!host::autoSaveDue(how, turn, initial))
 					return;
+				// (no Documents folder: no autosave, rather than one beside the working directory)
+				const fs::path documents = documentsFolder();
+				if (documents.empty())
+				{
+					std::printf("  autosave skipped: no Documents folder\n");
+					return;
+				}
 				const auto save = [&](const fs::path& folder, const fs::path& path) {
 					fs::create_directories(folder);
 					session.saveGame(path);
-					std::printf("  autosaved turn %d: %s\n", turn, path.string().c_str());
+					std::printf("  autosaved turn %d: %s\n", turn, utf8Path(path).c_str());
 				};
 				try
 				{
 					if (how.openciv4)
 					{
 						// (Documents\My Games\openciv4\Saves\auto; the active civilization and the
-						// game's map seed in the name, every 25th turn kept for good)
-						const fs::path folder = documentsFolder() / L"My Games" / L"openciv4" / L"Saves" / L"auto";
+						// game's map seed in the name, one save in 25 turns kept for good)
+						const fs::path folder = documents / L"My Games" / L"openciv4" / L"Saves" / L"auto";
 						std::wstring civ;
 						if (const PlayerTypes active = game.getActivePlayer(); active != NO_PLAYER)
 							for (const wchar_t c : std::wstring(GC.getInitCore().getCivShortDesc(active).GetCString()))
@@ -943,11 +950,11 @@ namespace
 						const std::wstring stem = std::format(L"AutoSave_{}_{:08X}", civ, GC.getInitCore().getMapRandSeed());
 						const fs::path path = folder / host::openciv4AutoSaveName(stem, how, turn);
 						save(folder, path);
-						if (turn % 25 == 0)
+						if (host::openciv4KeepsForGood(how, turn))
 							fs::copy_file(path, folder / std::format(L"{}_turn{}.CivBeyondSwordSave", stem, turn), fs::copy_options::overwrite_existing);
 						return;
 					}
-					const fs::path folder = documentsFolder() / L"My Games" / L"Beyond the Sword" / L"Saves" / L"single" / L"auto";
+					const fs::path folder = documents / L"My Games" / L"Beyond the Sword" / L"Saves" / L"single" / L"auto";
 					// (the year through the scripts' CyGame: the game core does not export getGameTurnYear)
 					int year;
 					{
@@ -1583,11 +1590,11 @@ namespace
 				// (the units there are in the plot list then), one click on the bar selects the city
 				// (what it builds in the bottom panel); one click on its plot is any plot's (its
 				// units). One click on one of the figures in it is, as anywhere, its unit's; a double
-				// click there opens the city too (Wine, backlog #46). OpenCiv4's option opens the
+				// click there opens the city too (Wine). OpenCiv4's option opens the
 				// screen with one click on the city or its bar.
 				// The first click of a double click is a click (it selects the units there); the city's
-				// screen then opens with the units selected before it, the ones Esc gives back (Wine,
-				// backlog #46: on its plot, its bar or a figure in it).
+				// screen then opens with the units selected before it, the ones Esc gives back (Wine:
+				// on its plot, its bar or a figure in it).
 				CvCity* ownCity = plot->getPlotCity() && plot->getPlotCity()->getOwner() == me ? plot->getPlotCity() : nullptr;
 				const auto before = std::exchange(selectedBeforeClick, std::nullopt);
 				if (!click.right && !click.twice)
@@ -1630,7 +1637,7 @@ namespace
 					else
 						ui.clearSelectionList();
 					// (as the original's: the camera goes to the plot clicked, a unit there or not, but
-					// not to one's own city, its plot or a figure in it (Wine, backlog #46: so a double
+					// not to one's own city, its plot or a figure in it (Wine: so a double
 					// click's second click lands where the first did); a scripted game told where to
 					// look keeps looking there)
 					if (!ownCity && (opt.lookX < 0 || opt.viewSeconds <= 0 || std::getenv("OC4_FOLLOW_CAMERA")))

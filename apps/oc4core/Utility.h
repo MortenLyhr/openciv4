@@ -61,7 +61,7 @@ namespace oc4::host
 		}
 		std::function<void(bool initial)> onAutoSave;
 		// How it saves (AutoSaves.h; the options' OpenCiv4 tab).
-		AutoSaveSettings autoSave;
+		SharedAutoSaveSettings autoSave;
 		// At most this many frames a second (the ini's SetMaxFrameRate; 0: as many as the display shows).
 		std::atomic<int> maxFrameRate = 0;
 

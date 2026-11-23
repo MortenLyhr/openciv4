@@ -199,7 +199,7 @@ def main():
 		profile = options._UserProfile()
 		check(profile.getPlayerOption(2) and not profile.getPlayerOption(6), "defaults kept after a restart")
 
-		# A profile written before this change: the XML's defaults, the rest kept.
+		# A profile with no player options in it: the XML's defaults, the rest kept.
 		with open(os.path.join(folder, 'profile.ini'), 'w') as f:
 			f.write('name=openciv4\nedgeScroll=0\n')
 		host, options = start(folder)

@@ -1,6 +1,7 @@
 #include "Sounds.h"
 
 #include "audio/Audio.h"
+#include "core/FileUtil.h"
 
 #include "CvGameCoreDLL.h"
 
@@ -39,19 +40,19 @@ namespace oc4::host
 		std::string g_musicFolder; // (the player's own music; empty: the era's)
 		std::atomic<int> g_folderChanges = 0;
 
-		// The music files of a folder (MP3, WAV), by name.
+		// The music files of a folder (MP3, WAV), by name; the folder and the files' paths in UTF-8.
 		std::vector<std::string> musicFiles(const std::string& folder)
 		{
 			std::vector<std::string> out;
 			std::error_code ec;
-			if (folder.empty() || !std::filesystem::is_directory(folder, ec))
+			if (folder.empty() || !std::filesystem::is_directory(pathFromUtf8(folder), ec))
 				return out;
-			for (const auto& e : std::filesystem::directory_iterator(folder, ec))
+			for (const auto& e : std::filesystem::directory_iterator(pathFromUtf8(folder), ec))
 			{
-				std::string ext = e.path().extension().string();
+				std::string ext = utf8Path(e.path().extension());
 				std::ranges::transform(ext, ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
 				if ((ext == ".mp3" || ext == ".wav") && e.is_regular_file(ec))
-					out.push_back(e.path().string());
+					out.push_back(utf8Path(e.path()));
 			}
 			std::ranges::sort(out);
 			return out;
@@ -313,10 +314,10 @@ namespace oc4::host
 			if (it == loading.end())
 			{
 				std::shared_ptr<std::vector<std::byte>> bytes;
-				if (std::filesystem::path(file).is_absolute())
+				if (pathFromUtf8(file).is_absolute())
 				{
 					// (the player's own music, from their folder)
-					std::ifstream in(std::filesystem::path(file), std::ios::binary);
+					std::ifstream in(pathFromUtf8(file), std::ios::binary);
 					if (!in)
 						return cache[file] = nullptr;
 					bytes = std::make_shared<std::vector<std::byte>>();

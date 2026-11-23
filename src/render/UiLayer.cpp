@@ -552,7 +552,7 @@ namespace oc4::render
 
 	void UiLayer::drawListButton(Overlay& o, const Item& it, bool hot, bool pressed, double clock)
 	{
-		// As the original draws a multi list's button (measured in Wine, BUG + BULL, 2026-11-20): its
+		// As the original draws a multi list's button (measured in Wine, BUG + BULL): its
 		// picture whole, the ring over its edge in the HUDBorder colour; under the mouse the fill
 		// glow added (+57 of 255: its inside, the ring, and a soft edge just outside); pressed, a
 		// blue fill half over that; disabled, half way to black (its own picture, the one
