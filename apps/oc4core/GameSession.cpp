@@ -440,11 +440,23 @@ namespace oc4::host
 		game.initDiplomacy();
 
 		// As the original engine plays a scenario: its map, its starting plots, the era's
-		// free things (CvGame::setInitialItems: units where none are), then its own.
+		// free units (where none are), then its own items. CvGame::setInitialItems without
+		// initFreeState: a scenario's teams have only the techs it lists (no civilization,
+		// handicap or era free techs) and its players the gold it gives them.
 		if (wb.attr("applyMapDesc")().cast<int>() < 0)
 			throw std::runtime_error("cannot apply the scenario's map");
 		wb.attr("getAssignedStartingPlots")();
-		game.setInitialItems();
+		game.assignStartingPlots();
+		game.normalizeStartingPlots();
+		game.initFreeUnits();
+		// (CvPlayerAI::AI_updateFoundValues isn't exported: through its Python binding)
+		if (!m_python.run("import CvPythonExtensions\n"
+						  "_gc = CvPythonExtensions.CyGlobalContext()\n"
+						  "for _p in range(_gc.getMAX_PLAYERS()):\n"
+						  "    if _gc.getPlayer(_p).isAlive():\n"
+						  "        _gc.getPlayer(_p).AI_updateFoundValues(False)\n"
+						  "del _gc, _p\n"))
+			throw std::runtime_error("CyPlayer.AI_updateFoundValues failed");
 		wb.attr("applyInitialItems")();
 		game.initScoreCalculation();
 		game.setFinalInitialized(true);
