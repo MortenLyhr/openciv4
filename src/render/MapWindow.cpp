@@ -1820,7 +1820,9 @@ namespace oc4::render
 					else
 						drawMinimap(x0, y0, x1, y1, false);
 				}, clock,
-					[&](const UiItem& it) { return drawHead(it); });
+					[&](const UiItem& it) { return drawHead(it); },
+					// (the top messages: over the main interface, under the game's screens, as the original)
+					[&] { drawMessages(); });
 			}
 			else
 			{
@@ -1837,8 +1839,8 @@ namespace oc4::render
 				drawMinimap(sw - 12 - mw, sh - 12 - mw, sw - 12, sh - 12, true);
 				drawInfo();
 				drawActions();
+				drawMessages();
 			}
-			drawMessages();
 			if (!popup.active())
 				drawPlotHelp();
 			popup.draw(*overlay, busy ? std::function<std::string(int)>{} : popupHelp);
