@@ -778,6 +778,9 @@ namespace
 		std::vector<int> actionIds; // the action of each button the window shows
 		std::optional<std::pair<int, int>> pathShown; // where the way the window shows leads
 		std::optional<std::vector<IDInfo>> selectedBeforeClick; // (the units selected before the last left click on the map)
+		bool heldSeen[2] = {};       // (the mouse buttons a frame saw held, for the scripts' isLeftMouseDown, ...)
+		std::tuple<int, int, int> highlighted{ -2, -2, -2 }; // (the plot the interface mode outlines, and the mode)
+		bool pickPress = false;      // (a press begun while a script picks a plot, still held)
 		std::pair<const void*, int> pathFrom{};        // (the unit it starts from and its plot: the gamepad's plot cursor shows it all the while)
 		std::tuple<const void*, const void*, int, int> coloredFor{}; // what was selected when the plots were last coloured
 		uint64_t marksShown = ~0ull; // the marks the window has
@@ -1416,7 +1419,6 @@ namespace
 			// frame, so that it is seen once.
 			if (!ui.worldBuilder() && !opt.ownInterface)
 			{
-				static bool heldSeen[2] = {};
 				const auto [hx, hy] = window.hoveredPlot();
 				ui.mouseOverMap = hx >= 0 && window.uiHovered() < 0;
 				int px = ui.mouseOverMap ? hx : ui.mouseX, py = ui.mouseOverMap ? hy : ui.mouseY;
@@ -1448,7 +1450,6 @@ namespace
 			// the units can't go; none where it isn't known or the script can't pick it), as the
 			// WorldBuilder's brush (Wine: BUG's dot map editor, a green plot under the mouse, backlog #68).
 			// Asked again only when the mode or the plot changes (pick plot asks the scripts).
-			static std::tuple<int, int, int> highlighted{ -2, -2, -2 };
 			if (ui.worldBuilder())
 				highlighted = { -2, -2, -2 }; // (the WorldBuilder's brush is drawn in that layer meanwhile)
 			else
@@ -1683,7 +1684,6 @@ namespace
 			// None while a script picks a plot (BUG's dot map editor, whose right button takes a city
 			// away): there the original shows no way to it, neither with the button held nor for a
 			// press begun in that mode and still held after the mode ends (backlog #68).
-			static bool pickPress = false;
 			std::optional<std::pair<int, int>> pointed = playing ? window.pathTarget() : std::nullopt;
 			if (!pointed)
 				pickPress = false;
