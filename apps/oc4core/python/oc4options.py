@@ -576,6 +576,22 @@ def handleMacKeysClicked(args):
 	return 1
 
 
+def handleMacKeysReset(args):
+	"""Restore Defaults on the Mac keys tab: Mac keys as a new profile has it (on on macOS), as the
+	game's button does for its own tab (CvOptionsScreenCallbackInterface: resetOptions, refresh,
+	saveProfile)."""
+	_profile['macKeys'] = _fresh()['macKeys']
+	_save()
+	try:
+		oc4host.set_mac_keys(_profile['macKeys'])
+	except Exception:
+		pass
+	ctrl = _state['ctrl']
+	if ctrl is not None:
+		ctrl.setValue(MAC_KEYS_CHECKBOX, bool(_profile['macKeys']))
+	return 1
+
+
 def _macKeysOn():
 	try:
 		return bool(oc4host.mac_keys())
@@ -1169,8 +1185,13 @@ class CyGTabCtrl(object):
 		"""The option Mac keys and the keys macOS takes or a Mac has not (MAC_KEYS)."""
 		self.attachTabItem(MAC_KEYS_FORM, u'Mac keys')
 		self.attachVBox(MAC_KEYS_FORM, 'Oc4MacVBox')
+		# (as the OpenCiv4 tab: a scroll panel, then the game's line, Restore Defaults and Exit under it)
+		self.attachScrollPanel('Oc4MacVBox', 'Oc4MacScroll')
+		self.setLayoutFlag('Oc4MacScroll', 'LAYOUT_SIZE_HEXPANDING')
+		self.setLayoutFlag('Oc4MacScroll', 'LAYOUT_SIZE_VEXPANDING')
+		self._attachLowerButtons('Oc4MacVBox', 'Oc4Mac', 'handleMacKeysReset')
 		parent = 'Oc4MacPanel'
-		self.attachPanel('Oc4MacVBox', parent)
+		self.attachPanel('Oc4MacScroll', parent)
 		self.setStyle(parent, 'Panel_Tan15_Style')
 		self.setLayoutFlag(parent, 'LAYOUT_SIZE_HEXPANDING')
 		self.setLayoutFlag(parent, 'LAYOUT_SIZE_VEXPANDING')

@@ -203,8 +203,14 @@ def main():
 			check(not host.macKeys and 'macKeys=0' in profileLines(folder), "Mac keys: off, kept")
 			host, options = start(folder)
 			check(not host.macKeys, "Mac keys: off after a restart")
-			click(options, optionsScreen(options), options.MAC_KEYS_CHECKBOX)
-			check(host.macKeys and 'macKeys=1' in profileLines(folder), "Mac keys: on again")
+			# Restore Defaults on its tab: on again (the game's line and its two buttons under the tab).
+			ctrl = optionsScreen(options)
+			check([n.name for n in ctrl._byName['Oc4MacVBox'].children] == ['Oc4MacScroll', 'Oc4MacExitSeparator', 'Oc4MacLowerHBox'],
+				"Mac keys tab: %s" % [n.name for n in ctrl._byName['Oc4MacVBox'].children])
+			check([n.name for n in ctrl._byName['Oc4MacLowerHBox'].children] == ['Oc4MacOptionsResetButton', 'Oc4MacOptionsExitButton'], "its buttons")
+			options._call(ctrl._byName['Oc4MacOptionsResetButton'], (0, 'Oc4MacOptionsResetButton'))
+			check(host.macKeys and 'macKeys=1' in profileLines(folder) and ctrl._byName[options.MAC_KEYS_CHECKBOX].value is True,
+				"Mac keys: Restore Defaults turns it on again")
 			ctrl = optionsScreen(options)
 		game = [n.name for n in ctrl._byName['GamePanelCenter'].children]
 		check(game == ['GameOptionCheckBox_2', 'GameOptionCheckBox_6', 'LangHBox'], "the Game tab has only the game's: %s" % game)
