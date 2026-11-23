@@ -224,6 +224,30 @@ def main():
 	finally:
 		shutil.rmtree(folder, ignore_errors=True)
 
+	# A profile and a music folder named in what isn't ASCII, in a folder so named: kept as UTF-8,
+	# written whole (no file left beside it).
+	folder = tempfile.mkdtemp(suffix=u'_J\u00f8rgen')
+	try:
+		host, options = start(folder)
+		profile = options._UserProfile()
+		name = u'\u6771\u4eac'
+		profile.setProfileName(name)
+		check(profile.writeToFile(name), "a profile named %r written" % name)
+		check(os.path.isfile(os.path.join(folder, u'Profiles', name + u'.ini')), "as Profiles/%s.ini" % name)
+		check(options._utf8(name) in [options._utf8(n) for n in listed(profile)], "and listed: %r" % listed(profile))
+		check(profile.readFromFile(name), "and loaded")
+		music = os.path.join(folder, u'\u6771\u4eac musik')
+		profile.setMusicPath(music)
+		check(profile.getMusicPath() == options._utf8(music), "the music folder kept as UTF-8")
+		host, options = start(folder)
+		profile = options._UserProfile()
+		check(profile.getProfileName() == options._utf8(name) and profile.getMusicPath() == options._utf8(music),
+			"both read back after a restart: %r %r" % (profile.getProfileName(), profile.getMusicPath()))
+		left = [f for f in os.listdir(folder) + os.listdir(os.path.join(folder, u'Profiles')) if f.endswith(u'.tmp')]
+		check(not left, "no file left from writing: %r" % left)
+	finally:
+		shutil.rmtree(folder, ignore_errors=True)
+
 	if failures:
 		print("options_other_test: %d failed" % len(failures))
 		return 1

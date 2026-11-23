@@ -93,6 +93,46 @@ def _path():
 		return ''
 
 
+try:
+	_unicode = unicode
+except NameError: # (Python 3, as the tests run it: str is text)
+	_unicode = None
+
+
+def _utf8(s):
+	"""Text as UTF-8 bytes, as the profile keeps it (Python 2's str(u'...') fails on what isn't ASCII)."""
+	return s.encode('utf-8') if _unicode is not None and isinstance(s, _unicode) else str(s)
+
+
+def _fs(path):
+	"""A path as the file system calls take it: unicode, so that Windows opens it by its wide name,
+	not in the system's code page (bytes that aren't UTF-8 are left as they are)."""
+	if _unicode is None or isinstance(path, _unicode):
+		return path
+	try:
+		return path.decode('utf-8')
+	except UnicodeDecodeError:
+		return path
+
+
+def _write(path, text):
+	"""Writes the file whole or not at all: to a file beside it first, then over it (a crash while
+	writing leaves the old file)."""
+	path = _fs(path)
+	tmp = path + '.tmp'
+	f = open(tmp, 'w')
+	try:
+		f.write(text)
+	finally:
+		f.close()
+	try:
+		os.rename(tmp, path)
+	except OSError:
+		# (Windows: no rename over a file that is there)
+		os.remove(path)
+		os.rename(tmp, path)
+
+
 # The profile's form: 2 since the player options are the player's choices (before, the options
 # screen wrote every player option it had shown, those it had never read as off).
 _VERSION = 2
@@ -118,24 +158,24 @@ def _isGlobal(key):
 
 
 def _profilesDir():
-	path = _path()
-	return os.path.join(os.path.dirname(path), 'Profiles') if path else ''
+	path = _fs(_path())
+	return os.path.join(os.path.dirname(path), u'Profiles') if path else u''
 
 
 def _fileName(name):
 	"""The profile's file (a name the file system cannot have: None)."""
-	name = str(name).strip()
+	name = _utf8(name).strip()
 	if not name or name in ('.', '..') or [c for c in name if c in _BAD or ord(c) < 32]:
 		return None
 	folder = _profilesDir()
-	return os.path.join(folder, name + '.ini') if folder else None
+	return os.path.join(folder, _fs(name) + u'.ini') if folder else None
 
 
 def _profileNames():
 	"""The profiles there are (their files'), sorted as the original lists them."""
 	folder = _profilesDir()
 	try:
-		names = [f[:-4] for f in os.listdir(folder) if f.lower().endswith('.ini') and os.path.isfile(os.path.join(folder, f))]
+		names = [_utf8(f[:-4]) for f in os.listdir(folder) if f.lower().endswith('.ini') and os.path.isfile(os.path.join(folder, f))]
 	except OSError:
 		names = []
 	return sorted(names, key=lambda n: n.lower())
@@ -172,7 +212,7 @@ def _read(path, which, others=False):
 	(key: value) without taking them."""
 	rest = {}
 	try:
-		f = open(path, 'r')
+		f = open(_fs(path), 'r')
 	except IOError:
 		return rest
 	version = 1
@@ -242,20 +282,16 @@ def _save(name=None):
 		try:
 			if not os.path.isdir(os.path.dirname(own)):
 				os.makedirs(os.path.dirname(own))
-			f = open(own, 'w')
-			f.write('\n'.join(['version=%d' % _VERSION] + [l for l in lines if not _isGlobal(l.split('=', 1)[0])]) + '\n')
-			f.close()
+			_write(own, '\n'.join(['version=%d' % _VERSION] + [l for l in lines if not _isGlobal(l.split('=', 1)[0])]) + '\n')
 			ok = True
 		except (IOError, OSError):
 			pass
 	if name == _profile['name']:
 		_profile['UserProfile'] = name
 	try:
-		f = open(path, 'w')
-		f.write('\n'.join(['version=%d' % _VERSION, 'UserProfile=%s' % _profile.get('UserProfile', '')] +
+		_write(path, '\n'.join(['version=%d' % _VERSION, 'UserProfile=%s' % _profile.get('UserProfile', '')] +
 			[l for l in lines if _isGlobal(l.split('=', 1)[0])]) + '\n')
-		f.close()
-	except IOError:
+	except (IOError, OSError):
 		pass
 	return ok
 
@@ -677,7 +713,7 @@ def folderChosen(path):
 	except Exception:
 		import traceback
 		traceback.print_exc()
-	_profile['musicPath'] = path
+	_profile['musicPath'] = _utf8(path)
 	_save()
 	_applyVolumes()
 
@@ -696,7 +732,7 @@ class _UserProfile(object):
 
 	# the profiles (Profiles/<name>.ini): the Other tab's list, Create New Profile, Delete Profile
 	def getProfileName(self): return _profile['name']
-	def setProfileName(self, s): _profile['name'] = str(s)
+	def setProfileName(self, s): _profile['name'] = _utf8(s)
 	def loadProfileFileNames(self): _names[:] = _profileNames() or [_profile['name']]
 	def getNumProfileFiles(self): return len(_names)
 	def getProfileFileName(self, i):
@@ -713,7 +749,7 @@ class _UserProfile(object):
 			return False
 		_resetProfile()
 		_read(own, lambda key: not _isGlobal(key))
-		_profile['name'] = str(s)
+		_profile['name'] = _utf8(s)
 		_save()
 		_clock['justOn'] = True
 		_applyVolumes()
@@ -723,7 +759,7 @@ class _UserProfile(object):
 		if toggles:
 			toggles()
 		return True
-	def writeToFile(self, s): return _save(str(s))
+	def writeToFile(self, s): return _save(_utf8(s))
 	def deleteProfileFile(self, s):
 		"""Deletes the profile s's file; not the last one (a profile is always loaded)."""
 		own = _fileName(s)
@@ -827,7 +863,7 @@ class _UserProfile(object):
 	def getVolumeStops(self): return _VOLUME_STOPS
 	def recalculateAudioSettings(self): _applyVolumes()
 	def getMusicPath(self): return _profile['musicPath']
-	def setMusicPath(self, s): _profile['musicPath'] = str(s); _save(); _applyVolumes()
+	def setMusicPath(self, s): _profile['musicPath'] = _utf8(s); _save(); _applyVolumes()
 	def musicPathDialogBox(self):
 		# (the system's folder dialog; the folder chosen comes back to folderChosen)
 		try:
