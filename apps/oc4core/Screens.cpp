@@ -346,6 +346,8 @@ namespace oc4::host
 		host.def("set_wasd_pan", [&utility](bool on) { utility.setWasdPan(on); });
 		host.def("choose_wasd_pan", [&utility](bool on) { utility.chooseWasdPan(on); });
 		host.def("wasd_pan", [&utility] { return utility.wasdPan(); });
+		host.def("set_city_one_click", [&utility](bool on) { utility.setCityOneClick(on); });
+		host.def("city_one_click", [&utility] { return utility.cityOneClick(); });
 		// Ending idle turns: the same.
 		host.def("set_auto_end_turn", [&utility](bool on) { utility.setAutoEndTurn(on); });
 		host.def("choose_auto_end_turn", [&utility](bool on) { utility.chooseAutoEndTurn(on); });
