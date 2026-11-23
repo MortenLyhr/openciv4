@@ -1009,6 +1009,83 @@ float4 PSWater(WaterOut i) : SV_Target
 			}
 			return true;
 		}
+
+		// The plots the game colours in the circle style (PLOT_STYLE_CIRCLE: a worker's or a
+		// settler's recommended plots, a rally point): as the original's, the circle cell of
+		// Art/Terrain/PlotTextures/plottexture.dds (128 texels a plot; its ring 4 texels wide, 2 in
+		// from the plot's edges) laid on the ground in the plot's colour, under what stands on it:
+		// tested against the scene's depth and not writing it, so a figure on the plot hides it.
+		std::vector<MapView::GroundCircle> groundCircles;
+		scene::Model circleModel;
+		std::unique_ptr<GpuModel> circleGpu;
+		bool circleTried = false;
+
+		void drawGroundCircles(const Frustum& frustum)
+		{
+			if (groundCircles.empty())
+				return;
+			if (!circleTried)
+			{
+				circleTried = true;
+				circleModel.nodes.push_back({ "PlotCircle" });
+				scene::DrawItem quad;
+				quad.node = 0;
+				// (the plot, on the terrain's own grid and triangles (kSub a side), so that it lies
+				// exactly on the ground between its points too; the cell's picture across it)
+				constexpr int n = kSub;
+				constexpr float u0 = 640.0f / 1024, v0 = 256.0f / 512, du = 128.0f / 1024, dv = 128.0f / 512;
+				for (int j = 0; j <= n; ++j)
+					for (int i = 0; i <= n; ++i)
+					{
+						const float a = float(i) / n, b = float(j) / n;
+						quad.vertices.push_back({ { a, b, 0 }, { 0, 0, 1 }, { u0 + a * du, v0 + (1 - b) * dv } });
+					}
+				for (int j = 0; j < n; ++j)
+					for (int i = 0; i < n; ++i)
+					{
+						const uint32_t k = uint32_t(j * (n + 1) + i);
+						quad.indices.insert(quad.indices.end(), { k, k + 1, k + n + 2, k, k + n + 2, k + n + 1 });
+					}
+				scene::Material& mat = quad.material;
+				mat.baseTexture = "art/terrain/plottextures/plottexture.dds";
+				mat.baseClamp = scene::TexClamp::ClampClamp;
+				mat.lightingMode = 0;
+				mat.alphaBlend = true;
+				mat.zTest = true;
+				// (its depth where it shows: the pieces laid lower on the ground, rivers and roads,
+				// blended and drawn after it or before, cannot cover it; what stands on it can)
+				mat.zWrite = true;
+				mat.alphaTest = true;
+				mat.alphaFunc = scene::Compare::Greater;
+				mat.alphaRef = 8;
+				mat.cull = scene::Cull::None;
+				circleModel.items.push_back(std::move(quad));
+				circleGpu = renderer.upload(circleModel, assets, AssetLocation{});
+				if (!circleGpu)
+					problem("art/terrain/plottextures/plottexture.dds: the plot circle");
+			}
+			if (!circleGpu)
+				return;
+			std::vector<scene::Material> material(1, circleModel.items[0].material);
+			const uint8_t visible[] = { 1 };
+			for (const auto& c : groundCircles)
+			{
+				if (c.x < 0 || c.y < 0 || c.x >= map.width || c.y >= map.height)
+					continue;
+				Vec3 middle{ (float(c.x) + 0.5f) * S(), (float(c.y) + 0.5f) * S(), 0 };
+				middle.z = ground(middle.x, middle.y);
+				const float dx = wrapOffset(middle.x);
+				if (!frustum.sphere(middle + Vec3{ dx, 0, 0 }, S()))
+					continue;
+				// (above the pieces laid on the ground, rivers at 0.8 and roads at 0.6: the original
+				// draws the circle over their water and banks)
+				const Vec3 at{ float(c.x) * S() + dx, float(c.y) * S(), 1.5f };
+				material[0].emissive = { c.color.r, c.color.g, c.color.b };
+				material[0].alpha = std::clamp(c.alpha, 0.0f, 1.0f);
+				const Affine world[] = { placement(at, 0, S()) };
+				renderer.draw(*circleGpu, world, visible, material, kDefaultTeamColor, true);
+			}
+		}
 		std::unordered_map<uint64_t, float> restingSince; // when each resting unit began to fortify
 		std::unordered_map<uint64_t, float> battleStarts; // by BattleView::serial
 		std::unordered_map<uint64_t, std::pair<int, float>> workSince; // each working unit's work, since when
@@ -4837,6 +4914,7 @@ float4 PSWater(WaterOut i) : SV_Target
 		m->drawBorders(frustum, options, 2);
 		if (options.cities)
 			m->drawInstances(m->cities, frustum);
+		m->drawGroundCircles(frustum);
 		m->figureHits.clear();
 		m->flagDraws.clear();
 		if (options.units && !options.cityScreen)
@@ -5124,5 +5202,6 @@ float4 PSWater(WaterOut i) : SV_Target
 	}
 
 	const std::vector<std::string>& MapView::problems() const { return m->problems; }
+	void MapView::setGroundCircles(std::vector<GroundCircle> circles) { m->groundCircles = std::move(circles); }
 	void MapView::setSoundHandler(std::function<void(const std::string&, float, float)> handler) { m->onSound = std::move(handler); }
 }
