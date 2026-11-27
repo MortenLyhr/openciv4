@@ -1394,6 +1394,14 @@ namespace
 						ui.clearSelectionList();
 					continue;
 				}
+				// A mouse button on the map, heard by the scripts first, as the original's (they may take
+				// it: the event manager's cheats, Ctrl+Alt on a city, Ctrl+Shift on a plot).
+				if (!click.either && screens.active())
+				{
+					const auto [mx, my] = window.mousePosition();
+					if (screens.mouseEvent(click.right ? 3 : 1, mx, my, click.x, click.y, false, click.shift, click.ctrl, click.alt))
+						continue;
+				}
 				// The gamepad's plot cursor: one's own units or city there are selected, as a left click;
 				// anywhere else the selected units go there, as a right one (an interface mode's plot is a left click).
 				if (click.either)

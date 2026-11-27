@@ -1380,6 +1380,9 @@ if _walls:
 
 	void Screens::click(const Item& it, bool right, bool shift, bool ctrl, bool alt)
 	{
+		// (the button pressed, heard by the scripts first, as the original's: BUG's plot list takes
+		// Shift, Ctrl and Alt from it)
+		mouseEvent(right ? 3 : 1, m_mouse.first, m_mouse.second, -1, -1, true, shift, ctrl, alt);
 		// What the script hears: a click (NOTIFY_CLICKED, the part), or an item of a list
 		// chosen (NOTIFY_LISTBOX_ITEM_SELECTED, its index; a table's column as the mouse's x).
 		constexpr int kClicked = 0, kListItem = 11;
@@ -1539,6 +1542,29 @@ if _walls:
 				if (type == 6)
 					taken = !r.is_none() && PyObject_IsTrue(r.ptr()) == 1;
 			}
+		}
+		catch (py::error_already_set& e)
+		{
+			printPythonError(e);
+		}
+		m_utility.setModifierKeys(false, false, false);
+		return taken;
+	}
+
+	bool Screens::mouseEvent(int type, int mouseX, int mouseY, int plotX, int plotY, bool interfaceConsumed, bool shift, bool ctrl, bool alt)
+	{
+		if (!m_active || m_menu)
+			return false;
+		bool taken = false;
+		m_utility.setModifierKeys(shift, ctrl, alt);
+		try
+		{
+			const py::list shown = py::module_::import("oc4screens").attr("shownScreens")().cast<py::list>();
+			// (the handlers read the last six: debug, unused, Alt, Ctrl, Shift, cheats)
+			const py::object r = py::module_::import("CvEventInterface")
+									 .attr("onEvent")(py::make_tuple("mouseEvent", type, mouseX, mouseY, plotX, plotY, interfaceConsumed,
+										 py::tuple(shown), false, false, alt, ctrl, shift, false));
+			taken = !r.is_none() && PyObject_IsTrue(r.ptr()) == 1;
 		}
 		catch (py::error_already_set& e)
 		{

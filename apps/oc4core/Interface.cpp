@@ -292,7 +292,12 @@ namespace oc4::host
 		sounds->play(AudioScripts::Script3D, script, Sounds::Place{ float(pUnit->getX()) + 0.5f, float(pUnit->getY()) + 0.5f });
 	}
 
-	void Interface::insertIntoSelectionList(CvUnit* pUnit, bool bClear, bool bToggle, bool bGroup, bool bSound, bool /*bMinimalChange*/)
+	// One unit, never its whole group, bGroup or not: the game core inserts a group unit by unit
+	// itself (CvGame::selectUnit), and with bGroup set it picks single units out of their groups:
+	// Ctrl's units of one type, Alt's units that can still move (CvGame::selectGroup), the hurt
+	// ones (CONTROL_SELECT_HEALTHY, which joins them itself). The selection becomes one group when
+	// it is given an order (CvGame::selectionListGameNetMessage: GAMEMESSAGE_JOIN_GROUP).
+	void Interface::insertIntoSelectionList(CvUnit* pUnit, bool bClear, bool bToggle, bool /*bGroup*/, bool bSound, bool /*bMinimalChange*/)
 	{
 		if (bSound && (bClear || m_selection.getLength() == 0)) // (once for a group, inserted unit by unit)
 			unitSound(pUnit, false);
@@ -305,24 +310,13 @@ namespace oc4::host
 				leaveInterfaceMode();
 			return;
 		}
-		const auto insert = [&](CvUnit* u) {
-			if (!selected(u))
-			{
-				m_selection.insertAtEnd(u->getIDInfo());
-				changed = true;
-			}
-			else if (bToggle)
-				removeFromSelectionList(u);
-		};
-		if (bGroup && pUnit->getGroup())
+		if (!selected(pUnit))
 		{
-			CvSelectionGroup* group = pUnit->getGroup();
-			for (CLLNode<IDInfo>* n = group->headUnitNode(); n; n = group->nextUnitNode(n))
-				if (CvUnit* u = unitOf(n->m_data))
-					insert(u);
+			m_selection.insertAtEnd(pUnit->getIDInfo());
+			changed = true;
 		}
-		else
-			insert(pUnit);
+		else if (bToggle)
+			removeFromSelectionList(pUnit);
 		m_lastSelected = pUnit;
 		selectionChanged();
 		if (changed)
