@@ -1128,6 +1128,18 @@ if _walls:
 		if (const int hovered = window.uiHovered(); hovered != m_hovered)
 		{
 			m_hovered = hovered;
+			// (in a talk the answer under the mouse is the highlighted one, the keys' too: oc4screens)
+			if (m_utility.diplomacy().active())
+				try
+				{
+					const Item* h = hovered >= 0 && size_t(hovered) < m_items.size() ? &m_items[size_t(hovered)] : nullptr;
+					const int answer = h && h->name.rfind("DiploAnswer", 0) == 0 ? std::atoi(h->name.c_str() + 11) : -1;
+					py::module_::import("oc4screens").attr("diploHover")(answer);
+				}
+				catch (py::error_already_set& e)
+				{
+					printPythonError(e);
+				}
 			const std::string text = hovered >= 0 && size_t(hovered) < m_items.size() ? help(m_items[size_t(hovered)]) : std::string();
 			float x = 7, y = float(height) - 172, w = 350;
 			bool right = true, down = false;
