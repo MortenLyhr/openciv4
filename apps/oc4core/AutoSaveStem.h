@@ -36,9 +36,11 @@ namespace oc4::host
 		};
 		add(map.getGridWidth());
 		add(map.getGridHeight());
+		// (the plot type from the exported isPeak/isHills/isWater, as PlotTypes numbers them:
+		// CvPlot::getPlotType is not exported from the Windows game core)
 		for (int i = 0; i < map.numPlots(); ++i)
 			if (const CvPlot* plot = map.plotByIndex(i))
-				add(int(plot->getPlotType()));
+				add(plot->isPeak() ? int(PLOT_PEAK) : plot->isHills() ? int(PLOT_HILLS) : plot->isWater() ? int(PLOT_OCEAN) : int(PLOT_LAND));
 		return h;
 	}
 
@@ -47,7 +49,7 @@ namespace oc4::host
 	{
 		std::wstring civ;
 		if (const PlayerTypes active = game.getActivePlayer(); active != NO_PLAYER)
-			for (const wchar_t* c = GET_PLAYER(active).getCivilizationShortDescription(); c && *c; ++c)
+			for (const wchar_t* c = CvPlayerAI::getPlayerNonInl(active).getCivilizationShortDescription(); c && *c; ++c)
 				civ += std::iswalnum(*c) ? *c : L'_';
 		return std::format(L"AutoSave_{}_{:08X}", civ, mapLayoutHash(GC.getMap()));
 	}
