@@ -122,7 +122,7 @@ namespace oc4::host
 		// (trading: the player's Ctrl+click, and an AI's proposal, its items on the table)
 		m_trading = m_comment == GC.getInfoTypeForString("AI_DIPLOCOMMENT_TRADING") || m_aiOffer;
 		m_showAll = true;
-		m_current = false;
+		m_current = m_edited = false;
 		m_aiText.clear();
 		m_userComments.clear();
 		rebuild();
@@ -140,7 +140,7 @@ namespace oc4::host
 		m_theirInventory.clear();
 		m_userComments.clear();
 		m_aiText.clear();
-		m_trading = m_current = m_aiOffer = false;
+		m_trading = m_current = m_aiOffer = m_edited = false;
 		m_showAll = true;
 		++m_version;
 	}
@@ -224,7 +224,7 @@ namespace oc4::host
 	{
 		// The talk leaves the table, and the original clears it: an offer left on it ("Never
 		// mind", an AI's proposal renegotiated and then dropped) is gone at the next proposal.
-		m_trading = false;
+		m_trading = m_edited = false;
 		if (m_current || !ourOfferEmpty() || !theirOfferEmpty())
 		{
 			m_ourOffer.clear();
@@ -238,6 +238,7 @@ namespace oc4::host
 	void Diplomacy::showAllTrade(bool all)
 	{
 		m_trading = true;
+		m_edited = false;
 		m_showAll = all;
 		if (all && m_current)
 		{
@@ -438,6 +439,7 @@ namespace oc4::host
 				other.insertAtEnd(item);
 		}
 		m_aiOffer = false;
+		m_edited = true;
 		rebuild();
 		++m_version;
 	}

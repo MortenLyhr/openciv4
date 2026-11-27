@@ -508,6 +508,7 @@ namespace oc4::host
 		host.def("diplo_end_trade", [&diplo] { diplo.endTrade(); });
 		host.def("diplo_show_all", [&diplo](bool all) { diplo.showAllTrade(all); });
 		host.def("diplo_trading", [&diplo] { return py::make_tuple(diplo.trading(), diplo.showingAll(), diplo.showingCurrent()); });
+		host.def("diplo_edited", [&diplo] { return diplo.edited(); });
 		host.def("diplo_our_empty", [&diplo] { return diplo.ourOfferEmpty(); });
 		host.def("diplo_their_empty", [&diplo] { return diplo.theirOfferEmpty(); });
 		host.def("diplo_at_war", [&diplo] { return diplo.atWar(); });
