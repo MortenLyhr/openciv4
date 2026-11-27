@@ -2852,6 +2852,19 @@ class CyDiplomacy(object):
 	def diploEvent(self, eDiploEvent, iData1, iData2): oc4host.diplo_event(int(eDiploEvent), _int(iData1), _int(iData2))
 	def hasAnnualDeal(self): return bool(oc4host.diplo_annual())
 	def theirVassalTribute(self): return bool(oc4host.diplo_vassal_tribute())
+
+	def _offer(self, theirs, i):
+		# (the i-th item of an offer as the game's TradeData, None past its end: BUG's
+		# DiplomacyUtil reads them so, for its deal events)
+		items = oc4host.diplo_offer_data(bool(theirs))
+		if not 0 <= _int(i, -1) < len(items):
+			return None
+		data = _cpe.TradeData()
+		data.ItemType, data.iData = _cpe.TradeableItems(items[int(i)][0]), items[int(i)][1]
+		return data
+
+	def getPlayerTradeOffer(self, i): return self._offer(False, i)
+	def getTheirTradeOffer(self, i): return self._offer(True, i)
 	def closeScreen(self):
 		if _diploAnswering:
 			_diploAnswering[-1] = True

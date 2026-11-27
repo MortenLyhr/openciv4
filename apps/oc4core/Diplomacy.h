@@ -105,6 +105,8 @@ namespace oc4::host
 		// what is not offered or hidden; an offer's items.
 		std::vector<Item> inventory(bool theirs) const;
 		std::vector<Item> offer(bool theirs) const;
+		// An offer's items as they are in it: (item type, data; gold its amount).
+		std::vector<std::pair<int, int>> offerData(bool theirs) const;
 		// A click on an item: from a list into its offer (gold: `amount` of it), or back.
 		void toggle(bool theirs, bool fromOffer, int type, int data, int amount);
 		// Viewing the current deals: the deal with that item cancelled, if it can be (else why

@@ -407,6 +407,15 @@ namespace oc4::host
 		return out;
 	}
 
+	std::vector<std::pair<int, int>> Diplomacy::offerData(bool theirs) const
+	{
+		std::vector<std::pair<int, int>> out;
+		const CLinkList<TradeData>& list = theirs ? m_theirOffer : m_ourOffer;
+		for (CLLNode<TradeData>* n = list.head(); n; n = list.next(n))
+			out.emplace_back(int(n->m_data.m_eItemType), n->m_data.m_iData);
+		return out;
+	}
+
 	void Diplomacy::toggle(bool theirs, bool fromOffer, int type, int data, int amount)
 	{
 		if (!active() || m_current)

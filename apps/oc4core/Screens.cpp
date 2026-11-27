@@ -533,6 +533,12 @@ namespace oc4::host
 			return py::make_tuple(done, wide(reason));
 		});
 		host.def("diplo_toggle", [&diplo](bool theirs, bool fromOffer, int type, int data, int amount) { diplo.toggle(theirs, fromOffer, type, data, amount); });
+		host.def("diplo_offer_data", [&diplo](bool theirs) {
+			py::list out;
+			for (const auto& [type, data] : diplo.offerData(theirs))
+				out.append(py::make_tuple(type, data));
+			return out;
+		});
 		host.def("diplo_max_gold", [&diplo](bool theirs, bool perTurn) { return diplo.maxGold(theirs, perTurn); });
 
 		// how wide a text is (CyInterface.determineWidth), in the window's font
