@@ -1563,8 +1563,11 @@ namespace
 					for (int i = 0; i < plot->getNumUnits() && !own; ++i)
 						if (CvUnit* u = plot->getUnitByIndex(i); u && u->getOwner() == me)
 							own = u;
+					// (a double click selects the whole stack, as Alt does, and so groups it: "Double
+					// clicking on a stack of units will group them together", TXT_KEY_HINT_INTERFACE_6;
+					// seen in Wine, backlog #113)
 					if (own)
-						ui.selectGroup(own, click.shift, click.ctrl, click.alt);
+						ui.selectGroup(own, click.shift, click.ctrl, click.alt || click.twice);
 					else
 						ui.clearSelectionList();
 					// (as the original's: the camera goes to the plot clicked, a unit there or not, but
