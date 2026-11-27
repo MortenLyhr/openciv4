@@ -622,8 +622,9 @@ namespace oc4::host
 		return bits;
 	}
 
-	// How far a river's bed reaches into a plot from the edge it runs along, in plots (measured
-	// in Wine: the crops beside a river stop short of its sand, testgames/shots/wine-farmriver/).
+	// How far a river's bed reaches into a plot from the edge it runs along, in plots (fitted by
+	// eye to Wine's gaps, not measured exactly: the crops beside a river stop short of its sand,
+	// testgames/shots/wine-farmriver/).
 	constexpr float kRiverBed = 0.2f;
 
 	// Whether a leaf of crops (GLeaf_WxH at x, y in the plot's 12x12 cells, turned by degrees,
