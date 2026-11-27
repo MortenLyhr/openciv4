@@ -1109,9 +1109,9 @@ namespace oc4::host
 			m_queued.push_front({ info, active });
 			next = m_queued.begin();
 		}
-		// (the game's queued popups wait while a screen of its own or a talk is up, as the original's: a tech's splash first)
+		// (the game's queued popups wait while a screen of its own is up, or a talk is up or waiting, as the original's: a tech's splash first, a talk before the turn's popups)
 		if (next->info && (next->info->getButtonPopupType() == BUTTONPOPUP_PYTHON_SCREEN || !next->added) &&
-			((screenUp && screenUp()) || (diplomacyUp && diplomacyUp())))
+			((screenUp && screenUp()) || (diplomacyWaiting && diplomacyWaiting())))
 			return;
 		if (next->ready)
 		{
