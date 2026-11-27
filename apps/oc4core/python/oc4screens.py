@@ -3066,6 +3066,32 @@ def _diploGold(theirs, itemType, text):
 
 
 
+def _diploCancelAsk(theirs, row):
+	"""A current deal's item clicked: the original asks first, in a popup at the top right, "Are you
+	sure you wish to cancel this deal?" with "Absolutely, cancel this deal." and "Hrmmm, perhaps we
+	should rethink this?" (seen in Wine; the game's TXT_KEY_POPUP_CANCEL_DEAL texts). Yes cancels it
+	and the leader greets again, as at a new talk, with its menu (seen in Wine); a deal that can't be
+	cancelled yet says why."""
+	translator = _cpe.CyTranslator()
+	popup = CyPopup(-1, -1)
+	popup.setBodyString(translator.getText('TXT_KEY_POPUP_CANCEL_DEAL', ()))
+	popup.addButton(translator.getText('TXT_KEY_POPUP_CANCEL_DEAL_YES', ()))
+	popup.addButton(translator.getText('TXT_KEY_POPUP_CANCEL_DEAL_NO', ()))
+
+	def answered(answer):
+		if answer.getButtonClicked() != 0 or oc4host.diplo_who() < 0:
+			return
+		done, reason = oc4host.diplo_cancel(theirs, row)
+		if done:
+			import CvDiplomacyInterface
+			CvDiplomacyInterface.beginDiplomacy((oc4host.diplo_comment(), 0))
+		elif reason:
+			CyInterface().addImmediateMessage(reason, '')
+
+	popup._onAnswer = answered
+	popup.launch(False, 0)
+
+
 def _diploTrade():
 	"""An item taken while the leader only talks, or makes its own offer: now they trade (the
 	script's answers for AI_DIPLOCOMMENT_TRADING, both lists open)."""
@@ -3119,15 +3145,10 @@ def diploClick(name, part, right=False, shift=False):
 	kind, theirs, offered, itemType, data, heading, denied, text = rows[row]
 	if heading or (denied and not offered):
 		return
-	# (the current deals shown: a click on one of their items cancels its deal, as it may)
+	# (the current deals shown: a click on an item of one asks whether to cancel its deal)
 	if offered and oc4host.diplo_trading()[2]:
-		done, reason = oc4host.diplo_cancel(itemType, data)
-		if done:
-			import CvDiplomacyInterface
-			CvDiplomacyInterface.dealCanceled()
-		elif reason:
-			CyInterface().addImmediateMessage(reason, '')
-		_diploRefresh()
+		if oc4host.diplo_deal_row(bool(theirs), row):
+			_diploCancelAsk(bool(theirs), row)
 		return
 	_diploTrade()
 	if not offered and itemType in (int(_cpe.TradeableItems.TRADE_GOLD), int(_cpe.TradeableItems.TRADE_GOLD_PER_TURN)):

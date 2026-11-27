@@ -193,6 +193,8 @@ namespace oc4::host
 			// The deals the two have: their items in the offers, as they stand.
 			m_ourOffer.clear();
 			m_theirOffer.clear();
+			m_ourDeals.clear();
+			m_theirDeals.clear();
 			CvGame& game = GC.getGame();
 			int i = 0;
 			for (CvDeal* d = game.firstDeal(&i); d; d = game.nextDeal(&i))
@@ -201,9 +203,15 @@ namespace oc4::host
 				if (!first && !second)
 					continue;
 				for (CLLNode<TradeData>* n = d->headFirstTradesNode(); n; n = d->nextFirstTradesNode(n))
+				{
 					(first ? m_ourOffer : m_theirOffer).insertAtEnd(n->m_data);
+					(first ? m_ourDeals : m_theirDeals).push_back(d->getID());
+				}
 				for (CLLNode<TradeData>* n = d->headSecondTradesNode(); n; n = d->nextSecondTradesNode(n))
+				{
 					(first ? m_theirOffer : m_ourOffer).insertAtEnd(n->m_data);
+					(first ? m_theirDeals : m_ourDeals).push_back(d->getID());
+				}
 			}
 			m_current = true;
 			m_aiOffer = false;
@@ -434,36 +442,43 @@ namespace oc4::host
 		++m_version;
 	}
 
-	bool Diplomacy::cancelDeal(int type, int data, std::wstring& reason)
+	bool Diplomacy::isDealRow(bool theirs, int row) const
 	{
-		if (!active() || !m_current)
+		const std::vector<int>& deals = theirs ? m_theirDeals : m_ourDeals;
+		return active() && m_current && row >= 0 && size_t(row) < deals.size();
+	}
+
+	bool Diplomacy::cancelDeal(bool theirs, int row, std::wstring& reason)
+	{
+		if (!isDealRow(theirs, row))
 			return false;
-		CvGame& game = GC.getGame();
-		int i = 0;
-		for (CvDeal* d = game.firstDeal(&i); d; d = game.nextDeal(&i))
+		CvDeal* d = GC.getGame().getDeal((theirs ? m_theirDeals : m_ourDeals)[size_t(row)]);
+		if (!d)
+			return false;
+		CvWString why;
+		if (!d->isCancelable(m_player, &why))
 		{
-			if (!((d->getFirstPlayer() == m_player && d->getSecondPlayer() == m_who) || (d->getFirstPlayer() == m_who && d->getSecondPlayer() == m_player)))
-				continue;
-			bool has = false;
-			for (CLLNode<TradeData>* n = d->headFirstTradesNode(); n && !has; n = d->nextFirstTradesNode(n))
-				has = n->m_data.m_eItemType == type && (CvDeal::isGold(TradeableItems(type)) || n->m_data.m_iData == data);
-			for (CLLNode<TradeData>* n = d->headSecondTradesNode(); n && !has; n = d->nextSecondTradesNode(n))
-				has = n->m_data.m_eItemType == type && (CvDeal::isGold(TradeableItems(type)) || n->m_data.m_iData == data);
-			if (!has)
-				continue;
-			CvWString why;
-			if (!d->isCancelable(m_player, &why))
-			{
-				reason = gDLL->getText("TXT_KEY_POPUP_CANNOT_CANCEL_DEAL").GetCString();
-				if (!why.empty())
-					reason += L"\n" + std::wstring(why.GetCString());
-				return false;
-			}
-			gDLL->sendKillDeal(d->getID(), true);
-			startTrade(true); // (the deals left)
-			return true;
+			reason = gDLL->getText("TXT_KEY_POPUP_CANNOT_CANCEL_DEAL").GetCString();
+			if (!why.empty())
+				reason += L"\n" + std::wstring(why.GetCString());
+			return false;
 		}
-		return false;
+		gDLL->sendKillDeal(d->getID(), true);
+		// The talk starts again at the leader's greeting, the trade table closed and cleared (seen
+		// in Wine: after "Absolutely, cancel this deal." the leader greets as at a new talk, with
+		// its menu; not the current deals left, which a proposal would sign again).
+		m_ourOffer.clear();
+		m_theirOffer.clear();
+		m_ourDeals.clear();
+		m_theirDeals.clear();
+		m_trading = m_current = m_aiOffer = false;
+		m_showAll = true;
+		m_comment = playerOf(m_who).AI_isWillingToTalk(m_player) ? playerOf(m_who).AI_getGreeting(m_player) : GC.getInfoTypeForString("AI_DIPLOCOMMENT_REFUSE_TO_TALK");
+		m_aiText.clear();
+		m_userComments.clear();
+		rebuild();
+		++m_version;
+		return true;
 	}
 
 	int Diplomacy::maxGold(bool theirs, bool perTurn) const

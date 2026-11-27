@@ -107,9 +107,12 @@ namespace oc4::host
 		std::vector<Item> offer(bool theirs) const;
 		// A click on an item: from a list into its offer (gold: `amount` of it), or back.
 		void toggle(bool theirs, bool fromOffer, int type, int data, int amount);
-		// Viewing the current deals: the deal with that item cancelled, if it can be (else why
-		// not, in reason). The offers show the deals left.
-		bool cancelDeal(int type, int data, std::wstring& reason);
+		// Viewing the current deals: the deal of an offer's row (theirs: the leader's offer)
+		// cancelled, if it can be (else why not, in reason). The talk then starts again at the
+		// leader's greeting, as the original's does (seen in Wine).
+		bool cancelDeal(bool theirs, int row, std::wstring& reason);
+		// Whether an offer's row is one of the current deals' items, which a click cancels.
+		bool isDealRow(bool theirs, int row) const;
 		// The most gold (per turn) a side can give.
 		int maxGold(bool theirs, bool perTurn) const;
 
@@ -122,6 +125,8 @@ namespace oc4::host
 		CvDiploParameters* m_params = nullptr;
 		PlayerTypes m_player = NO_PLAYER, m_who = NO_PLAYER;
 		CLinkList<TradeData> m_ourOffer, m_theirOffer, m_ourInventory, m_theirInventory;
+		// (the current deals shown: each offer row's deal)
+		std::vector<int> m_ourDeals, m_theirDeals;
 		bool m_aiOffer = false, m_trading = false, m_showAll = true, m_current = false;
 		int m_comment = -1;
 		std::wstring m_aiText;

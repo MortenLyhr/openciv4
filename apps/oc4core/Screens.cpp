@@ -527,11 +527,12 @@ namespace oc4::host
 				out.append(py::make_tuple(i.type, i.data, wide(i.text), i.icon, i.heading, i.denied));
 			return out;
 		});
-		host.def("diplo_cancel", [&diplo](int type, int data) {
+		host.def("diplo_cancel", [&diplo](bool theirs, int row) {
 			std::wstring reason;
-			const bool done = diplo.cancelDeal(type, data, reason);
+			const bool done = diplo.cancelDeal(theirs, row, reason);
 			return py::make_tuple(done, wide(reason));
 		});
+		host.def("diplo_deal_row", [&diplo](bool theirs, int row) { return diplo.isDealRow(theirs, row); });
 		host.def("diplo_toggle", [&diplo](bool theirs, bool fromOffer, int type, int data, int amount) { diplo.toggle(theirs, fromOffer, type, data, amount); });
 		host.def("diplo_max_gold", [&diplo](bool theirs, bool perTurn) { return diplo.maxGold(theirs, perTurn); });
 
