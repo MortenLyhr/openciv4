@@ -1579,9 +1579,12 @@ if _walls:
 			return false;
 		try
 		{
+			// (each: its text, and 0 an item to do, 1 the start of a submenu, 2 its end: the game core
+			// puts a submenu's items between a NO_FLYOUT with a title and one without)
 			py::list texts;
 			for (const CvFlyoutMenuData& item : g_flyout)
-				texts.append(wide(std::wstring(item.m_strTitle.GetCString())));
+				texts.append(py::make_tuple(wide(std::wstring(item.m_strTitle.GetCString())),
+					item.m_eFlyout != NO_FLYOUT ? 0 : item.m_strTitle.empty() ? 2 : 1));
 			py::module_::import("oc4flyout").attr("show")(texts, mouseX, mouseY);
 		}
 		catch (py::error_already_set& e)

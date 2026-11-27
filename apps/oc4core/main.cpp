@@ -31,7 +31,7 @@
 // opens it, Esc closes it), or with --own-interface the window's simple one.
 // --keys are typed in on your turns then (letters and Space as keys, '^', '@' and '+' before
 // one hold Ctrl, Alt and Shift, '>' ends the turn, '~' is Esc, "(x,y)" right clicks that plot,
-// "[x,y]" left clicks it ("+[x,y]" with Shift held: '^', '@' and '+' as for keys), "%u", "%d", "%l", "%r", "%e", "%t" and "%b" type an arrow, Return, Tab or Backspace into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
+// "[x,y]" left clicks it ("+[x,y]" with Shift held: '^', '@' and '+' as for keys), "%u", "%d", "%l", "%r", "%e", "%t", "%b", "%," and "%." type an arrow, Return, Tab, Backspace, comma or period into the window ("^%l" with Ctrl held, as a game hotkey), "<x,y>" clicks that pixel of the window (a figure there: its unit), "#n" picks the n-th button of the popup up (OK if it has none), a
 // popup nothing answers gets its first, 'text' goes into its next edit box, "{Name}" or
 // "{Name/part}" clicks the interface's widget so named, "^{Name}" with Ctrl held, "?{Name}" rests
 // the mouse on it); with
@@ -393,6 +393,8 @@ namespace
 		case 'e': return render::key::Return;
 		case 't': return render::key::Tab;
 		case 'b': return render::key::Back;
+		case ',': return render::key::Comma;
+		case '.': return render::key::Period;
 		default: return 0;
 		}
 	}
@@ -1440,7 +1442,9 @@ namespace
 				}
 				// A click on one's city: its screen (the units there are in the plot list then); on
 				// one of the figures in it, as anywhere, its unit.
-				if (!click.right && !click.onFigure && !opt.ownInterface && screens.active())
+				// (Shift with a left click is the plot's menu, a city's too: seen in Wine, backlog #113)
+				const bool plotMenu = !click.right && click.shift && !click.ctrl && !click.alt;
+				if (!click.right && !plotMenu && !click.onFigure && !opt.ownInterface && screens.active())
 					if (CvCity* city = plot->getPlotCity(); city && city->getOwner() == me)
 					{
 						ui.selectCity(city, true);
@@ -1465,7 +1469,7 @@ namespace
 							own = u;
 					// Shift with a left click: the plot's menu at the mouse (CvGame::startFlyoutMenu), the
 					// selection and the camera as they are (seen in Wine, backlog #113).
-					const bool menu = click.shift && !click.ctrl && !click.alt;
+					const bool menu = plotMenu;
 					if (menu)
 					{
 						const auto [mx, my] = window.mousePosition();

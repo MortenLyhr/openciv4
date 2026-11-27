@@ -146,13 +146,27 @@ namespace oc4::host
 	CvUnit* Interface::getHeadSelectedUnit()
 	{
 		// Units that died since are dropped on the way.
+		CvUnit* first = nullptr;
 		while (CLLNode<IDInfo>* n = m_selection.head())
 		{
-			if (CvUnit* u = unitOf(n->m_data))
-				return u;
+			if ((first = unitOf(n->m_data)))
+				break;
 			m_selection.deleteNode(n);
 		}
-		return nullptr;
+		// A selection that is a whole group of several has that group's head at its head (the
+		// group's order: CvSelectionGroup::addUnit, by AI_groupFirstVal). Seen in Wine (backlog
+		// #113): after Alt or Select All on a stack the head is one of its Workers.
+		if (first && m_selection.getLength() > 1)
+			if (CvSelectionGroup* group = first->getGroup(); group && group->getNumUnits() == m_selection.getLength())
+			{
+				bool whole = true;
+				for (CLLNode<IDInfo>* n = group->headUnitNode(); n && whole; n = group->nextUnitNode(n))
+					whole = unitOf(n->m_data) && selected(unitOf(n->m_data));
+				if (whole)
+					if (CvUnit* head = group->getHeadUnit())
+						return head;
+			}
+		return first;
 	}
 
 	CvUnit* Interface::getSelectionUnit(int iIndex)
@@ -347,9 +361,16 @@ namespace oc4::host
 		if (m_selection.getLength() > 0)
 			leaveInterfaceMode();
 		m_selection.clear();
-		for (int i = 0; pPlot && i < pPlot->getNumUnits(); ++i)
-			if (CvUnit* u = pPlot->getUnitByIndex(i); u && u->getOwner() == GC.getGame().getActivePlayer())
-				insertIntoSelectionList(u, false, false, false, false, false);
+		// (as the game core's CvGame::selectAll: Alt on the plot's unit, so the units there that can
+		// still move, one group; seen in Wine, backlog #113: the plot menu's Select All on a stack
+		// of 11 selects all 11 as one group)
+		const PlayerTypes me = GC.getGame().getActivePlayer();
+		CvUnit* unit = nullptr;
+		for (int i = 0; pPlot && i < pPlot->getNumUnits() && !unit; ++i)
+			if (CvUnit* u = pPlot->getUnitByIndex(i); u && u->getOwner() == me)
+				unit = u;
+		if (unit)
+			selectGroup(unit, false, false, true);
 	}
 
 	bool Interface::removeFromSelectionList(CvUnit* pUnit)
