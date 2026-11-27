@@ -35,7 +35,7 @@ def show(items, x, y):
 	if y + h > yr:
 		y = max(0, y - h)
 	screen.addPanel(_NAMES[0], u'', u'', True, False, x, y, _W, h, _cpe.PanelStyles.PANEL_STYLE_MAIN)
-	screen.addListBoxGFC(_NAMES[1], u'', x + 22, y + 8, _W - 30, h - 16, _cpe.TableStyles.TABLE_STYLE_STANDARD)
+	screen.addListBoxGFC(_NAMES[1], u'', x + 22, y + 8, _W - 30, h - 16, _cpe.TableStyles.TABLE_STYLE_EMPTY)  # (no stripes, as Wine's)
 	box = screen._s.get(_NAMES[1])
 	if box is not None:
 		box.rowHeight = 28
