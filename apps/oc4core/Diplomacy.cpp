@@ -121,7 +121,9 @@ namespace oc4::host
 			m_comment = playerOf(m_who).AI_isWillingToTalk(p) ? playerOf(m_who).AI_getGreeting(p) : GC.getInfoTypeForString("AI_DIPLOCOMMENT_REFUSE_TO_TALK");
 		// (trading: the player's Ctrl+click, and an AI's proposal, its items on the table)
 		m_trading = m_comment == GC.getInfoTypeForString("AI_DIPLOCOMMENT_TRADING") || m_aiOffer;
-		m_showAll = true;
+		// (an AI's own offer: both lists closed, "Tradeable Items" alone, until the player
+		// renegotiates (showAllTrade): seen in Wine, Roosevelt's offer at turn 168)
+		m_showAll = !m_aiOffer;
 		m_current = false;
 		m_aiText.clear();
 		m_userComments.clear();
