@@ -2325,7 +2325,12 @@ def tooltipPlace(fileId, name, x0, y0, x1, y1, mx, my, width):
 	help area are hidden and the help is a small box at the widget: under the mouse in its tool
 	window (oc4wb's OC4WB... widgets: 12 px left of the mouse, 31 under it), else beside the
 	widget, on the side away from the screen's edge (the top right buttons': 3 px left of it,
-	3 down). Measured in Wine (BtS 3.19, BUG + BULL, 1600x900)."""
+	3 down). Measured in Wine (BtS 3.19, BUG + BULL, 1600x900).
+	In a talk the trade lists' items have theirs under the mouse (what the item does, and the
+	leader's reason when it is red), its corner 1 px left of the mouse, 33 under it (seen in Wine,
+	2026-11-27, testgames/shots/wine-diplo-trade/w03-w05, x04)."""
+	if _str(name) in ('DiploTheirItems', 'DiploOurItems'):
+		return (mx - 1, my + 33, 400, True, True)
 	try:
 		if not oc4host.ui_world_builder():
 			return None
