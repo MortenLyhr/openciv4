@@ -212,7 +212,7 @@ namespace oc4::render
 			return true;
 		const bool chosenWithKeys = m_keyboard && m_hover >= 0 && m_view->items[size_t(m_hover)].kind != Kind::Edit;
 		if (virtualKey == key::Escape && !m_view->escape)
-			return true; // (the original's questions stay: what to build, research, a new civic)
+			return true; // (the original's popups stay; only its menu goes)
 		if (virtualKey == key::Escape)
 		{
 			m_answer = MapWindow::PopupAnswer{ .dismissed = true };

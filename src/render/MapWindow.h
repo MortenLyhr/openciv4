@@ -173,7 +173,7 @@ namespace oc4::render
 			std::vector<Item> items;
 			bool okButton = false;
 			bool menu = false; // the game menu's style (Window_NoTitleBar_Style): narrower, at the same place
-			bool escape = true; // Esc closes it (not the questions a turn waits for)
+			bool escape = true; // Esc closes it (in the original only the game's menu)
 		};
 		void setPopup(const PopupView* popup); // nullptr: none
 		struct PopupAnswer

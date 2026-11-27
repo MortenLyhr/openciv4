@@ -1583,9 +1583,11 @@ namespace oc4::host
 		v.menu = popup.style == "Window_NoTitleBar_Style";
 		itemOf.clear();
 		const ButtonPopupTypes type = popup.info ? popup.info->getButtonPopupType() : BUTTONPOPUP_TEXT;
-		// (the original's Esc closes none of the questions a turn waits for: what to build, what to
-		// research, a new civic; Wine, the plain game and BUG alike)
-		v.escape = type != BUTTONPOPUP_CHOOSEPRODUCTION && type != BUTTONPOPUP_CHOOSETECH && type != BUTTONPOPUP_CHANGECIVIC;
+		// (Esc closes only the game's menu, seen in Wine (testgames/shots/wine-escpopup/): every other
+		// popup tried ignored it: a text popup with OK, a script popup with and without OK, the research
+		// and build questions (and the civic question, backlog #52). The menu's own "are you sure" was
+		// not seen and keeps Esc.)
+		v.escape = type == BUTTONPOPUP_MAIN_MENU || type == BUTTONPOPUP_CONFIRM_MENU;
 		for (size_t i = 0; i < popup.items.size(); ++i)
 		{
 			const Item& it = popup.items[i];
