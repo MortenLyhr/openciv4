@@ -3030,6 +3030,13 @@ def diploShow():
 			True, True, lx, split + 8, SW, bottom - split - 8)
 		_diploList(screen, 'DiploOurOffer', translator.getText('TXT_KEY_TRADE_YOU_OFFER', ()).upper(), oc4host.diplo_items(False, True),
 			False, True, rx, split + 8, SW, bottom - split - 8)
+		# (under each offer with something on it, while it can change, a CLEAR TABLE button that
+		# takes it all off: seen in Wine, TXT_KEY_TRADE_CLEAR_TABLE, 117 x 26 at the offer's foot)
+		if not current:
+			for name, x, items in (('DiploTheirClear', lx, _diplo.get('DiploTheirOffer')), ('DiploOurClear', rx, _diplo.get('DiploOurOffer'))):
+				if items:
+					screen.setButtonGFC(name, translator.getText('TXT_KEY_TRADE_CLEAR_TABLE', ()), '', x + (SW - 117) / 2, bottom - 34, 117, 26,
+						WidgetTypes.WIDGET_GENERAL, -1, -1, _cpe.ButtonStyles.BUTTON_STYLE_STANDARD)
 
 	for n, (offset, hoffset) in kept.items():
 		w = s.widgets.get(n)
@@ -3103,6 +3110,12 @@ def diploClick(name, part, right=False, shift=False):
 		answers = _diplo.get('answers', [])
 		if int(name[11:]) < len(answers):
 			_diploAnswer(answers[int(name[11:])])
+		return
+	if name in ('DiploTheirClear', 'DiploOurClear'):
+		theirs = name == 'DiploTheirClear'
+		for entry in list(_diplo.get('DiploTheirOffer' if theirs else 'DiploOurOffer', [])):
+			oc4host.diplo_toggle(theirs, True, entry[3], entry[4], 0)
+		_diploRefresh()
 		return
 	rows = _diplo.get(name)
 	row = int(part) >> 8
