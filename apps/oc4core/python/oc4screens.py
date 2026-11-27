@@ -2875,6 +2875,7 @@ def _art(name):
 
 
 _diploOpen = set()  # the item lists the player opened in this talk ('their', 'our')
+_diploSel = [-1, None]  # the highlighted answer and the menu it is of
 # The original's frame (DIPLOMACY_NEW_BACKGROUND, 512 x 1024): what of it shows, its title bar,
 # the leader's window between its posts, the box of what the leader says, the answers' box.
 _FRAME_LEFT, _FRAME_TOP, _FRAME_RIGHT, _FRAME_BOTTOM, _FRAME_W, _FRAME_H = 12, 15, 500, 1010, 512, 1024
@@ -3004,7 +3005,15 @@ def diploShow():
 	screen.addScrollPanel('DiploAnswers', u'', cx + 8, ay0, CW - 16, ay1 - ay0, PanelStyles.PANEL_STYLE_EMPTY)
 	answers = []
 	step = 31
-	for i, (comment, data1, data2, answer) in enumerate(oc4host.diplo_user()):
+	user = oc4host.diplo_user()
+	# (the highlighted answer, gold: on a new menu its last one, the way out; the mouse and the
+	# arrow keys move it, Enter takes it: seen in Wine)
+	menu = tuple([(c, d1, d2) for (c, d1, d2, a) in user])
+	if menu != _diploSel[1] or not 0 <= _diploSel[0] < len(user):
+		_diploSel[:] = [len(user) - 1, menu]
+	for i, (comment, data1, data2, answer) in enumerate(user):
+		if i == _diploSel[0]:
+			answer = u'<color=255,230,153,255>' + answer + u'</color>'
 		text = u'<font=3>' + answer + u'</font>'
 		width = _textWidth(text, 3)
 		screen.setTextAt('DiploAnswer%d' % i, 'DiploAnswers', text, _FONT_LEFT, max(0, (CW - 16 - width) / 2), i * step, -0.1, FontTypes.GAME_FONT,
@@ -3137,49 +3146,45 @@ def diploClick(name, part, right=False, shift=False):
 	_diploRefresh()
 
 
-# (Esc goes back a step first: "Never mind" from the trade table, the deals or "something else" to the
-# greeting; "Something else" from its own questions (their research, their attitude, a target) to it.
-# A first contact has only war or peace to say: Esc is the peace, the greeting returned)
-_DIPLO_ESCAPE = ('NEVERMIND', 'EXIT', 'REJECT', 'REJECT_DEMAND', 'REJECT_OFFER', 'REFUSE_HELP', 'NO_CONVERT', 'NO_JOIN_WAR',
-	'NO_MAKE_PEACE_WITH', 'NO_RENEGOTIATE', 'NO_REVOLUTION', 'NO_STOP_TRADING', 'PEACE')
-_DIPLO_SOMETHING_ELSE_MENUS = ('AI_DIPLOCOMMENT_RESEARCH', 'AI_DIPLOCOMMENT_TARGET', 'AI_DIPLOCOMMENT_ATTITUDE',
-	'AI_DIPLOCOMMENT_ATTITUDE_PLAYER_FURIOUS', 'AI_DIPLOCOMMENT_ATTITUDE_PLAYER_ANNOYED', 'AI_DIPLOCOMMENT_ATTITUDE_PLAYER_CAUTIOUS',
-	'AI_DIPLOCOMMENT_ATTITUDE_PLAYER_PLEASED', 'AI_DIPLOCOMMENT_ATTITUDE_PLAYER_FRIENDLY')
-_DIPLO_ENTER = ('ACCEPT', 'ACCEPT_DEMAND', 'ACCEPT_OFFER', 'GIVE_HELP', 'PEACE', 'COMPLETE_DEAL')
-
-
-def _diploPick(kinds):
-	gc = _cpe.CyGlobalContext()
+def _diploPick(index):
 	answers = _diplo.get('answers', [])
-	for kind in kinds:
-		comment = gc.getInfoTypeForString('USER_DIPLOCOMMENT_' + kind)
-		for entry in answers:
-			if entry[0] == comment:
-				_diploAnswer(entry)
-				return
+	if 0 <= index < len(answers):
+		_diploAnswer(answers[index])
 
 
 def diploEscape():
-	"""Esc in a talk: back to the menu it came from, else its way out, or a no (never war); the talk
-	keeps the key either way."""
-	gc = _cpe.CyGlobalContext()
-	comment = oc4host.diplo_comment()
-	if comment >= 0 and gc.getDiplomacyInfo(comment).getType() in _DIPLO_SOMETHING_ELSE_MENUS:
-		_diploPick(('SOMETHING_ELSE', 'EXIT'))
-		return True
-	_diploPick(_DIPLO_ESCAPE)
+	"""Esc in a talk: its last answer, the way out (Farewell; at a first contact the peace; an
+	offer's or a demand's no), from every menu and sub-menu, the trade table too: seen in Wine,
+	where Esc in the trade table or in "What do you think of..." closed the talk. Never war; the
+	talk keeps the key either way."""
+	answers = _diplo.get('answers', [])
+	if answers and answers[-1][0] != _cpe.CyGlobalContext().getInfoTypeForString('USER_DIPLOCOMMENT_WAR'):
+		_diploPick(len(answers) - 1)
 	return True
 
 
+def diploHover(index):
+	"""The host: the mouse rests on answer `index` (-1: on none). It is the highlighted one then, and
+	stays so when the mouse leaves (seen in Wine)."""
+	if 0 <= index < len(_diplo.get('answers', [])) and index != _diploSel[0]:
+		_diploSel[0] = index
+		diploShow()
+
+
 def diploKey(key):
-	"""The host: a key (a Windows key code) while a talk is up, which keeps it. Enter: a yes; 1 to 9
-	the answer so numbered."""
-	if key == 0x0D:
-		_diploPick(_DIPLO_ENTER)
+	"""The host: a key (a Windows key code) while a talk is up, which keeps it. Up and Down move the
+	highlight (no wrap), Enter takes the highlighted answer (seen in Wine); 1 to 9 the answer so
+	numbered."""
+	answers = _diplo.get('answers', [])
+	if key in (0x26, 0x28):
+		index = max(0, min(len(answers) - 1, _diploSel[0] + (1 if key == 0x28 else -1)))
+		if index != _diploSel[0]:
+			_diploSel[0] = index
+			diploShow()
+	elif key == 0x0D:
+		_diploPick(_diploSel[0])
 	elif 0x31 <= key <= 0x39:
-		answers = _diplo.get('answers', [])
-		if key - 0x31 < len(answers):
-			_diploAnswer(answers[key - 0x31])
+		_diploPick(key - 0x31)
 	elif key == 0x1B:
 		diploEscape()
 	return True
