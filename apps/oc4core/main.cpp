@@ -1443,13 +1443,27 @@ namespace
 					}
 				if (!click.right)
 				{
+					// The unit the plot shows (CvPlot::updateCenterUnit's first choices): one of yours
+					// there that is selected, else your best defender there. Seen in Wine (backlog #113):
+					// a click on a stack with its Worker selected keeps the Worker; Ctrl and Alt then take
+					// its type or the whole stack (CvGame::selectGroup).
 					CvUnit* own = nullptr;
+					for (int i = 0; i < plot->getNumUnits() && !own; ++i)
+						if (CvUnit* u = plot->getUnitByIndex(i); u && u->getOwner() == me && u->IsSelected())
+							own = u;
+					if (!own)
+						own = plot->getBestDefender(me, NO_PLAYER, nullptr, false, false, true);
+					if (!own)
+						own = plot->getBestDefender(me);
 					for (int i = 0; i < plot->getNumUnits() && !own; ++i)
 						if (CvUnit* u = plot->getUnitByIndex(i); u && u->getOwner() == me)
 							own = u;
-					if (own)
+					// (Shift with a left click opens the plot's menu in the original, CvGame::startFlyoutMenu,
+					// and leaves the selection as it is; OpenCiv4 has no such menu yet)
+					const bool menu = click.shift && !click.ctrl && !click.alt;
+					if (own && !menu)
 						ui.selectGroup(own, click.shift, click.ctrl, click.alt);
-					else
+					else if (!own && !menu)
 						ui.clearSelectionList();
 					// (as the original's: the camera goes to the plot clicked, a unit there or not;
 					// a scripted game told where to look keeps looking there)

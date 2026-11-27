@@ -5,6 +5,7 @@
 #include "CvDLLButtonPopup.h"
 #include "CvDLLWidgetData.h"
 #include "CvMap.h"
+#include "CvMessageControl.h"
 #include "CvPlayerAI.h"
 #include "CvPlot.h"
 #include "CvPopupInfo.h"
@@ -292,12 +293,14 @@ namespace oc4::host
 		sounds->play(AudioScripts::Script3D, script, Sounds::Place{ float(pUnit->getX()) + 0.5f, float(pUnit->getY()) + 0.5f });
 	}
 
-	// One unit, never its whole group, bGroup or not: the game core inserts a group unit by unit
-	// itself (CvGame::selectUnit), and with bGroup set it picks single units out of their groups:
-	// Ctrl's units of one type, Alt's units that can still move (CvGame::selectGroup), the hurt
-	// ones (CONTROL_SELECT_HEALTHY, which joins them itself). The selection becomes one group when
-	// it is given an order (CvGame::selectionListGameNetMessage: GAMEMESSAGE_JOIN_GROUP).
-	void Interface::insertIntoSelectionList(CvUnit* pUnit, bool bClear, bool bToggle, bool /*bGroup*/, bool bSound, bool /*bMinimalChange*/)
+	// One unit, never its whole group: the game core inserts a group unit by unit itself
+	// (CvGame::selectUnit), and with bGroup set it picks single units out of their groups: Ctrl's
+	// units of one type, Alt's units that can still move (CvGame::selectGroup), the hurt ones
+	// (CONTROL_SELECT_HEALTHY). bGroup makes the selection one group: the unit joins the head
+	// unit's group at once, as the original's (seen in Wine 2026-11-27, backlog #113: after Ctrl,
+	// Alt, Shift, Ctrl+Shift or a double click the selected units are one group, a unit the head
+	// was grouped with stays in it unselected, and one Shift-clicked off stays in the group).
+	void Interface::insertIntoSelectionList(CvUnit* pUnit, bool bClear, bool bToggle, bool bGroup, bool bSound, bool /*bMinimalChange*/)
 	{
 		if (bSound && (bClear || m_selection.getLength() == 0)) // (once for a group, inserted unit by unit)
 			unitSound(pUnit, false);
@@ -314,6 +317,9 @@ namespace oc4::host
 		{
 			m_selection.insertAtEnd(pUnit->getIDInfo());
 			changed = true;
+			if (const CvUnit* head = getHeadSelectedUnit(); bGroup && head && head != pUnit && head->getGroup() != pUnit->getGroup() &&
+				pUnit->getOwner() == GC.getGame().getActivePlayer() && head->getOwner() == pUnit->getOwner())
+				CvMessageControl::getInstance().sendJoinGroup(pUnit->getID(), head->getID());
 		}
 		else if (bToggle)
 			removeFromSelectionList(pUnit);
