@@ -101,6 +101,8 @@ namespace oc4::host
 		bool trading() const { return m_trading; }
 		bool showingAll() const { return m_showAll; }
 		bool showingCurrent() const { return m_current; }
+		// Whether the player changed the table since the trade began (CLEAR TABLE shows then).
+		bool edited() const { return m_edited; }
 		// A player's items (theirs: the leader's) as the trade list shows them: its headings and
 		// what is not offered or hidden; an offer's items.
 		std::vector<Item> inventory(bool theirs) const;
@@ -122,7 +124,7 @@ namespace oc4::host
 		CvDiploParameters* m_params = nullptr;
 		PlayerTypes m_player = NO_PLAYER, m_who = NO_PLAYER;
 		CLinkList<TradeData> m_ourOffer, m_theirOffer, m_ourInventory, m_theirInventory;
-		bool m_aiOffer = false, m_trading = false, m_showAll = true, m_current = false;
+		bool m_aiOffer = false, m_trading = false, m_showAll = true, m_current = false, m_edited = false;
 		int m_comment = -1;
 		std::wstring m_aiText;
 		std::vector<Comment> m_userComments;

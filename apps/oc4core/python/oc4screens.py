@@ -3030,9 +3030,10 @@ def diploShow():
 			True, True, lx, split + 8, SW, bottom - split - 8)
 		_diploList(screen, 'DiploOurOffer', translator.getText('TXT_KEY_TRADE_YOU_OFFER', ()).upper(), oc4host.diplo_items(False, True),
 			False, True, rx, split + 8, SW, bottom - split - 8)
-		# (under each offer with something on it, while it can change, a CLEAR TABLE button that
-		# takes it all off: seen in Wine, TXT_KEY_TRADE_CLEAR_TABLE, 117 x 26 at the offer's foot)
-		if not current:
+		# (under each offer with something on it, once the player changed the table, a CLEAR TABLE
+		# button that takes it all off: seen in Wine, TXT_KEY_TRADE_CLEAR_TABLE, 117 x 26 at the
+		# offer's foot; none on an AI's offer, renegotiated or not, until an item is clicked)
+		if not current and oc4host.diplo_edited():
 			for name, x, items in (('DiploTheirClear', lx, _diplo.get('DiploTheirOffer')), ('DiploOurClear', rx, _diplo.get('DiploOurOffer'))):
 				if items:
 					screen.setButtonGFC(name, translator.getText('TXT_KEY_TRADE_CLEAR_TABLE', ()), '', x + (SW - 117) / 2, bottom - 34, 117, 26,
