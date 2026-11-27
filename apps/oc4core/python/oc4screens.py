@@ -2832,7 +2832,11 @@ class CyDiplomacy(object):
 	def getData(self): return oc4host.diplo_data()
 	def setAIString(self, szString, args=()): oc4host.diplo_set_ai_string(_text(szString), tuple(args or ()))
 	def setAIComment(self, eComment): oc4host.diplo_set_ai_comment(int(eComment))
-	def clearUserComments(self): oc4host.diplo_clear_user()
+	def clearUserComments(self):
+		# (new answers: the highlight back on the last one, as the original's, even when they are
+		# the same answers again: seen in Wine after an item was put on the table)
+		_diploSel[0] = -1
+		oc4host.diplo_clear_user()
 
 	def addUserComment(self, eComment, iData1, iData2, szString, args=()):
 		oc4host.diplo_add_user(int(eComment), _int(iData1), _int(iData2), _text(szString), tuple(args or ()))
