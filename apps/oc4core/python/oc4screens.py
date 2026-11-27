@@ -3044,16 +3044,20 @@ def _diploRefresh():
 
 
 def _diploGold(theirs, itemType, text):
-	"""Gold into an offer: how much is asked first (most what its owner can give)."""
+	"""Gold into an offer: how much is asked first (most what its owner can give). As the original
+	(seen in Wine): headed "Gold" (TXT_KEY_TRADE_TITLE_GOLD), the question by whose gold it is
+	("How much gold per turn would you like from them?" for the leader's, "... to offer?" for ours),
+	the box at 0."""
 	perTurn = itemType == int(_cpe.TradeableItems.TRADE_GOLD_PER_TURN)
 	most = oc4host.diplo_max_gold(bool(theirs), perTurn)
 	if most <= 0:
 		return
+	translator = _cpe.CyTranslator()
 	popup = CyPopup(-1, -1)
-	popup.setHeaderString(text)
-	# (the game's question: "How much gold would you like to offer?")
-	popup.setBodyString(_cpe.CyTranslator().getText('TXT_KEY_TRADE_GPT_TO_OFFER' if perTurn else 'TXT_KEY_TRADE_GOLD_TO_OFFER', ()))
-	popup.createSpinBox(0, u'', most, 1, most, 0)
+	popup.setHeaderString(translator.getText('TXT_KEY_TRADE_TITLE_GOLD', ()))
+	question = ('TXT_KEY_TRADE_GPT_' if perTurn else 'TXT_KEY_TRADE_GOLD_') + ('FROM_THEM' if theirs else 'TO_OFFER')
+	popup.setBodyString(translator.getText(question, ()))
+	popup.createSpinBox(0, u'', 0, 1, most, 0)
 
 	def answered(answer):
 		amount = answer.getSpinnerWidgetValue(0)
