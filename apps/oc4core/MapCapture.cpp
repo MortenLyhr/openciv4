@@ -1633,11 +1633,12 @@ namespace oc4::host
 
 	std::string MapCapture::caption() const
 	{
+		// (nothing the player can't know: no count of the map's cities or unit stacks, which take in the
+		// unseen ones; the civilizations still in the game, the barbarians not counted)
 		int alive = 0;
-		for (const auto& p : m_snapshot.players)
-			alive += p.alive;
+		for (size_t p = 0; p < m_snapshot.players.size() && p < size_t(MAX_CIV_PLAYERS); ++p)
+			alive += m_snapshot.players[p].alive;
 		return "turn " + std::to_string(m_snapshot.turn) + (m_snapshot.date.empty() ? "" : " (" + m_snapshot.date + ")") + ", " +
-			std::to_string(m_snapshot.cities.size()) + " cities, " +
-			std::to_string(m_snapshot.units.size()) + " unit stacks, " + std::to_string(alive) + " players";
+			std::to_string(alive) + " civilizations";
 	}
 }
